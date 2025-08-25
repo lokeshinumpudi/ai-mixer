@@ -12,4 +12,14 @@ export const chatModels: Array<ChatModel> = [
     name: 'grok-3-mini',
     description: 'Primary model for all-purpose chat with advanced reasoning',
   },
+  {
+    id: 'chat-model-1',
+    name: 'grok-3-mini',
+    description: 'Advanced model with enhanced reasoning capabilities',
+  },
+  {
+    id: 'chat-model-2',
+    name: 'grok-3-mini',
+    description: 'Latest model with improved performance',
+  },
 ];

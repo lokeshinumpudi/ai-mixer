@@ -32,7 +32,7 @@ import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
 import type { Session } from 'next-auth';
-import { ChevronDownIcon, CheckCircleFillIcon } from './icons';
+import { ChevronDownIcon, CheckCircleFillIcon, PlusIcon } from './icons';
 import { chatModels } from '@/lib/ai/models';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
 import { saveChatModelAsCookie } from '@/app/(chat)/actions';
@@ -41,7 +41,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from './ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 function PureMultimodalInput({
   chatId,
@@ -58,6 +60,7 @@ function PureMultimodalInput({
   selectedVisibilityType,
   session,
   selectedModelId,
+  onCompareMode,
 }: {
   chatId: string;
   input: string;
@@ -73,6 +76,7 @@ function PureMultimodalInput({
   selectedVisibilityType: VisibilityType;
   session: Session;
   selectedModelId: string;
+  onCompareMode?: (models: string[], prompt: string) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -329,6 +333,8 @@ function PureMultimodalInput({
           session={session}
           selectedModelId={selectedModelId}
           status={status}
+          input={input}
+          onCompareMode={onCompareMode}
         />
       </div>
 
@@ -356,6 +362,7 @@ export const MultimodalInput = memo(
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
     if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
+    if (prevProps.onCompareMode !== nextProps.onCompareMode) return false;
 
     return true;
   },
@@ -445,14 +452,20 @@ function PureCompactModelSelector({
   session,
   selectedModelId,
   status,
+  input,
+  onCompareMode,
 }: {
   session: Session;
   selectedModelId: string;
   status: UseChatHelpers<ChatMessage>['status'];
+  input: string;
+  onCompareMode?: (models: string[], prompt: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [optimisticModelId, setOptimisticModelId] =
     useOptimistic(selectedModelId);
+  const [isCompareMode, setIsCompareMode] = useState(false);
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
 
   const userType = session.user.type;
   const { availableChatModelIds } = entitlementsByUserType[userType];
@@ -469,6 +482,41 @@ function PureCompactModelSelector({
     [optimisticModelId, availableChatModels],
   );
 
+  const handleToggleCompareMode = () => {
+    if (isCompareMode) {
+      // Exit compare mode
+      setIsCompareMode(false);
+      setSelectedModels([]);
+      setOpen(false);
+    } else {
+      // Enter compare mode
+      setIsCompareMode(true);
+      setSelectedModels([optimisticModelId]); // Start with current model selected
+    }
+  };
+
+  const handleModelToggle = (modelId: string) => {
+    setSelectedModels((prev) => {
+      if (prev.includes(modelId)) {
+        return prev.filter((id) => id !== modelId);
+      } else {
+        return [...prev, modelId];
+      }
+    });
+  };
+
+  const handleStartComparison = () => {
+    if (selectedModels.length >= 2 && onCompareMode && input.trim()) {
+      onCompareMode(selectedModels, input);
+      setOpen(false);
+      setIsCompareMode(false);
+      setSelectedModels([]);
+    } else if (!input.trim()) {
+      // Don't close the dropdown if there's no input
+      return;
+    }
+  };
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -483,42 +531,140 @@ function PureCompactModelSelector({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="min-w-[300px]">
-        {availableChatModels.map((chatModel) => {
-          const { id } = chatModel;
+        {!isCompareMode ? (
+          // Normal single model selection
+          <>
+            {availableChatModels.map((chatModel) => {
+              const { id } = chatModel;
 
-          return (
-            <DropdownMenuItem
-              data-testid={`compact-model-selector-item-${id}`}
-              key={id}
-              onSelect={() => {
-                setOpen(false);
+              return (
+                <DropdownMenuItem
+                  data-testid={`compact-model-selector-item-${id}`}
+                  key={id}
+                  onSelect={() => {
+                    setOpen(false);
 
-                startTransition(() => {
-                  setOptimisticModelId(id);
-                  saveChatModelAsCookie(id);
-                });
-              }}
-              data-active={id === optimisticModelId}
-              asChild
-            >
-              <button
-                type="button"
-                className="gap-4 group/item flex flex-row justify-between items-center w-full"
+                    startTransition(() => {
+                      setOptimisticModelId(id);
+                      saveChatModelAsCookie(id);
+                    });
+                  }}
+                  data-active={id === optimisticModelId}
+                  asChild
+                >
+                  <button
+                    type="button"
+                    className="gap-4 group/item flex flex-row justify-between items-center w-full"
+                  >
+                    <div className="flex flex-col gap-1 items-start">
+                      <div>{chatModel.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {chatModel.description}
+                      </div>
+                    </div>
+
+                    <div className="text-foreground dark:text-foreground opacity-0 group-data-[active=true]/item:opacity-100">
+                      <CheckCircleFillIcon />
+                    </div>
+                  </button>
+                </DropdownMenuItem>
+              );
+            })}
+
+            {availableChatModels.length > 1 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    handleToggleCompareMode();
+                  }}
+                  asChild
+                >
+                  <button
+                    type="button"
+                    className="flex flex-row items-center gap-2 w-full text-blue-600 dark:text-blue-400"
+                  >
+                    <PlusIcon size={14} />
+                    <span>Compare Models</span>
+                  </button>
+                </DropdownMenuItem>
+              </>
+            )}
+          </>
+        ) : (
+          // Compare mode - multi-select interface
+          <>
+            <div className="px-2 py-2 text-sm font-medium text-foreground border-b">
+              Select models to compare ({selectedModels.length} selected)
+            </div>
+
+            {availableChatModels.map((chatModel) => {
+              const { id } = chatModel;
+              const isSelected = selectedModels.includes(id);
+
+              return (
+                <DropdownMenuItem
+                  key={id}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    handleModelToggle(id);
+                  }}
+                  asChild
+                >
+                  <button
+                    type="button"
+                    className="gap-3 flex flex-row items-center w-full"
+                  >
+                    <div
+                      className={cn(
+                        'w-4 h-4 border rounded flex items-center justify-center',
+                        isSelected
+                          ? 'bg-blue-600 border-blue-600'
+                          : 'border-gray-300',
+                      )}
+                    >
+                      {isSelected && (
+                        <div className="text-white">
+                          <CheckCircleFillIcon size={12} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-1 items-start">
+                      <div>{chatModel.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {chatModel.description}
+                      </div>
+                    </div>
+                  </button>
+                </DropdownMenuItem>
+              );
+            })}
+
+            <DropdownMenuSeparator />
+
+            <div className="flex gap-2 p-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleToggleCompareMode}
+                className="flex-1"
               >
-                <div className="flex flex-col gap-1 items-start">
-                  <div>{chatModel.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {chatModel.description}
-                  </div>
-                </div>
-
-                <div className="text-foreground dark:text-foreground opacity-0 group-data-[active=true]/item:opacity-100">
-                  <CheckCircleFillIcon />
-                </div>
-              </button>
-            </DropdownMenuItem>
-          );
-        })}
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleStartComparison}
+                disabled={selectedModels.length < 2 || !input.trim()}
+                className="flex-1"
+                title={!input.trim() ? 'Enter a message to compare models' : ''}
+              >
+                Compare ({selectedModels.length})
+              </Button>
+            </div>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -85,11 +85,15 @@ export async function saveChat({
   userId,
   title,
   visibility,
+  isCompareMode = false,
+  selectedModels = null,
 }: {
   id: string;
   userId: string;
   title: string;
   visibility: VisibilityType;
+  isCompareMode?: boolean;
+  selectedModels?: string[] | null;
 }) {
   try {
     return await db.insert(chat).values({
@@ -98,6 +102,8 @@ export async function saveChat({
       userId,
       title,
       visibility,
+      isCompareMode,
+      selectedModels,
     });
   } catch (error) {
     throw new ChatSDKError('bad_request:database', 'Failed to save chat');
@@ -533,6 +539,129 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get stream ids by chat id',
+    );
+  }
+}
+
+// Compare Mode specific functions
+
+export async function updateChatToCompareMode({
+  chatId,
+  selectedModels,
+}: {
+  chatId: string;
+  selectedModels: string[];
+}) {
+  try {
+    return await db
+      .update(chat)
+      .set({ isCompareMode: true, selectedModels })
+      .where(eq(chat.id, chatId));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to update chat to compare mode',
+    );
+  }
+}
+
+export async function exitCompareMode({ chatId }: { chatId: string }) {
+  try {
+    return await db
+      .update(chat)
+      .set({ isCompareMode: false, selectedModels: null })
+      .where(eq(chat.id, chatId));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to exit compare mode',
+    );
+  }
+}
+
+export async function getCompareChats({
+  userId,
+  limit = 50,
+}: {
+  userId: string;
+  limit?: number;
+}) {
+  try {
+    return await db
+      .select()
+      .from(chat)
+      .where(and(eq(chat.userId, userId), eq(chat.isCompareMode, true)))
+      .orderBy(desc(chat.createdAt))
+      .limit(limit);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get compare chats',
+    );
+  }
+}
+
+export async function getMessagesByModel({
+  chatId,
+  modelId,
+}: {
+  chatId: string;
+  modelId: string;
+}) {
+  try {
+    return await db
+      .select()
+      .from(message)
+      .where(and(eq(message.chatId, chatId), eq(message.modelId, modelId)))
+      .orderBy(asc(message.createdAt));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get messages by model',
+    );
+  }
+}
+
+export async function getTotalTokenUsageByChat({
+  chatId,
+}: {
+  chatId: string;
+}): Promise<Record<string, { input: number; output: number; total: number }>> {
+  try {
+    const messages = await db
+      .select({
+        modelId: message.modelId,
+        tokenUsage: message.tokenUsage,
+      })
+      .from(message)
+      .where(and(eq(message.chatId, chatId), eq(message.role, 'assistant')));
+
+    const tokensByModel: Record<
+      string,
+      { input: number; output: number; total: number }
+    > = {};
+
+    for (const msg of messages) {
+      if (msg.modelId && msg.tokenUsage) {
+        const usage = msg.tokenUsage as {
+          input: number;
+          output: number;
+          total: number;
+        };
+        if (!tokensByModel[msg.modelId]) {
+          tokensByModel[msg.modelId] = { input: 0, output: 0, total: 0 };
+        }
+        tokensByModel[msg.modelId].input += usage.input || 0;
+        tokensByModel[msg.modelId].output += usage.output || 0;
+        tokensByModel[msg.modelId].total += usage.total || 0;
+      }
+    }
+
+    return tokensByModel;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get token usage by chat',
     );
   }
 }

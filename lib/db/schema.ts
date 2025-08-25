@@ -29,6 +29,8 @@ export const chat = pgTable('Chat', {
   visibility: varchar('visibility', { enum: ['public', 'private'] })
     .notNull()
     .default('private'),
+  isCompareMode: boolean('isCompareMode').default(false),
+  selectedModels: json('selectedModels'), // Array of model IDs for compare mode
 });
 
 export type Chat = InferSelectModel<typeof chat>;
@@ -56,6 +58,8 @@ export const message = pgTable('Message_v2', {
   parts: json('parts').notNull(),
   attachments: json('attachments').notNull(),
   createdAt: timestamp('createdAt').notNull(),
+  modelId: varchar('modelId'), // Which model generated this message (for assistant messages)
+  tokenUsage: json('tokenUsage'), // Token usage data: { input: number, output: number, total: number }
 });
 
 export type DBMessage = InferSelectModel<typeof message>;

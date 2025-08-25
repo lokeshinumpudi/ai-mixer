@@ -17,6 +17,7 @@ export const myProvider = isTestEnvironment
       languageModels: {
         'chat-model': chatModel,
         'chat-model-reasoning': reasoningModel,
+        'chat-model-2': chatModel,
         'title-model': titleModel,
         'artifact-model': artifactModel,
       },
@@ -28,6 +29,7 @@ export const myProvider = isTestEnvironment
           model: xai('grok-3-mini'),
           middleware: extractReasoningMiddleware({ tagName: 'think' }),
         }),
+        'chat-model-2': xai('grok-3-mini'),
         'title-model': xai('grok-3-mini'),
         'artifact-model': xai('grok-3-mini'),
       },

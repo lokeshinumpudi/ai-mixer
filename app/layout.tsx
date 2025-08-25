@@ -6,10 +6,26 @@ import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 import { SessionProvider } from 'next-auth/react';
 
+/**
+ * AI playground that lets you compare different AI models and prompts.
+ * So you don't have to waste time pasting your queries to different AI models.
+ * such as ChatGPT, Claude, Gemini, etc.
+ *
+ * Thereby saving you the time and effort of pasting your queries to different AI models.
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ */
 export const metadata: Metadata = {
   metadataBase: new URL('https://chat.vercel.ai'),
-  title: 'Next.js Chatbot Template',
-  description: 'Next.js chatbot template using the AI SDK.',
+  title: 'AI Promptiverse',
+  description:
+    'AI playground that lets you compare different AI models and prompts.',
 };
 
 export const viewport = {

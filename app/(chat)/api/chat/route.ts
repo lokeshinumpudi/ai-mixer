@@ -142,6 +142,8 @@ export async function POST(request: Request) {
           parts: message.parts,
           attachments: [],
           createdAt: new Date(),
+          modelId: null,
+          tokenUsage: null,
         },
       ],
     });
@@ -199,6 +201,11 @@ export async function POST(request: Request) {
             createdAt: new Date(),
             attachments: [],
             chatId: id,
+            modelId: message.role === 'assistant' ? selectedChatModel : null,
+            tokenUsage:
+              message.role === 'assistant'
+                ? (message as any).experimental_providerMetadata?.usage || null
+                : null,
           })),
         });
       },
