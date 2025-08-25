@@ -1,0 +1,617 @@
+---
+description: State management patterns including SWR, chat-scoped state, local state, and data synchronization
+---
+
+# State Management Patterns
+
+## Overview
+
+The application uses a multi-layered state management approach combining local React state, SWR for server state, and custom patterns for complex features like chat-scoped artifacts and real-time data streaming.
+
+## State Management Layers
+
+### 1. Local Component State
+
+Use React's built-in state management for component-specific state that doesn't need to be shared.
+
+```typescript
+// Simple local state
+const [isOpen, setIsOpen] = useState(false);
+const [input, setInput] = useState("");
+
+// Complex local state with useReducer
+const [state, dispatch] = useReducer(chatReducer, initialState);
+
+// Refs for mutable values
+const textareaRef = useRef<HTMLTextAreaElement>(null);
+const lastProcessedIndex = useRef(-1);
+```
+
+### 2. SWR for Server State
+
+Use SWR for all server-side data with caching, revalidation, and optimistic updates.
+
+```typescript
+// Basic SWR usage
+const { data: votes } = useSWR<Array<Vote>>(
+  messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
+  fetcher
+);
+
+// With mutation for optimistic updates
+const { data: documents, mutate } = useSWR<Array<Document>>(
+  `/api/document?id=${documentId}`,
+  fetcher
+);
+
+// Manual mutation for optimistic updates
+const handleVote = async (messageId: string, type: "up" | "down") => {
+  // Optimistic update
+  mutate(
+    (currentVotes) => [
+      ...(currentVotes || []),
+      { messageId, type, id: generateUUID() },
+    ],
+    false // Don't revalidate immediately
+  );
+
+  // Server update
+  await fetch("/api/vote", {
+    method: "POST",
+    body: JSON.stringify({ messageId, type }),
+  });
+
+  // Revalidate
+  mutate();
+};
+```
+
+### 3. Chat-Scoped State Pattern
+
+For features that need to be isolated per chat session (like artifacts), use SWR keys that include the chat ID.
+
+```typescript
+// Reference: hooks/use-artifact.ts
+export function useArtifact(chatId?: string) {
+  const artifactKey = chatId ? `artifact-${chatId}` : "artifact";
+
+  const { data: localArtifact, mutate: setLocalArtifact } = useSWR<UIArtifact>(
+    artifactKey,
+    null,
+    {
+      fallbackData: initialArtifactData,
+    }
+  );
+
+  const setArtifact = useCallback(
+    (updaterFn: UIArtifact | ((currentArtifact: UIArtifact) => UIArtifact)) => {
+      setLocalArtifact((currentArtifact) => {
+        const artifactToUpdate = currentArtifact || initialArtifactData;
+
+        if (typeof updaterFn === "function") {
+          return updaterFn(artifactToUpdate);
+        }
+
+        return updaterFn;
+      });
+    },
+    [setLocalArtifact]
+  );
+
+  return { artifact: localArtifact, setArtifact };
+}
+
+// Usage in components with chat context
+const chatId = usePathname().startsWith("/chat/")
+  ? usePathname().slice(6)
+  : undefined;
+const { artifact, setArtifact } = useArtifact(chatId);
+```
+
+### 4. Custom Hooks for Complex State
+
+Abstract complex state logic into custom hooks for reusability and testability.
+
+```typescript
+// Reference: hooks/use-chat-visibility.ts
+export function useChatVisibility({
+  chatId,
+  initialVisibilityType,
+}: {
+  chatId: string;
+  initialVisibilityType: VisibilityType;
+}) {
+  const { mutate, cache } = useSWRConfig();
+  const history: ChatHistory = cache.get("/api/history")?.data;
+
+  const { data: localVisibility, mutate: setLocalVisibility } = useSWR(
+    `${chatId}-visibility`,
+    null,
+    {
+      fallbackData: initialVisibilityType,
+    }
+  );
+
+  const visibilityType = useMemo(() => {
+    if (!history) return localVisibility;
+    const chat = history.chats.find((chat) => chat.id === chatId);
+    if (!chat) return "private";
+    return chat.visibility;
+  }, [history, chatId, localVisibility]);
+
+  const setVisibilityType = (updatedVisibilityType: VisibilityType) => {
+    setLocalVisibility(updatedVisibilityType);
+    mutate(unstable_serialize(getChatHistoryPaginationKey));
+
+    updateChatVisibility({
+      chatId: chatId,
+      visibility: updatedVisibilityType,
+    });
+  };
+
+  return { visibilityType, setVisibilityType };
+}
+```
+
+## Data Streaming Patterns
+
+### 1. Context-Based Streaming
+
+Use React Context for streaming data that needs to be consumed by multiple components.
+
+```typescript
+// Reference: components/data-stream-provider.tsx
+interface DataStreamContext {
+  dataStream: Array<DataStreamPart>;
+  setDataStream: Dispatch<SetStateAction<Array<DataStreamPart>>>;
+}
+
+const DataStreamContext = createContext<DataStreamContext | null>(null);
+
+export function DataStreamProvider({ children }: { children: ReactNode }) {
+  const [dataStream, setDataStream] = useState<Array<DataStreamPart>>([]);
+
+  return (
+    <DataStreamContext.Provider value={{ dataStream, setDataStream }}>
+      {children}
+    </DataStreamContext.Provider>
+  );
+}
+
+export function useDataStream() {
+  const context = useContext(DataStreamContext);
+  if (!context) {
+    throw new Error("useDataStream must be used within DataStreamProvider");
+  }
+  return context;
+}
+```
+
+### 2. Stream Data Processing
+
+Process streaming data with proper deduplication and state management.
+
+```typescript
+// Reference: components/data-stream-handler.tsx
+export function DataStreamHandler() {
+  const { dataStream } = useDataStream();
+  const { artifact, setArtifact, setMetadata } = useArtifact(chatId);
+  const lastProcessedIndex = useRef(-1);
+
+  useEffect(() => {
+    if (!dataStream?.length) return;
+
+    // Only process new deltas
+    const newDeltas = dataStream.slice(lastProcessedIndex.current + 1);
+    lastProcessedIndex.current = dataStream.length - 1;
+
+    newDeltas.forEach((delta) => {
+      // Let artifact definitions handle their specific stream parts
+      const artifactDefinition = artifactDefinitions.find(
+        (def) => def.kind === artifact.kind
+      );
+
+      if (artifactDefinition?.onStreamPart) {
+        artifactDefinition.onStreamPart({
+          streamPart: delta,
+          setArtifact,
+          setMetadata,
+        });
+      }
+
+      // Handle common stream data types
+      setArtifact((draftArtifact) => {
+        switch (delta.type) {
+          case "data-clear":
+            return { ...initialArtifactData, status: "streaming" };
+          case "data-id":
+            return {
+              ...draftArtifact,
+              documentId: delta.data,
+              status: "streaming",
+            };
+          // ... other cases
+          default:
+            return draftArtifact;
+        }
+      });
+    });
+  }, [dataStream, artifact, setArtifact, setMetadata]);
+
+  return null;
+}
+```
+
+## Optimistic Updates Pattern
+
+### 1. SWR Mutations
+
+Use SWR's mutation capabilities for optimistic updates with automatic rollback on failure.
+
+```typescript
+// Reference: components/message-actions.tsx (conceptual)
+const { data: votes, mutate: mutateVotes } = useSWR<Array<Vote>>(
+  `/api/vote?chatId=${chatId}`,
+  fetcher
+);
+
+const handleVote = async (messageId: string, type: "up" | "down") => {
+  const newVote = { id: generateUUID(), messageId, type };
+
+  // Optimistic update
+  mutateVotes((currentVotes) => [...(currentVotes || []), newVote], false);
+
+  try {
+    // Server update
+    await fetch("/api/vote", {
+      method: "POST",
+      body: JSON.stringify({ messageId, type }),
+    });
+
+    // Revalidate to get server state
+    mutateVotes();
+  } catch (error) {
+    // SWR automatically rolls back on error
+    toast.error("Failed to vote");
+  }
+};
+```
+
+### 2. Optimistic Local State
+
+For immediate UI feedback before server confirmation.
+
+```typescript
+const [optimisticModelId, setOptimisticModelId] =
+  useOptimistic(selectedModelId);
+
+const handleModelChange = (newModelId: string) => {
+  // Immediate UI update
+  setOptimisticModelId(newModelId);
+
+  // Background server update
+  startTransition(() => {
+    saveChatModelAsCookie(newModelId);
+  });
+};
+```
+
+## Debounced Updates Pattern
+
+### 1. Content Auto-Save
+
+Debounce frequent content changes to reduce server load.
+
+```typescript
+// Reference: components/artifact.tsx
+const debouncedHandleContentChange = useDebounceCallback(
+  (content: string) => {
+    if (document && document.content !== content) {
+      updateDocument({
+        id: document.id,
+        content,
+      });
+    }
+  },
+  1000 // 1 second delay
+);
+
+const handleContentChange = useCallback(
+  (content: string) => {
+    setArtifact((currentArtifact) => ({
+      ...currentArtifact,
+      content,
+    }));
+
+    debouncedHandleContentChange(content);
+  },
+  [setArtifact, debouncedHandleContentChange]
+);
+```
+
+### 2. Search Input
+
+Debounce search queries to avoid excessive API calls.
+
+```typescript
+const [searchQuery, setSearchQuery] = useState("");
+const [debouncedQuery] = useDebounce(searchQuery, 300);
+
+// Trigger search when debounced query changes
+const { data: searchResults } = useSWR(
+  debouncedQuery ? `/api/search?q=${debouncedQuery}` : null,
+  fetcher
+);
+```
+
+## Local Storage Integration
+
+### 1. Persistent Local State
+
+Use localStorage for state that should persist across sessions.
+
+```typescript
+// Reference: components/multimodal-input.tsx
+const [localStorageInput, setLocalStorageInput] = useLocalStorage("input", "");
+
+useEffect(() => {
+  if (textareaRef.current) {
+    const domValue = textareaRef.current.value;
+    // Prefer DOM value over localStorage to handle hydration
+    const finalValue = domValue || localStorageInput || "";
+    setInput(finalValue);
+  }
+}, []);
+
+useEffect(() => {
+  setLocalStorageInput(input);
+}, [input, setLocalStorageInput]);
+```
+
+### 2. User Preferences
+
+Store user preferences that should persist across sessions.
+
+```typescript
+const [preferences, setPreferences] = useLocalStorage("user-preferences", {
+  theme: "system",
+  sidebarCollapsed: false,
+  editorTheme: "dark",
+});
+
+const updatePreference = <K extends keyof UserPreferences>(
+  key: K,
+  value: UserPreferences[K]
+) => {
+  setPreferences((prev) => ({ ...prev, [key]: value }));
+};
+```
+
+## State Synchronization Patterns
+
+### 1. Cross-Component State Sync
+
+When multiple components need to stay in sync, use SWR cache invalidation.
+
+```typescript
+const { mutate } = useSWRConfig();
+
+const updateGlobalState = async (newData: any) => {
+  // Update server
+  await updateServerData(newData);
+
+  // Invalidate related cache keys
+  mutate("/api/data");
+  mutate("/api/related-data");
+  mutate((key) => typeof key === "string" && key.startsWith("/api/user/"));
+};
+```
+
+### 2. Real-time Updates
+
+For real-time features, combine WebSocket updates with SWR revalidation.
+
+```typescript
+useEffect(() => {
+  const ws = new WebSocket("/api/websocket");
+
+  ws.onmessage = (event) => {
+    const update = JSON.parse(event.data);
+
+    // Update relevant SWR caches
+    if (update.type === "message_update") {
+      mutate(`/api/chat/${update.chatId}/messages`);
+    }
+
+    if (update.type === "document_update") {
+      mutate(`/api/document?id=${update.documentId}`);
+    }
+  };
+
+  return () => ws.close();
+}, [mutate]);
+```
+
+## Error Handling in State Management
+
+### 1. SWR Error Boundaries
+
+Handle errors gracefully with SWR's built-in error handling.
+
+```typescript
+const { data, error, isLoading } = useSWR("/api/data", fetcher);
+
+if (error) {
+  return <ErrorMessage error={error} retry={() => mutate()} />;
+}
+
+if (isLoading) {
+  return <LoadingSkeleton />;
+}
+
+return <DataComponent data={data} />;
+```
+
+### 2. Optimistic Update Error Handling
+
+Handle errors in optimistic updates with proper rollback.
+
+```typescript
+const updateWithOptimism = async (newData: any) => {
+  const currentData = data;
+
+  // Optimistic update
+  mutate(newData, false);
+
+  try {
+    await updateServer(newData);
+    mutate(); // Revalidate
+  } catch (error) {
+    // Rollback on error
+    mutate(currentData, false);
+    toast.error("Update failed");
+  }
+};
+```
+
+## Performance Considerations
+
+### 1. SWR Configuration
+
+Configure SWR for optimal performance.
+
+```typescript
+// Global SWR config
+<SWRConfig
+  value={{
+    fetcher: (url: string) => fetch(url).then((res) => res.json()),
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+    refreshInterval: 0,
+    dedupingInterval: 5000,
+  }}
+>
+  <App />
+</SWRConfig>
+```
+
+### 2. Selective Re-rendering
+
+Use React.memo and dependency arrays to prevent unnecessary re-renders.
+
+```typescript
+export const ExpensiveComponent = memo(
+  ({ data, onUpdate }: Props) => {
+    const memoizedValue = useMemo(() => {
+      return expensiveCalculation(data);
+    }, [data]);
+
+    const stableCallback = useCallback(
+      (newValue: any) => {
+        onUpdate(newValue);
+      },
+      [onUpdate]
+    );
+
+    return <div>{memoizedValue}</div>;
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison for memo
+    return prevProps.data.id === nextProps.data.id;
+  }
+);
+```
+
+### 3. State Cleanup
+
+Clean up state when components unmount or contexts change.
+
+```typescript
+useEffect(() => {
+  return () => {
+    // Cleanup on unmount
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Clear pending requests
+    abortControllerRef.current?.abort();
+  };
+}, []);
+
+// Clear chat-specific state when switching chats
+useEffect(() => {
+  if (chatId) {
+    // Reset transient state for new chat
+    setMessages([]);
+    setInput("");
+  }
+}, [chatId]);
+```
+
+## Testing State Management
+
+### 1. Hook Testing
+
+Test custom hooks in isolation.
+
+```typescript
+describe("useArtifact", () => {
+  it("should isolate state by chatId", () => {
+    const { result: chat1 } = renderHook(() => useArtifact("chat1"));
+    const { result: chat2 } = renderHook(() => useArtifact("chat2"));
+
+    act(() => {
+      chat1.current.setArtifact((prev) => ({ ...prev, title: "Chat 1" }));
+    });
+
+    expect(chat1.current.artifact.title).toBe("Chat 1");
+    expect(chat2.current.artifact.title).toBe("");
+  });
+});
+```
+
+### 2. SWR Testing
+
+Test components that use SWR with proper mocking.
+
+```typescript
+import { SWRConfig } from "swr";
+
+const TestWrapper = ({ children }: { children: ReactNode }) => (
+  <SWRConfig value={{ provider: () => new Map() }}>{children}</SWRConfig>
+);
+
+test("should handle data loading", async () => {
+  const mockFetcher = jest.fn().mockResolvedValue({ data: "test" });
+
+  render(
+    <TestWrapper>
+      <ComponentWithSWR />
+    </TestWrapper>
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText("test")).toBeInTheDocument();
+  });
+});
+```
+
+### 3. Integration Testing
+
+Test state flows across multiple components.
+
+```typescript
+test("should sync state across components", async () => {
+  render(<ChatApplication />);
+
+  // Update in one component
+  await user.type(screen.getByRole("textbox"), "test message");
+  await user.click(screen.getByRole("button", { name: /send/i }));
+
+  // Should update in another component
+  await waitFor(() => {
+    expect(screen.getByText("test message")).toBeInTheDocument();
+  });
+});
+```

@@ -1,9 +1,9 @@
 import type { UserType } from '@/app/(auth)/auth';
-import type { ChatModel } from './models';
+import { chatModels, type ChatModel } from './models';
 
 interface Entitlements {
   maxMessagesPerDay: number;
-  availableChatModelIds: Array<ChatModel['id']>;
+  getAvailableModels: () => Array<ChatModel>;
 }
 
 export const entitlementsByUserType: Record<UserType, Entitlements> = {
@@ -12,7 +12,12 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    */
   guest: {
     maxMessagesPerDay: 20,
-    availableChatModelIds: ['chat-model', 'chat-model-reasoning'],
+    getAvailableModels: () => {
+      // Guest users get access to basic models only
+      return chatModels.filter(
+        (model) => model.id.includes('grok-3-mini'), // Only mini models for guests
+      );
+    },
   },
 
   /*
@@ -20,10 +25,26 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    */
   regular: {
     maxMessagesPerDay: 100,
-    availableChatModelIds: ['chat-model', 'chat-model-reasoning'],
+    getAvailableModels: () => {
+      // Regular users get access to all models
+      return chatModels;
+    },
   },
 
   /*
    * TODO: For users with an account and a paid membership
    */
+};
+
+// Helper functions for backward compatibility and convenience
+export const getAvailableModelsForUser = (
+  userType: UserType,
+): Array<ChatModel> => {
+  return entitlementsByUserType[userType].getAvailableModels();
+};
+
+export const getAvailableModelIdsForUser = (
+  userType: UserType,
+): Array<ChatModel['id']> => {
+  return getAvailableModelsForUser(userType).map((model) => model.id);
 };

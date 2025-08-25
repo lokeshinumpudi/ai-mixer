@@ -21,6 +21,7 @@ import { useArtifact } from '@/hooks/use-artifact';
 import equal from 'fast-deep-equal';
 import { SpreadsheetEditor } from './sheet-editor';
 import { ImageEditor } from './image-editor';
+import { usePathname } from 'next/navigation';
 
 interface DocumentPreviewProps {
   isReadonly: boolean;
@@ -33,7 +34,9 @@ export function DocumentPreview({
   result,
   args,
 }: DocumentPreviewProps) {
-  const { artifact, setArtifact } = useArtifact();
+  const pathname = usePathname();
+  const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
+  const { artifact, setArtifact } = useArtifact(chatId);
 
   const { data: documents, isLoading: isDocumentsFetching } = useSWR<
     Array<Document>
@@ -235,7 +238,9 @@ const DocumentHeader = memo(PureDocumentHeader, (prevProps, nextProps) => {
 });
 
 const DocumentContent = ({ document }: { document: Document }) => {
-  const { artifact } = useArtifact();
+  const pathname = usePathname();
+  const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
+  const { artifact } = useArtifact(chatId);
 
   const containerClassName = cn(
     'h-[257px] overflow-y-scroll border rounded-b-2xl dark:bg-muted border-t-0 dark:border-zinc-700',

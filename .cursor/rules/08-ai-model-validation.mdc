@@ -1,0 +1,320 @@
+---
+globs: lib/ai/*.ts,app/**/api/chat/*.ts,components/model-selector.tsx,tests/**/*.ts
+description: Prevents hallucinating model names and provider configurations by documenting exact available models and validation rules
+---
+
+# AI Model & Provider Validation Rules
+
+## 🚨 CRITICAL: Do Not Hallucinate Models or Providers
+
+**NEVER** reference model IDs or provider configurations that don't exist in the actual codebase. Always check [lib/ai/models.ts](mdc:lib/ai/models.ts) and [lib/ai/providers.ts](mdc:lib/ai/providers.ts) before using any model references.
+
+## Current Available Models (as of latest update)
+
+### Production Models
+
+**ONLY these models exist in production** ([lib/ai/models.ts](mdc:lib/ai/models.ts)):
+
+```typescript
+// ✅ ACTUAL MODELS - These exist and can be used
+{
+  id: 'xai:grok-3-mini',
+  name: 'Grok 3 Mini',
+  description: 'Fast and efficient model for general chat',
+  provider: 'xai',
+  supportsReasoning: true,
+  supportsArtifacts: true,
+}
+```
+
+### System Models
+
+**Special system models** (defined in [lib/ai/providers.ts](mdc:lib/ai/providers.ts)):
+
+```typescript
+// ✅ SYSTEM MODELS - These exist for internal use
+"title-model"; // Maps to xai('grok-3-mini')
+"artifact-model"; // Maps to xai('grok-3-mini')
+```
+
+### Current Providers
+
+**ONLY these providers are implemented**:
+
+```typescript
+// ✅ IMPLEMENTED PROVIDERS
+"xai"; // xAI provider with Grok models
+```
+
+## ❌ DO NOT USE - Common Hallucinations
+
+**These models DO NOT exist in production** (despite appearing in tests or legacy code):
+
+```typescript
+// ❌ THESE DO NOT EXIST - Do not reference these
+"xai:grok-3-mini-reasoning"; // Legacy test reference
+"xai:grok-2-1212"; // Legacy test reference
+"xai:grok-2-reasoning"; // Legacy test reference
+"openai:gpt-4o"; // Not implemented
+"anthropic:claude-3-haiku"; // Not implemented
+"chat-model"; // Legacy hardcoded ID
+"chat-model-reasoning"; // Legacy hardcoded ID
+```
+
+**These providers are NOT implemented**:
+
+```typescript
+// ❌ THESE PROVIDERS DO NOT EXIST
+"openai"; // Not implemented
+"anthropic"; // Not implemented
+"cohere"; // Not implemented
+```
+
+## Model ID Format Rules
+
+### Required Format
+
+All model IDs MUST follow this pattern:
+
+```typescript
+"provider:model-name";
+// Examples:
+"xai:grok-3-mini"; // ✅ Correct
+"grok-3-mini"; // ❌ Missing provider prefix
+"xai-grok-3-mini"; // ❌ Wrong separator (use colon)
+```
+
+### Model Properties
+
+Every model MUST have these exact properties:
+
+```typescript
+interface ChatModel {
+  id: string; // Format: "provider:model-name"
+  name: string; // Display name for users
+  description: string; // User-friendly description
+  provider: string; // Provider identifier
+  supportsReasoning: boolean; // Shows step-by-step reasoning
+  supportsArtifacts: boolean; // Can use artifact creation tools
+}
+```
+
+## Adding New Models - Required Steps
+
+### ⚠️ BEFORE adding any new model, you MUST:
+
+1. **Verify the model exists** with the actual AI provider
+2. **Install the provider SDK** if it's a new provider
+3. **Add environment variables** for API keys
+4. **Follow the exact process below**
+
+### Step-by-Step Process
+
+1. **Add to models definition** in [lib/ai/models.ts](mdc:lib/ai/models.ts):
+
+```typescript
+// Add to chatModels array
+{
+  id: 'provider:model-name',        // Use actual provider and model name
+  name: 'Display Name',             // User-friendly name
+  description: 'Description here',  // Clear description
+  provider: 'provider',             // Must match provider implementation
+  supportsReasoning: boolean,       // Based on actual capabilities
+  supportsArtifacts: boolean,       // Based on actual capabilities
+}
+```
+
+2. **Add provider mapping** in [lib/ai/providers.ts](mdc:lib/ai/providers.ts):
+
+```typescript
+// Add provider case in createLanguageModels()
+if (model.provider === "newprovider") {
+  if (model.supportsReasoning) {
+    models[model.id] = wrapLanguageModel({
+      model: newprovider(baseModelId),
+      middleware: extractReasoningMiddleware({ tagName: "thinking" }),
+    });
+  } else {
+    models[model.id] = newprovider(baseModelId);
+  }
+}
+```
+
+3. **Update test models** in [lib/ai/providers.ts](mdc:lib/ai/providers.ts):
+
+```typescript
+// Add to createTestLanguageModels()
+'provider:model-name': chatModel,  // Use actual model ID
+```
+
+4. **Update entitlements** in [lib/ai/entitlements.ts](mdc:lib/ai/entitlements.ts) if needed
+
+5. **Add environment variables**:
+
+```env
+NEW_PROVIDER_API_KEY=your_key_here
+```
+
+## Validation Rules
+
+### When writing code that references models:
+
+1. **Always import from models.ts**:
+
+```typescript
+import { chatModels } from "@/lib/ai/models";
+
+// ✅ Get available models
+const availableModels = chatModels.map((m) => m.id);
+
+// ❌ Never hardcode model IDs
+const modelId = "xai:grok-4-turbo"; // This doesn't exist!
+```
+
+2. **Use type-safe references**:
+
+```typescript
+import type { ChatModel } from "@/lib/ai/models";
+
+// ✅ Type-safe model parameter
+function useModel(modelId: ChatModel["id"]) {
+  // This will catch typos at compile time
+}
+```
+
+3. **Always check model capabilities**:
+
+```typescript
+const model = chatModels.find((m) => m.id === selectedModelId);
+if (!model) {
+  throw new Error(`Model ${selectedModelId} not found`);
+}
+
+// ✅ Use actual capabilities
+if (model.supportsReasoning) {
+  // Enable reasoning features
+}
+```
+
+## Testing Rules
+
+### Test Model References
+
+**In tests, only reference models that exist in production**:
+
+```typescript
+// ✅ Good - Uses actual production model
+const testModel = "xai:grok-3-mini";
+
+// ❌ Bad - Uses non-existent model
+const testModel = "xai:grok-5-ultra"; // This doesn't exist!
+```
+
+### Test Fixtures
+
+**Update test fixtures to use real models**:
+
+```typescript
+// ✅ Good - References actual model
+await chatPage.chooseModelFromSelector("xai:grok-3-mini");
+
+// ❌ Bad - References non-existent model
+await chatPage.chooseModelFromSelector("gpt-4-reasoning"); // Not implemented!
+```
+
+## Common Mistakes to Avoid
+
+### ❌ Don't Do This
+
+```typescript
+// Hardcoding non-existent models
+const reasoningModel = "xai:grok-3-reasoning"; // Doesn't exist
+
+// Assuming capabilities without checking
+if (modelId.includes("reasoning")) {
+  // Wrong approach
+  enableReasoning();
+}
+
+// Using legacy model IDs
+const model = "chat-model-reasoning"; // Legacy, doesn't exist
+
+// Making up provider configurations
+models["anthropic:claude-4"] = anthropic("claude-4"); // Provider not implemented
+```
+
+### ✅ Do This Instead
+
+```typescript
+// Use actual models from configuration
+import { chatModels } from "@/lib/ai/models";
+const model = chatModels.find((m) => m.supportsReasoning);
+
+// Check capabilities properly
+if (selectedModel.supportsReasoning) {
+  enableReasoning();
+}
+
+// Use type-safe imports
+import type { ChatModel } from "@/lib/ai/models";
+```
+
+## Provider Implementation Rules
+
+### Before Adding New Providers
+
+1. **Verify provider SDK compatibility** with AI SDK v5
+2. **Check authentication requirements**
+3. **Test model availability** in provider's API
+4. **Understand pricing and rate limits**
+
+### Provider Implementation Template
+
+```typescript
+// 1. Install SDK
+// npm install @ai-sdk/provider-name
+
+// 2. Import and configure
+import { providerName } from "@ai-sdk/provider-name";
+
+// 3. Add to provider mapping
+if (model.provider === "provider-name") {
+  models[model.id] = providerName(baseModelId);
+}
+
+// 4. Add environment variable
+// PROVIDER_NAME_API_KEY=...
+```
+
+## Error Prevention Checklist
+
+Before committing any model/provider changes:
+
+- [ ] ✅ Model exists in [lib/ai/models.ts](mdc:lib/ai/models.ts)
+- [ ] ✅ Provider is implemented in [lib/ai/providers.ts](mdc:lib/ai/providers.ts)
+- [ ] ✅ Test models updated to match production models
+- [ ] ✅ No hardcoded model IDs in code
+- [ ] ✅ Type safety maintained
+- [ ] ✅ Build passes without errors
+- [ ] ✅ Tests use actual model references
+
+## Quick Reference
+
+### Current State Summary
+
+```typescript
+// Production Models (1 total)
+"xai:grok-3-mini"; // Supports reasoning + artifacts
+
+// System Models (2 total)
+"title-model"; // Internal use
+"artifact-model"; // Internal use
+
+// Providers (1 total)
+"xai"; // xAI/Grok provider
+
+// Default Model
+DEFAULT_CHAT_MODEL = "xai:grok-3-mini";
+```
+
+Remember: **When in doubt, check [lib/ai/models.ts](mdc:lib/ai/models.ts) first!** Never assume a model exists without verifying it in the actual configuration.

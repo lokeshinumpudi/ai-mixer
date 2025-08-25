@@ -1,20 +1,19 @@
 ---
-globs: artifacts/**/*,components/artifact*,lib/artifacts/**/*
-description: Artifacts system patterns for generating and editing code, text, images, and spreadsheets
+description: Artifacts system patterns with chat-scoped state management for generating and editing code, text, images, and spreadsheets
 ---
 
 # Artifacts System Architecture
 
 ## Overview
 
-The artifacts system enables real-time generation and editing of different content types (text, code, images, spreadsheets) with live preview, version control, and collaborative editing features.
+The artifacts system enables real-time generation and editing of different content types (text, code, images, spreadsheets) with live preview, version control, collaborative editing features, and **chat-scoped state management**.
 
 ## Core Architecture
 
 ### Artifact Types
 
 - **Text** - Rich text documents with markdown support
-- **Code** - Interactive code editor with syntax highlighting
+- **Code** - Interactive code editor with syntax highlighting and execution
 - **Image** - Image generation and editing capabilities
 - **Sheet** - Spreadsheet functionality with data manipulation
 
@@ -37,79 +36,230 @@ artifacts/
     └── server.ts       # Sheet artifact server handler
 ```
 
-## Artifact Definition Pattern
+## Chat-Scoped State Management
 
-### Client-Side Artifact Structure
+### Problem Solved
+
+Previously, artifact state was global and persisted across chat sessions, causing artifacts to unexpectedly appear when switching chats. Now each chat session has isolated artifact state.
+
+### Implementation Pattern
 
 ```typescript
-// Reference: artifacts/text/client.tsx
-import type { ArtifactDefinition } from "@/components/artifact";
-
-export const textArtifact: ArtifactDefinition = {
-  kind: "text",
-  title: "Text Document",
-  description: "Rich text document with markdown support",
-  component: TextEditor,
-  previewComponent: TextPreview,
-  actions: ["edit", "copy", "download", "share"],
-};
-
-// Editor component implementation
-function TextEditor({ content, onChange, isReadonly }: ArtifactEditorProps) {
-  return (
-    <div className="h-full">
-      <ProseMirrorEditor
-        content={content}
-        onChange={onChange}
-        editable={!isReadonly}
-      />
-    </div>
+// Reference: hooks/use-artifact.ts - Chat-scoped state
+export function useArtifact(chatId?: string) {
+  const artifactKey = chatId ? `artifact-${chatId}` : "artifact";
+  const { data: localArtifact, mutate: setLocalArtifact } = useSWR<UIArtifact>(
+    artifactKey,
+    null,
+    {
+      fallbackData: initialArtifactData,
+    }
   );
+
+  // Rest of hook implementation...
+}
+
+// Usage in components
+const { artifact, setArtifact } = useArtifact(chatId);
+```
+
+### ChatId Extraction Pattern
+
+```typescript
+// Reference: components/data-stream-handler.tsx
+export function DataStreamHandler() {
+  const pathname = usePathname();
+
+  // Extract chatId from pathname (e.g., /chat/123 -> 123)
+  const chatId = pathname.startsWith("/chat/") ? pathname.slice(6) : undefined;
+
+  const { artifact, setArtifact, setMetadata } = useArtifact(chatId);
+  // Component logic...
 }
 ```
 
-### Server-Side Handler Pattern
+### State Isolation Benefits
+
+1. **Clean navigation** - Closing artifacts in one chat doesn't affect others
+2. **Session persistence** - Each chat maintains its own artifact state
+3. **No state leakage** - Switching chats doesn't show artifacts from previous sessions
+4. **Proper cleanup** - Artifacts are scoped and managed per chat context
+
+## Artifact Definition Pattern
+
+### Enhanced Client-Side Structure
 
 ```typescript
-// Reference: artifacts/text/server.ts
-import type { DocumentHandler } from "@/lib/artifacts/server";
-
-export const textDocumentHandler: DocumentHandler = {
-  kind: "text",
-  onCreateDocument: async ({ id, title, dataStream, session }) => {
-    // Initialize document creation
-    dataStream.write({
-      type: "text-delta",
-      data: "Creating new text document...",
-      transient: true,
+// Reference: artifacts/code/client.tsx - Auto-visibility pattern
+export const codeArtifact = new Artifact<"code", Metadata>({
+  kind: "code",
+  description:
+    "Useful for code generation; Code execution is only available for python code.",
+  initialize: async ({ setMetadata }) => {
+    setMetadata({
+      outputs: [],
     });
-
-    // Create document in database
-    const document = await createDocument({
-      id,
-      title,
-      kind: "text",
-      userId: session.user.id,
-    });
-
-    return document;
   },
-  onUpdateDocument: async ({ documentId, delta, session }) => {
-    // Handle document updates
-    const updatedDocument = await updateDocumentContent({
-      id: documentId,
-      content: delta.content,
-      userId: session.user.id,
-    });
-
-    return updatedDocument;
+  onStreamPart: ({ streamPart, setArtifact }) => {
+    if (streamPart.type === "data-codeDelta") {
+      setArtifact((draftArtifact) => ({
+        ...draftArtifact,
+        content: streamPart.data,
+        // Auto-visibility based on content length
+        isVisible:
+          draftArtifact.status === "streaming" &&
+          draftArtifact.content.length > 300 &&
+          draftArtifact.content.length < 310
+            ? true
+            : draftArtifact.isVisible,
+        status: "streaming",
+      }));
+    }
   },
-};
+  content: ({ metadata, setMetadata, ...props }) => {
+    return (
+      <>
+        <div className="px-1">
+          <CodeEditor {...props} />
+        </div>
+        {metadata?.outputs && (
+          <Console
+            consoleOutputs={metadata.outputs}
+            setConsoleOutputs={() => {
+              setMetadata({
+                ...metadata,
+                outputs: [],
+              });
+            }}
+          />
+        )}
+      </>
+    );
+  },
+  // Actions and toolbar configuration...
+});
+```
+
+### Auto-Visibility Thresholds
+
+Different artifact types have different visibility thresholds:
+
+```typescript
+// Text artifacts - 400+ characters
+isVisible:
+  draftArtifact.status === 'streaming' &&
+  draftArtifact.content.length > 400 &&
+  draftArtifact.content.length < 450
+    ? true
+    : draftArtifact.isVisible,
+
+// Code artifacts - 300+ characters
+isVisible:
+  draftArtifact.status === 'streaming' &&
+  draftArtifact.content.length > 300 &&
+  draftArtifact.content.length < 310
+    ? true
+    : draftArtifact.isVisible,
 ```
 
 ## Core Components
 
-### Artifact Container
+### Enhanced Artifact Container
+
+```typescript
+// Reference: components/artifact.tsx - Chat-scoped implementation
+function PureArtifact({
+  chatId,
+  input,
+  setInput,
+  status,
+  stop,
+  attachments,
+  setAttachments,
+  sendMessage,
+  messages,
+  setMessages,
+  regenerate,
+  votes,
+  isReadonly,
+  selectedVisibilityType,
+  session,
+  selectedModelId,
+}: ArtifactProps) {
+  // Chat-scoped artifact state
+  const { artifact, setArtifact, metadata, setMetadata } = useArtifact(chatId);
+
+  // Document management with SWR
+  const {
+    data: documents,
+    isLoading: isDocumentsFetching,
+    mutate: mutateDocuments,
+  } = useSWR<Array<Document>>(
+    artifact.documentId !== "init" && artifact.status !== "streaming"
+      ? `/api/document?id=${artifact.documentId}`
+      : null,
+    fetcher
+  );
+
+  // Artifact definition lookup
+  const artifactDefinition = artifactDefinitions.find(
+    (definition) => definition.kind === artifact.kind
+  );
+
+  // Version control and editing logic...
+
+  return (
+    <AnimatePresence>
+      {artifact.isVisible && (
+        <motion.div
+          data-testid="artifact"
+          className="flex flex-row h-dvh w-dvw fixed top-0 left-0 z-50 bg-transparent"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { delay: 0.4 } }}
+        >
+          {/* Artifact content and UI */}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+```
+
+### Artifact Close Button
+
+```typescript
+// Reference: components/artifact-close-button.tsx - Chat-aware closing
+function PureArtifactCloseButton() {
+  const pathname = usePathname();
+  const chatId = pathname.startsWith("/chat/") ? pathname.slice(6) : undefined;
+  const { setArtifact } = useArtifact(chatId);
+
+  return (
+    <Button
+      data-testid="artifact-close-button"
+      variant="outline"
+      className="h-fit p-2 dark:hover:bg-zinc-700"
+      onClick={() => {
+        setArtifact((currentArtifact) =>
+          currentArtifact.status === "streaming"
+            ? {
+                ...currentArtifact,
+                isVisible: false,
+              }
+            : { ...initialArtifactData, status: "idle" }
+        );
+      }}
+    >
+      <CrossIcon size={18} />
+    </Button>
+  );
+}
+```
+
+## State Management Interface
+
+### UIArtifact Interface
 
 ```typescript
 // Reference: components/artifact.tsx
@@ -118,9 +268,10 @@ export interface UIArtifact {
   documentId: string;
   kind: ArtifactKind;
   content: string;
-  isVisible: boolean;
-  status: "streaming" | "idle";
+  isVisible: boolean; // Controls artifact visibility
+  status: "streaming" | "idle"; // Streaming state
   boundingBox: {
+    // Position for animations
     top: number;
     left: number;
     width: number;
@@ -128,263 +279,292 @@ export interface UIArtifact {
   };
 }
 
-export function Artifact({
-  chatId,
-  input,
-  setInput,
-  status,
-  messages,
-  votes,
-  isReadonly,
-}: ArtifactProps) {
-  const { artifact, setArtifact } = useArtifact();
-
-  // Find appropriate artifact definition
-  const artifactDefinition = artifactDefinitions.find(
-    (def) => def.kind === artifact.kind
-  );
-
-  if (!artifactDefinition) {
-    return <div>Unsupported artifact type</div>;
-  }
-
-  return (
-    <ResizablePanelGroup direction="horizontal">
-      <ResizablePanel>
-        <artifactDefinition.component
-          content={artifact.content}
-          onChange={handleContentChange}
-          isReadonly={isReadonly}
-        />
-      </ResizablePanel>
-
-      <ResizableHandle />
-
-      <ResizablePanel>
-        <ArtifactMessages chatId={chatId} documentId={artifact.documentId} />
-      </ResizablePanel>
-    </ResizablePanelGroup>
-  );
-}
+export const initialArtifactData: UIArtifact = {
+  documentId: "init",
+  content: "",
+  kind: "text",
+  title: "",
+  status: "idle",
+  isVisible: false, // Default to hidden
+  boundingBox: {
+    top: 0,
+    left: 0,
+    width: 0,
+    height: 0,
+  },
+};
 ```
 
-### State Management
+### Metadata Management
 
 ```typescript
-// Reference: hooks/use-artifact.ts
-export function useArtifact() {
-  const [artifact, setArtifact] = useState<UIArtifact>({
-    title: "",
-    documentId: "init",
-    kind: "text",
-    content: "",
-    isVisible: false,
-    status: "idle",
-    boundingBox: { top: 0, left: 0, width: 0, height: 0 },
-  });
-
-  const [metadata, setMetadata] = useState<ArtifactMetadata>({
-    language: "",
-    framework: "",
-    dependencies: [],
-  });
-
-  return {
-    artifact,
-    setArtifact,
-    metadata,
-    setMetadata,
-  };
-}
+// Chat-scoped metadata with document association
+const { data: localArtifactMetadata, mutate: setLocalArtifactMetadata } =
+  useSWR<any>(
+    () =>
+      artifact.documentId && artifact.documentId !== "init"
+        ? `artifact-metadata-${artifact.documentId}`
+        : null,
+    null,
+    {
+      fallbackData: null,
+    }
+  );
 ```
 
 ## Artifact Type Implementations
 
-### Text Artifacts
+### Text Artifacts with Suggestions
 
 ```typescript
 // Reference: artifacts/text/client.tsx
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-
-export function TextEditor({ content, onChange, isReadonly }: TextEditorProps) {
-  const editor = useEditor({
-    extensions: [StarterKit],
-    content,
-    editable: !isReadonly,
-    onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
-    },
-  });
-
-  return (
-    <div className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl mx-auto">
-      <EditorContent editor={editor} />
-    </div>
-  );
-}
-```
-
-### Code Artifacts
-
-```typescript
-// Reference: artifacts/code/client.tsx
-import CodeMirror from "@uiw/react-codemirror";
-import { javascript } from "@codemirror/lang-javascript";
-import { python } from "@codemirror/lang-python";
-
-export function CodeEditor({
-  content,
-  onChange,
-  language,
-  isReadonly,
-}: CodeEditorProps) {
-  const extensions = [language === "python" ? python() : javascript()];
-
-  return (
-    <CodeMirror
-      value={content}
-      height="100%"
-      extensions={extensions}
-      onChange={onChange}
-      editable={!isReadonly}
-      theme="dark"
-    />
-  );
-}
-```
-
-### Image Artifacts
-
-```typescript
-// Reference: artifacts/image/client.tsx
-export function ImageEditor({
-  content,
-  onChange,
-  isReadonly,
-}: ImageEditorProps) {
-  const [imageUrl, setImageUrl] = useState(content);
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 flex items-center justify-center">
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt="Generated image"
-            className="max-w-full max-h-full object-contain"
-          />
-        ) : (
-          <div className="text-muted-foreground">No image generated yet</div>
-        )}
-      </div>
-
-      {!isReadonly && (
-        <div className="p-4 border-t">
-          <ImageGenerationControls onGenerate={handleImageGeneration} />
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-### Sheet Artifacts
-
-```typescript
-// Reference: artifacts/sheet/client.tsx
-import DataGrid from "react-data-grid";
-
-export function SheetEditor({
-  content,
-  onChange,
-  isReadonly,
-}: SheetEditorProps) {
-  const [data, setData] = useState(() => {
-    try {
-      return JSON.parse(content);
-    } catch {
-      return [];
+export const textArtifact = new Artifact<"text", TextArtifactMetadata>({
+  kind: "text",
+  description: "Useful for text content, like drafting essays and emails.",
+  initialize: async ({ documentId, setMetadata }) => {
+    const suggestions = await getSuggestions({ documentId });
+    setMetadata({
+      suggestions,
+    });
+  },
+  onStreamPart: ({ streamPart, setMetadata, setArtifact }) => {
+    if (streamPart.type === "data-suggestion") {
+      setMetadata((metadata) => {
+        return {
+          suggestions: [...metadata.suggestions, streamPart.data],
+        };
+      });
     }
-  });
 
-  const handleDataChange = (newData: any[]) => {
-    setData(newData);
-    onChange(JSON.stringify(newData));
-  };
+    if (streamPart.type === "data-textDelta") {
+      setArtifact((draftArtifact) => {
+        return {
+          ...draftArtifact,
+          content: draftArtifact.content + streamPart.data,
+          isVisible:
+            draftArtifact.status === "streaming" &&
+            draftArtifact.content.length > 400 &&
+            draftArtifact.content.length < 450
+              ? true
+              : draftArtifact.isVisible,
+          status: "streaming",
+        };
+      });
+    }
+  },
+  // Content component implementation...
+});
+```
 
-  return (
-    <DataGrid
-      columns={columns}
-      rows={data}
-      onRowsChange={handleDataChange}
-      className="fill-grid"
-      readonly={isReadonly}
-    />
-  );
+### Code Artifacts with Execution
+
+```typescript
+// Reference: artifacts/code/client.tsx - Enhanced with console output
+interface Metadata {
+  outputs: Array<ConsoleOutput>;
 }
+
+export const codeArtifact = new Artifact<"code", Metadata>({
+  kind: "code",
+  description:
+    "Useful for code generation; Code execution is only available for python code.",
+  content: ({ metadata, setMetadata, ...props }) => {
+    return (
+      <>
+        <div className="px-1">
+          <CodeEditor {...props} />
+        </div>
+        {metadata?.outputs && (
+          <Console
+            consoleOutputs={metadata.outputs}
+            setConsoleOutputs={() => {
+              setMetadata({
+                ...metadata,
+                outputs: [],
+              });
+            }}
+          />
+        )}
+      </>
+    );
+  },
+  actions: [
+    {
+      icon: <PlayIcon size={18} />,
+      label: "Run",
+      action: async ({ content, setMetadata, metadata }) => {
+        // Execute code and capture output
+        const output = await executeCode(content);
+        setMetadata({
+          ...metadata,
+          outputs: [...metadata.outputs, output],
+        });
+      },
+    },
+  ],
+});
 ```
 
 ## Data Streaming Integration
+
+### Enhanced Stream Handler
+
+```typescript
+// Reference: components/data-stream-handler.tsx - Chat-scoped streaming
+export function DataStreamHandler() {
+  const { dataStream } = useDataStream();
+  const pathname = usePathname();
+
+  // Extract chatId from pathname (e.g., /chat/123 -> 123)
+  const chatId = pathname.startsWith("/chat/") ? pathname.slice(6) : undefined;
+
+  const { artifact, setArtifact, setMetadata } = useArtifact(chatId);
+  const lastProcessedIndex = useRef(-1);
+
+  useEffect(() => {
+    if (!dataStream?.length) return;
+
+    const newDeltas = dataStream.slice(lastProcessedIndex.current + 1);
+    lastProcessedIndex.current = dataStream.length - 1;
+
+    newDeltas.forEach((delta) => {
+      const artifactDefinition = artifactDefinitions.find(
+        (artifactDefinition) => artifactDefinition.kind === artifact.kind
+      );
+
+      // Let artifact handle stream part
+      if (artifactDefinition?.onStreamPart) {
+        artifactDefinition.onStreamPart({
+          streamPart: delta,
+          setArtifact,
+          setMetadata,
+        });
+      }
+
+      // Handle common stream data types
+      setArtifact((draftArtifact) => {
+        if (delta.type === "data-clear") {
+          return { ...initialArtifactData, status: "streaming" };
+        }
+
+        switch (delta.type) {
+          case "data-id":
+            return {
+              ...draftArtifact,
+              documentId: delta.data,
+              status: "streaming",
+            };
+          case "data-title":
+            return {
+              ...draftArtifact,
+              title: delta.data,
+              status: "streaming",
+            };
+          case "data-kind":
+            return {
+              ...draftArtifact,
+              kind: delta.data,
+              status: "streaming",
+            };
+          case "data-finish":
+            return {
+              ...draftArtifact,
+              status: "idle",
+            };
+          default:
+            return draftArtifact;
+        }
+      });
+    });
+  }, [dataStream, artifact, setArtifact, setMetadata]);
+
+  return null;
+}
+```
 
 ### Stream Data Types
 
 ```typescript
 // Artifact-specific stream data types
 type ArtifactStreamData =
-  | { type: "text-delta"; data: string; transient: true }
-  | { type: "code-delta"; data: string; transient: true }
-  | { type: "image-url"; data: string; transient: true }
-  | { type: "sheet-data"; data: any[]; transient: true }
+  | { type: "data-textDelta"; data: string; transient: true }
+  | { type: "data-codeDelta"; data: string; transient: true }
+  | { type: "data-suggestion"; data: Suggestion; transient: true }
   | { type: "data-kind"; data: ArtifactKind; transient: true }
   | { type: "data-id"; data: string; transient: true }
-  | { type: "data-title"; data: string; transient: true };
+  | { type: "data-title"; data: string; transient: true }
+  | { type: "data-clear"; data: null; transient: true }
+  | { type: "data-finish"; data: null; transient: true };
 ```
 
-### Stream Handler Pattern
+## Document Interaction Patterns
+
+### Click-to-Open Artifacts
 
 ```typescript
-// Reference: components/data-stream-handler.tsx
-export function DataStreamHandler() {
-  const { dataStream } = useDataStream();
-  const { setArtifact } = useArtifact();
+// Reference: components/document-preview.tsx - Chat-aware opening
+const PureHitboxLayer = ({
+  hitboxRef,
+  result,
+  setArtifact,
+}: {
+  hitboxRef: React.RefObject<HTMLDivElement>;
+  result: any;
+  setArtifact: (
+    updaterFn: UIArtifact | ((currentArtifact: UIArtifact) => UIArtifact)
+  ) => void;
+}) => {
+  const handleClick = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      const boundingBox = event.currentTarget.getBoundingClientRect();
 
-  useEffect(() => {
-    if (!dataStream) return;
+      setArtifact((artifact) =>
+        artifact.status === "streaming"
+          ? { ...artifact, isVisible: true }
+          : {
+              ...artifact,
+              title: result.title,
+              documentId: result.id,
+              kind: result.kind,
+              isVisible: true, // Make visible on click
+              boundingBox: {
+                left: boundingBox.x,
+                top: boundingBox.y,
+                width: boundingBox.width,
+                height: boundingBox.height,
+              },
+            }
+      );
+    },
+    [setArtifact, result]
+  );
 
-    for (const data of dataStream) {
-      switch (data.type) {
-        case "data-kind":
-          setArtifact((prev) => ({ ...prev, kind: data.data }));
-          break;
-        case "data-id":
-          setArtifact((prev) => ({ ...prev, documentId: data.data }));
-          break;
-        case "text-delta":
-          setArtifact((prev) => ({
-            ...prev,
-            content: prev.content + data.data,
-          }));
-          break;
-      }
-    }
-  }, [dataStream, setArtifact]);
-
-  return null;
-}
+  return (
+    <div
+      className="size-full absolute top-0 left-0 rounded-xl z-10"
+      ref={hitboxRef}
+      onClick={handleClick}
+      role="presentation"
+      aria-hidden="true"
+    >
+      {/* Fullscreen icon overlay */}
+    </div>
+  );
+};
 ```
 
 ## Version Control & Collaboration
 
-### Document Versioning
+### Document Versioning with Chat Context
 
 ```typescript
-// Automatic versioning on content changes
+// Automatic versioning on content changes - scoped to chat
 const debouncedSave = useDebounceCallback((content: string) => {
   updateDocumentContent({
     id: artifact.documentId,
     content,
     version: Date.now(),
+    chatId, // Associate with specific chat
   });
 }, 1000);
 ```
@@ -407,169 +587,83 @@ export const suggestion = pgTable("Suggestion", {
 });
 ```
 
-### Diff Visualization
-
-```typescript
-// Reference: components/diffview.tsx
-import * as Diff from "diff";
-
-export function DiffView({ original, modified }: DiffViewProps) {
-  const diff = Diff.diffWords(original, modified);
-
-  return (
-    <div className="font-mono text-sm">
-      {diff.map((part, index) => (
-        <span
-          key={index}
-          className={cn(
-            part.added && "bg-green-100 text-green-800",
-            part.removed && "bg-red-100 text-red-800"
-          )}
-        >
-          {part.value}
-        </span>
-      ))}
-    </div>
-  );
-}
-```
-
-## Actions & Toolbar
-
-### Artifact Actions
-
-```typescript
-// Reference: components/artifact-actions.tsx
-export function ArtifactActions({
-  artifact,
-  onEdit,
-  onCopy,
-  onDownload,
-}: ArtifactActionsProps) {
-  return (
-    <div className="flex items-center gap-2">
-      <Button variant="ghost" size="sm" onClick={onEdit}>
-        <Edit className="w-4 h-4" />
-        Edit
-      </Button>
-
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onCopy(artifact.content)}
-      >
-        <Copy className="w-4 h-4" />
-        Copy
-      </Button>
-
-      <Button variant="ghost" size="sm" onClick={() => onDownload(artifact)}>
-        <Download className="w-4 h-4" />
-        Download
-      </Button>
-    </div>
-  );
-}
-```
-
-### Toolbar Integration
-
-```typescript
-// Reference: components/toolbar.tsx
-export function Toolbar({ artifact, mode, setMode }: ToolbarProps) {
-  const artifactDefinition = artifactDefinitions.find(
-    (def) => def.kind === artifact.kind
-  );
-
-  return (
-    <div className="flex items-center justify-between p-2 border-b">
-      <div className="flex items-center gap-2">
-        <h3 className="font-medium">{artifact.title}</h3>
-        <Badge variant="secondary">{artifactDefinition?.title}</Badge>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <ToggleGroup type="single" value={mode} onValueChange={setMode}>
-          <ToggleGroupItem value="edit">Edit</ToggleGroupItem>
-          <ToggleGroupItem value="diff">Diff</ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-    </div>
-  );
-}
-```
-
 ## Performance & UX Considerations
 
-### Debounced Auto-save
+### Chat-Scoped Performance
 
 ```typescript
+// Debounced auto-save with chat context
 const debouncedSave = useDebounceCallback((content: string) => {
-  // Save to database
-  updateDocument({ id: artifact.documentId, content });
+  // Save to database with chat association
+  updateDocument({
+    id: artifact.documentId,
+    content,
+    chatId,
+  });
 }, 1000); // 1 second delay
 ```
 
-### Virtualization for Large Content
+### Memory Management
 
 ```typescript
-// For large datasets in sheets
-import { FixedSizeGrid as Grid } from "react-window";
-
-export function VirtualizedSheet({ data }: VirtualizedSheetProps) {
-  return (
-    <Grid
-      columnCount={data[0]?.length || 0}
-      columnWidth={100}
-      height={600}
-      rowCount={data.length}
-      rowHeight={35}
-      itemData={data}
-    >
-      {CellRenderer}
-    </Grid>
-  );
-}
+// Clean up artifact state when leaving chat
+useEffect(() => {
+  return () => {
+    // Optional: Clean up resources when component unmounts
+    if (artifact.documentId !== "init") {
+      // Cleanup heavy resources, but keep state for return visits
+    }
+  };
+}, [chatId]);
 ```
 
-### Lazy Loading Artifacts
+### State Persistence Strategy
+
+1. **Session storage** - Artifacts persist within chat session
+2. **Cross-session** - State restored when returning to same chat
+3. **Cleanup** - Old artifact states can be garbage collected
+4. **Isolation** - No cross-chat state contamination
+
+## Testing Chat-Scoped Artifacts
+
+### State Isolation Testing
 
 ```typescript
-// Dynamic imports for artifact components
-const LazyTextEditor = lazy(() => import("@/artifacts/text/client"));
-const LazyCodeEditor = lazy(() => import("@/artifacts/code/client"));
+describe("Chat-Scoped Artifacts", () => {
+  it("should isolate artifact state between chats", () => {
+    // Create artifact in chat1
+    const chat1Hook = renderHook(() => useArtifact("chat1"));
+    act(() => {
+      chat1Hook.result.current.setArtifact((prev) => ({
+        ...prev,
+        isVisible: true,
+        title: "Chat 1 Artifact",
+      }));
+    });
 
-export function ArtifactRenderer({ kind }: { kind: ArtifactKind }) {
-  switch (kind) {
-    case "text":
-      return (
-        <Suspense fallback={<ArtifactSkeleton />}>
-          <LazyTextEditor />
-        </Suspense>
-      );
-    // ... other cases
-  }
-}
-```
+    // Create artifact in chat2
+    const chat2Hook = renderHook(() => useArtifact("chat2"));
 
-## Testing Artifacts
+    // Should have separate state
+    expect(chat1Hook.result.current.artifact.title).toBe("Chat 1 Artifact");
+    expect(chat2Hook.result.current.artifact.title).toBe("");
+    expect(chat2Hook.result.current.artifact.isVisible).toBe(false);
+  });
 
-### Component Testing
+  it("should persist state within same chat", () => {
+    const { result: hook1 } = renderHook(() => useArtifact("chat1"));
+    act(() => {
+      hook1.current.setArtifact((prev) => ({
+        ...prev,
+        isVisible: true,
+        content: "Test content",
+      }));
+    });
 
-```typescript
-// Test artifact components
-describe("TextEditor", () => {
-  it("should update content on change", () => {
-    const mockOnChange = jest.fn();
-    render(
-      <TextEditor
-        content="Initial content"
-        onChange={mockOnChange}
-        isReadonly={false}
-      />
-    );
-
-    // Simulate user input
-    // Assert onChange called with new content
+    // Re-render with same chatId
+    const { result: hook2 } = renderHook(() => useArtifact("chat1"));
+    expect(hook2.current.artifact.content).toBe("Test content");
+    expect(hook2.current.artifact.isVisible).toBe(true);
   });
 });
 ```
@@ -577,20 +671,30 @@ describe("TextEditor", () => {
 ### Integration Testing
 
 ```typescript
-// Test full artifact workflow
-it("should create and update text artifact", async () => {
-  // Create artifact
-  const createResponse = await createDocument({
-    title: "Test Document",
-    kind: "text",
+// Test full artifact workflow with chat scoping
+it("should handle artifact lifecycle within chat context", async () => {
+  const chatId = "test-chat-123";
+
+  // Navigate to specific chat
+  render(<ChatPage chatId={chatId} />);
+
+  // Trigger artifact creation
+  await user.type(screen.getByRole("textbox"), "Create a todo list");
+  await user.click(screen.getByRole("button", { name: /send/i }));
+
+  // Artifact should appear
+  await waitFor(() => {
+    expect(screen.getByTestId("artifact")).toBeInTheDocument();
   });
 
-  // Update content
-  const updateResponse = await updateDocument({
-    id: createResponse.id,
-    content: "Updated content",
-  });
+  // Close artifact
+  await user.click(screen.getByTestId("artifact-close-button"));
 
-  expect(updateResponse.content).toBe("Updated content");
+  // Navigate away and back
+  navigate("/");
+  navigate(`/chat/${chatId}`);
+
+  // Artifact should remain closed
+  expect(screen.queryByTestId("artifact")).not.toBeInTheDocument();
 });
 ```

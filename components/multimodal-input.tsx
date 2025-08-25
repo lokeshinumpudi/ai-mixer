@@ -33,8 +33,7 @@ import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
 import type { Session } from 'next-auth';
 import { ChevronDownIcon, CheckCircleFillIcon } from './icons';
-import { chatModels } from '@/lib/ai/models';
-import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import { getAvailableModelsForUser } from '@/lib/ai/entitlements';
 import { saveChatModelAsCookie } from '@/app/(chat)/actions';
 import {
   DropdownMenu,
@@ -455,11 +454,7 @@ function PureCompactModelSelector({
     useOptimistic(selectedModelId);
 
   const userType = session.user.type;
-  const { availableChatModelIds } = entitlementsByUserType[userType];
-
-  const availableChatModels = chatModels.filter((chatModel) =>
-    availableChatModelIds.includes(chatModel.id),
-  );
+  const availableChatModels = getAvailableModelsForUser(userType);
 
   const selectedChatModel = useMemo(
     () =>

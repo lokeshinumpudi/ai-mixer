@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { UIArtifact } from '@/components/artifact';
+import type { UIArtifact } from '@/components/artifact';
 import { useCallback, useMemo } from 'react';
 
 export const initialArtifactData: UIArtifact = {
@@ -21,8 +21,12 @@ export const initialArtifactData: UIArtifact = {
 
 type Selector<T> = (state: UIArtifact) => T;
 
-export function useArtifactSelector<Selected>(selector: Selector<Selected>) {
-  const { data: localArtifact } = useSWR<UIArtifact>('artifact', null, {
+export function useArtifactSelector<Selected>(
+  selector: Selector<Selected>,
+  chatId?: string,
+) {
+  const artifactKey = chatId ? `artifact-${chatId}` : 'artifact';
+  const { data: localArtifact } = useSWR<UIArtifact>(artifactKey, null, {
     fallbackData: initialArtifactData,
   });
 
@@ -34,9 +38,10 @@ export function useArtifactSelector<Selected>(selector: Selector<Selected>) {
   return selectedValue;
 }
 
-export function useArtifact() {
+export function useArtifact(chatId?: string) {
+  const artifactKey = chatId ? `artifact-${chatId}` : 'artifact';
   const { data: localArtifact, mutate: setLocalArtifact } = useSWR<UIArtifact>(
-    'artifact',
+    artifactKey,
     null,
     {
       fallbackData: initialArtifactData,
@@ -66,7 +71,9 @@ export function useArtifact() {
   const { data: localArtifactMetadata, mutate: setLocalArtifactMetadata } =
     useSWR<any>(
       () =>
-        artifact.documentId ? `artifact-metadata-${artifact.documentId}` : null,
+        artifact.documentId && artifact.documentId !== 'init'
+          ? `artifact-metadata-${artifact.documentId}`
+          : null,
       null,
       {
         fallbackData: null,

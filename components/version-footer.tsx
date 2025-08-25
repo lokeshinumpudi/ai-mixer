@@ -12,6 +12,7 @@ import { getDocumentTimestampByIndex } from '@/lib/utils';
 import { LoaderIcon } from './icons';
 import { Button } from './ui/button';
 import { useArtifact } from '@/hooks/use-artifact';
+import { usePathname } from 'next/navigation';
 
 interface VersionFooterProps {
   handleVersionChange: (type: 'next' | 'prev' | 'toggle' | 'latest') => void;
@@ -24,7 +25,9 @@ export const VersionFooter = ({
   documents,
   currentVersionIndex,
 }: VersionFooterProps) => {
-  const { artifact } = useArtifact();
+  const pathname = usePathname();
+  const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
+  const { artifact } = useArtifact(chatId);
 
   const { width } = useWindowSize();
   const isMobile = width < 768;

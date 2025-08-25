@@ -4,6 +4,7 @@ import type { ArtifactKind } from './artifact';
 import { FileIcon, LoaderIcon, MessageIcon, PencilEditIcon } from './icons';
 import { toast } from 'sonner';
 import { useArtifact } from '@/hooks/use-artifact';
+import { usePathname } from 'next/navigation';
 
 const getActionText = (
   type: 'create' | 'update' | 'request-suggestions',
@@ -34,7 +35,9 @@ function PureDocumentToolResult({
   result,
   isReadonly,
 }: DocumentToolResultProps) {
-  const { setArtifact } = useArtifact();
+  const pathname = usePathname();
+  const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
+  const { setArtifact } = useArtifact(chatId);
 
   return (
     <button
@@ -100,7 +103,9 @@ function PureDocumentToolCall({
   args,
   isReadonly,
 }: DocumentToolCallProps) {
-  const { setArtifact } = useArtifact();
+  const pathname = usePathname();
+  const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
+  const { setArtifact } = useArtifact(chatId);
 
   return (
     <button

@@ -2,9 +2,12 @@ import { memo } from 'react';
 import { CrossIcon } from './icons';
 import { Button } from './ui/button';
 import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
+import { usePathname } from 'next/navigation';
 
 function PureArtifactCloseButton() {
-  const { setArtifact } = useArtifact();
+  const pathname = usePathname();
+  const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
+  const { setArtifact } = useArtifact(chatId);
 
   return (
     <Button

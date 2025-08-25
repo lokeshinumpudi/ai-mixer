@@ -4,11 +4,16 @@ import { useEffect, useRef } from 'react';
 import { artifactDefinitions } from './artifact';
 import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
 import { useDataStream } from './data-stream-provider';
+import { usePathname } from 'next/navigation';
 
 export function DataStreamHandler() {
   const { dataStream } = useDataStream();
+  const pathname = usePathname();
 
-  const { artifact, setArtifact, setMetadata } = useArtifact();
+  // Extract chatId from pathname (e.g., /chat/123 -> 123)
+  const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
+
+  const { artifact, setArtifact, setMetadata } = useArtifact(chatId);
   const lastProcessedIndex = useRef(-1);
 
   useEffect(() => {
