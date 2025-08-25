@@ -27,12 +27,17 @@ import {
   type DBMessage,
   type Chat,
   stream,
+  subscription,
+  payment,
+  creditLedger,
+  usageDaily,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact';
 import { generateUUID } from '../utils';
 import { generateHashedPassword } from './utils';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { ChatSDKError } from '../errors';
+import { sql } from 'drizzle-orm';
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -534,5 +539,150 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
       'bad_request:database',
       'Failed to get stream ids by chat id',
     );
+  }
+}
+
+// Billing & Usage
+
+export async function createPaymentRecord({
+  userId,
+  orderId,
+  amountPaise,
+  currency,
+}: {
+  userId: string;
+  orderId: string;
+  amountPaise: number;
+  currency: string;
+}) {
+  try {
+    await db
+      .insert(payment)
+      .values({
+        userId,
+        orderId,
+        amountPaise,
+        currency,
+        status: 'created',
+        createdAt: new Date(),
+      })
+      .onConflictDoNothing({ target: payment.orderId });
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to create payment');
+  }
+}
+
+export async function updatePaymentFromWebhook({
+  orderId,
+  paymentId,
+  status,
+}: {
+  orderId: string;
+  paymentId: string;
+  status: string;
+}) {
+  try {
+    await db
+      .update(payment)
+      .set({ paymentId, status })
+      .where(eq(payment.orderId, orderId));
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to update payment');
+  }
+}
+
+export async function addCredit({
+  userId,
+  tokensDelta,
+  reason,
+}: {
+  userId: string;
+  tokensDelta: number;
+  reason: string;
+}) {
+  try {
+    await db.insert(creditLedger).values({
+      userId,
+      tokensDelta,
+      reason,
+      createdAt: new Date(),
+    });
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to add credit');
+  }
+}
+
+export async function setSubscriptionPlan({
+  userId,
+  plan,
+  status,
+  currentPeriodEnd,
+}: {
+  userId: string;
+  plan: string;
+  status: string;
+  currentPeriodEnd?: Date | null;
+}) {
+  try {
+    await db
+      .insert(subscription)
+      .values({
+        userId,
+        plan,
+        status,
+        currentPeriodEnd: currentPeriodEnd ?? null,
+        createdAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: subscription.userId,
+        set: { plan, status, currentPeriodEnd: currentPeriodEnd ?? null },
+      });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set subscription plan',
+    );
+  }
+}
+
+export async function upsertDailyUsage({
+  userId,
+  modelId,
+  tokensIn,
+  tokensOut,
+  day,
+}: {
+  userId: string;
+  modelId: string;
+  tokensIn: number;
+  tokensOut: number;
+  day?: Date;
+}) {
+  const d = day ? new Date(day) : new Date();
+  const dayOnly = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+
+  try {
+    await db
+      .insert(usageDaily)
+      .values({
+        userId,
+        day: dayOnly as unknown as any,
+        modelId,
+        tokensIn,
+        tokensOut,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [usageDaily.userId, usageDaily.day, usageDaily.modelId],
+        set: {
+          tokensIn: sql`${usageDaily.tokensIn} + ${tokensIn}`,
+          tokensOut: sql`${usageDaily.tokensOut} + ${tokensOut}`,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to upsert usage');
   }
 }

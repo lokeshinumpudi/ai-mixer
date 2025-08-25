@@ -25,6 +25,7 @@ import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
+import { upsertDailyUsage } from '@/lib/db/queries';
 import {
   entitlementsByUserType,
   getAvailableModelsForUser,
@@ -222,6 +223,37 @@ export async function POST(request: Request) {
             chatId: id,
           })),
         });
+
+        // Token usage upsert (best-effort)
+        try {
+          const getText = (msg: any) =>
+            Array.isArray(msg?.parts)
+              ? msg.parts
+                  .filter((p: any) => p?.type === 'text')
+                  .map((p: any) => String(p.text || ''))
+                  .join('')
+              : '';
+
+          const lastUser = [...messages]
+            .reverse()
+            .find((m) => m.role === 'user');
+          const lastAssistant = [...messages]
+            .reverse()
+            .find((m) => m.role === 'assistant');
+
+          const inChars = lastUser ? getText(lastUser).length : 0;
+          const outChars = lastAssistant ? getText(lastAssistant).length : 0;
+          const toTokens = (n: number) => Math.ceil(n / 4);
+
+          await upsertDailyUsage({
+            userId: session.user.id,
+            modelId: selectedChatModel,
+            tokensIn: toTokens(inChars),
+            tokensOut: toTokens(outChars),
+          });
+        } catch (err) {
+          console.error('usage upsert failed', err);
+        }
       },
       onError: () => {
         return 'Oops, an error occurred!';

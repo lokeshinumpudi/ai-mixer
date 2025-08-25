@@ -3,6 +3,8 @@ import {
   pgTable,
   varchar,
   timestamp,
+  integer,
+  date,
   json,
   uuid,
   text,
@@ -168,3 +170,64 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+// Billing & Usage
+
+export const subscription = pgTable('Subscription', {
+  id: uuid('id').notNull().defaultRandom().primaryKey(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  plan: varchar('plan', { length: 32 }).notNull().default('free'), // free | pro
+  status: varchar('status', { length: 32 }).notNull().default('active'), // active | past_due | canceled
+  currentPeriodEnd: timestamp('currentPeriodEnd'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type Subscription = InferSelectModel<typeof subscription>;
+
+export const payment = pgTable('Payment', {
+  id: uuid('id').notNull().defaultRandom().primaryKey(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  orderId: varchar('orderId', { length: 64 }).notNull(),
+  paymentId: varchar('paymentId', { length: 64 }),
+  amountPaise: integer('amountPaise').notNull(),
+  currency: varchar('currency', { length: 8 }).notNull().default('INR'),
+  status: varchar('status', { length: 32 }).notNull().default('created'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type Payment = InferSelectModel<typeof payment>;
+
+export const creditLedger = pgTable('CreditLedger', {
+  id: uuid('id').notNull().defaultRandom().primaryKey(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  tokensDelta: integer('tokensDelta').notNull(),
+  reason: varchar('reason', { length: 64 }).notNull().default('topup'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type CreditLedger = InferSelectModel<typeof creditLedger>;
+
+export const usageDaily = pgTable(
+  'UsageDaily',
+  {
+    userId: uuid('userId')
+      .notNull()
+      .references(() => user.id),
+    day: date('day').notNull(),
+    modelId: varchar('modelId', { length: 64 }).notNull(),
+    tokensIn: integer('tokensIn').notNull().default(0),
+    tokensOut: integer('tokensOut').notNull().default(0),
+    updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.day, table.modelId] }),
+  }),
+);
+
+export type UsageDaily = InferSelectModel<typeof usageDaily>;
