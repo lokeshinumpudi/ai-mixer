@@ -34,7 +34,7 @@ description: Prevents hallucinating model names and provider configurations by d
 ```typescript
 // ✅ SYSTEM MODELS - These exist for internal use
 "title-model"; // Maps to xai('grok-3-mini')
-"artifact-model"; // Maps to xai('grok-3-mini')
+// Note: artifact operations now use the user's selected model dynamically
 ```
 
 ### Current Providers
@@ -306,9 +306,9 @@ Before committing any model/provider changes:
 // Production Models (1 total)
 "xai:grok-3-mini"; // Supports reasoning + artifacts
 
-// System Models (2 total)
+// System Models (1 total)
 "title-model"; // Internal use
-"artifact-model"; // Internal use
+// Note: Artifacts now use the user's selected model dynamically
 
 // Providers (1 total)
 "xai"; // xAI/Grok provider

@@ -18,4 +18,12 @@ export const chatModels: Array<ChatModel> = [
     supportsReasoning: true,
     supportsArtifacts: true,
   },
+  {
+    id: 'xai:grok-4-0709',
+    name: 'Grok 4',
+    description: 'Latest model from XAI',
+    provider: 'xai',
+    supportsReasoning: true,
+    supportsArtifacts: true,
+  },
 ];

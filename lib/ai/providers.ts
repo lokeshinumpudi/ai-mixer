@@ -36,7 +36,6 @@ const createLanguageModels = () => {
 
   // Add special models for system functions
   models['title-model'] = xai('grok-3-mini');
-  models['artifact-model'] = xai('grok-3-mini');
 
   return models;
 };
@@ -44,11 +43,8 @@ const createLanguageModels = () => {
 const createTestLanguageModels = () => ({
   // Map new model IDs to test models for backward compatibility
   'xai:grok-3-mini': chatModel,
-  'xai:grok-3-mini-reasoning': reasoningModel,
   'xai:grok-2-1212': chatModel,
-  'xai:grok-2-reasoning': reasoningModel,
   'title-model': titleModel,
-  'artifact-model': artifactModel,
 });
 
 export const myProvider = isTestEnvironment
