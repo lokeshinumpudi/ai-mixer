@@ -12,6 +12,9 @@ import {
   type SetStateAction,
   type ChangeEvent,
   memo,
+  useMemo,
+  useOptimistic,
+  startTransition,
 } from 'react';
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
@@ -28,6 +31,17 @@ import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
+import type { Session } from 'next-auth';
+import { ChevronDownIcon, CheckCircleFillIcon } from './icons';
+import { chatModels } from '@/lib/ai/models';
+import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import { saveChatModelAsCookie } from '@/app/(chat)/actions';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 
 function PureMultimodalInput({
   chatId,
@@ -42,6 +56,8 @@ function PureMultimodalInput({
   sendMessage,
   className,
   selectedVisibilityType,
+  session,
+  selectedModelId,
 }: {
   chatId: string;
   input: string;
@@ -55,6 +71,8 @@ function PureMultimodalInput({
   sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
   className?: string;
   selectedVisibilityType: VisibilityType;
+  session: Session;
+  selectedModelId: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -305,8 +323,13 @@ function PureMultimodalInput({
         }}
       />
 
-      <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start">
+      <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start items-center gap-1">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
+        <CompactModelSelector
+          session={session}
+          selectedModelId={selectedModelId}
+          status={status}
+        />
       </div>
 
       <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
@@ -332,6 +355,7 @@ export const MultimodalInput = memo(
     if (!equal(prevProps.attachments, nextProps.attachments)) return false;
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
+    if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
 
     return true;
   },
@@ -416,3 +440,88 @@ const SendButton = memo(PureSendButton, (prevProps, nextProps) => {
   if (prevProps.input !== nextProps.input) return false;
   return true;
 });
+
+function PureCompactModelSelector({
+  session,
+  selectedModelId,
+  status,
+}: {
+  session: Session;
+  selectedModelId: string;
+  status: UseChatHelpers<ChatMessage>['status'];
+}) {
+  const [open, setOpen] = useState(false);
+  const [optimisticModelId, setOptimisticModelId] =
+    useOptimistic(selectedModelId);
+
+  const userType = session.user.type;
+  const { availableChatModelIds } = entitlementsByUserType[userType];
+
+  const availableChatModels = chatModels.filter((chatModel) =>
+    availableChatModelIds.includes(chatModel.id),
+  );
+
+  const selectedChatModel = useMemo(
+    () =>
+      availableChatModels.find(
+        (chatModel) => chatModel.id === optimisticModelId,
+      ),
+    [optimisticModelId, availableChatModels],
+  );
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          data-testid="compact-model-selector"
+          variant="ghost"
+          className="rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200 text-xs max-w-[100px]"
+          disabled={status !== 'ready'}
+        >
+          <span className="truncate">{selectedChatModel?.name}</span>
+          <ChevronDownIcon size={12} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="top" className="min-w-[300px]">
+        {availableChatModels.map((chatModel) => {
+          const { id } = chatModel;
+
+          return (
+            <DropdownMenuItem
+              data-testid={`compact-model-selector-item-${id}`}
+              key={id}
+              onSelect={() => {
+                setOpen(false);
+
+                startTransition(() => {
+                  setOptimisticModelId(id);
+                  saveChatModelAsCookie(id);
+                });
+              }}
+              data-active={id === optimisticModelId}
+              asChild
+            >
+              <button
+                type="button"
+                className="gap-4 group/item flex flex-row justify-between items-center w-full"
+              >
+                <div className="flex flex-col gap-1 items-start">
+                  <div>{chatModel.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {chatModel.description}
+                  </div>
+                </div>
+
+                <div className="text-foreground dark:text-foreground opacity-0 group-data-[active=true]/item:opacity-100">
+                  <CheckCircleFillIcon />
+                </div>
+              </button>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+const CompactModelSelector = memo(PureCompactModelSelector);

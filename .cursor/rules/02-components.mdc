@@ -1,0 +1,212 @@
+---
+globs: *.tsx,*.ts,components/**/*
+description: Component patterns, UI conventions, and React best practices
+---
+
+# Component Patterns & UI Conventions
+
+## Component Structure
+
+### File Organization
+
+- **One component per file** with same name as filename
+- **Co-locate related components** in subdirectories when needed
+- **Index files** for clean re-exports when appropriate
+- **UI components** in [components/ui/](mdc:components/ui/) following shadcn/ui patterns
+
+### Component Patterns
+
+```typescript
+// Standard component structure
+"use client"; // Only when needed for interactivity
+
+import { type ComponentProps } from "react";
+// External imports first
+// Internal imports grouped by domain
+// Relative imports last
+
+interface ComponentNameProps {
+  // Props interface with clear documentation
+}
+
+export function ComponentName({ prop1, prop2 }: ComponentNameProps) {
+  // Hooks at the top
+  // Event handlers
+  // Render logic
+
+  return <div className="semantic-class-names">{/* Content */}</div>;
+}
+```
+
+## UI Component Guidelines
+
+### shadcn/ui Integration
+
+- **Base components** in [components/ui/](mdc:components/ui/) folder
+- **Composite components** build upon base components
+- **Consistent theming** using CSS variables and Tailwind config
+- **Accessibility** built-in with Radix UI primitives
+
+### Styling Conventions
+
+- **Tailwind CSS** for all styling with semantic class names
+- **CSS variables** for theme consistency defined in [globals.css](mdc:app/globals.css)
+- **Responsive design** with mobile-first approach
+- **Dark mode support** using next-themes
+
+Example component:
+
+```typescript
+// Reference: components/chat-header.tsx
+export function ChatHeader({
+  chatId,
+  selectedModelId,
+  isReadonly,
+}: ChatHeaderProps) {
+  return (
+    <header className="flex items-center justify-between p-4 border-b">
+      <ModelSelector modelId={selectedModelId} />
+      <VisibilitySelector chatId={chatId} />
+    </header>
+  );
+}
+```
+
+## State Management Patterns
+
+### Local State
+
+- **useState** for component-specific state
+- **useReducer** for complex state logic
+- **useRef** for mutable values and DOM references
+- **Custom hooks** for reusable stateful logic
+
+### Server State with SWR
+
+```typescript
+// Reference: components/chat.tsx
+import useSWR from "swr";
+import { fetcher } from "@/lib/utils";
+
+const { data: votes } = useSWR<Array<Vote>>(
+  messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
+  fetcher
+);
+```
+
+### Custom Hooks Pattern
+
+```typescript
+// Reference: hooks/use-artifact.ts
+export function useArtifact() {
+  const [artifact, setArtifact] = useState<UIArtifact>({
+    // Initial state
+  });
+
+  const [metadata, setMetadata] = useState<ArtifactMetadata>({
+    // Initial metadata
+  });
+
+  return {
+    artifact,
+    setArtifact,
+    metadata,
+    setMetadata,
+  };
+}
+```
+
+## Form Handling
+
+### Input Components
+
+- **Controlled components** using value/onChange pattern
+- **Form validation** with proper error states
+- **Accessibility** with proper labels and ARIA attributes
+- **Multi-modal inputs** for rich user interactions
+
+Example from [multimodal-input.tsx](mdc:components/multimodal-input.tsx):
+
+```typescript
+<Textarea
+  ref={textareaRef}
+  placeholder="Send a message..."
+  value={input}
+  onChange={handleInput}
+  className="resize-none bg-transparent"
+  rows={3}
+  onKeyDown={submitOnEnter}
+/>
+```
+
+## Animation & Interactions
+
+### Framer Motion Integration
+
+- **Page transitions** with proper exit animations
+- **Component animations** for enhanced UX
+- **Gesture handling** for mobile interactions
+- **Layout animations** for dynamic content
+
+Example from [artifact.tsx](mdc:components/artifact.tsx):
+
+```typescript
+<AnimatePresence>
+  <motion.div
+    initial={{ opacity: 0, scale: 0.95 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.95 }}
+    transition={{ duration: 0.2 }}
+  >
+    {/* Content */}
+  </motion.div>
+</AnimatePresence>
+```
+
+## Performance Optimizations
+
+### Rendering Optimizations
+
+- **React.memo** for expensive components
+- **useMemo/useCallback** for expensive computations
+- **Dynamic imports** for code splitting
+- **Image optimization** with Next.js Image component
+
+### Event Handling
+
+- **Debounced inputs** for search and filter functionality
+- **Throttled scroll handlers** for performance
+- **Event delegation** when appropriate
+- **Cleanup effects** in useEffect hooks
+
+## Accessibility Guidelines
+
+### ARIA & Semantic HTML
+
+- **Proper heading hierarchy** (h1, h2, h3, etc.)
+- **ARIA labels** for interactive elements
+- **Focus management** for modal and drawer components
+- **Keyboard navigation** support
+
+### Screen Reader Support
+
+- **Alt text** for images and icons
+- **Live regions** for dynamic content updates
+- **Skip links** for navigation
+- **Color contrast** compliance
+
+## Testing Considerations
+
+### Component Testing
+
+- **Isolated component testing** with proper mocks
+- **User interaction testing** with testing-library
+- **Accessibility testing** with axe-core
+- **Visual regression testing** when appropriate
+
+### Integration Testing
+
+- **End-to-end testing** with Playwright (see [tests/](mdc:tests/) directory)
+- **API integration testing** for data flows
+- **Authentication flow testing**
+- **Error boundary testing**

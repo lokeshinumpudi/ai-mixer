@@ -1,0 +1,418 @@
+---
+globs: lib/db/**/*,drizzle.config.ts
+description: Database schema, query patterns, and Drizzle ORM conventions
+---
+
+# Database Architecture & Patterns
+
+## Database Stack
+
+### Core Technologies
+
+- **PostgreSQL** for primary data storage
+- **Drizzle ORM** for type-safe database operations
+- **Vercel Postgres** for serverless deployment
+- **Migration system** for schema versioning
+
+### Configuration
+
+- **[drizzle.config.ts](mdc:drizzle.config.ts)** - Drizzle configuration and connection setup
+- **[lib/db/schema.ts](mdc:lib/db/schema.ts)** - Complete database schema definitions
+- **[lib/db/queries.ts](mdc:lib/db/queries.ts)** - Reusable query functions
+- **[lib/db/migrations/](mdc:lib/db/migrations/)** - Database migration files
+
+## Schema Design Patterns
+
+### Table Definitions
+
+```typescript
+// Reference: lib/db/schema.ts
+import {
+  pgTable,
+  varchar,
+  timestamp,
+  json,
+  uuid,
+  text,
+  boolean,
+} from "drizzle-orm/pg-core";
+
+export const user = pgTable("User", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  email: varchar("email", { length: 64 }).notNull(),
+  password: varchar("password", { length: 64 }),
+});
+
+export const chat = pgTable("Chat", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  createdAt: timestamp("createdAt").notNull(),
+  title: text("title").notNull(),
+  userId: uuid("userId")
+    .notNull()
+    .references(() => user.id),
+  visibility: varchar("visibility", { enum: ["public", "private"] })
+    .notNull()
+    .default("private"),
+});
+```
+
+### Type Inference
+
+```typescript
+// Automatically infer TypeScript types from schema
+export type User = InferSelectModel<typeof user>;
+export type Chat = InferSelectModel<typeof chat>;
+export type DBMessage = InferSelectModel<typeof message>;
+```
+
+### Schema Evolution
+
+- **Versioned tables** (Message_v2, Vote_v2) for backward compatibility
+- **Deprecation comments** for old schemas
+- **Migration guides** for schema updates
+- **Foreign key constraints** for data integrity
+
+## Core Tables
+
+### User Management
+
+```typescript
+// User table with email/password authentication
+export const user = pgTable("User", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  email: varchar("email", { length: 64 }).notNull(),
+  password: varchar("password", { length: 64 }), // Nullable for guest users
+});
+```
+
+### Chat System
+
+```typescript
+// Chat table with user association and visibility
+export const chat = pgTable("Chat", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  createdAt: timestamp("createdAt").notNull(),
+  title: text("title").notNull(),
+  userId: uuid("userId")
+    .notNull()
+    .references(() => user.id),
+  visibility: varchar("visibility", { enum: ["public", "private"] })
+    .notNull()
+    .default("private"),
+});
+```
+
+### Message Storage
+
+```typescript
+// Modern message structure with parts and attachments
+export const message = pgTable("Message_v2", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  chatId: uuid("chatId")
+    .notNull()
+    .references(() => chat.id),
+  role: varchar("role").notNull(), // 'user' | 'assistant' | 'system'
+  parts: json("parts").notNull(), // MessagePart[]
+  attachments: json("attachments").notNull(), // Attachment[]
+  createdAt: timestamp("createdAt").notNull(),
+});
+```
+
+### Document/Artifact System
+
+```typescript
+// Document table with composite primary key for versioning
+export const document = pgTable(
+  "Document",
+  {
+    id: uuid("id").notNull().defaultRandom(),
+    createdAt: timestamp("createdAt").notNull(),
+    title: text("title").notNull(),
+    content: text("content"),
+    kind: varchar("text", { enum: ["text", "code", "image", "sheet"] })
+      .notNull()
+      .default("text"),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => user.id),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.id, table.createdAt] }),
+  })
+);
+```
+
+### Voting System
+
+```typescript
+// Vote table with composite primary key
+export const vote = pgTable(
+  "Vote_v2",
+  {
+    chatId: uuid("chatId")
+      .notNull()
+      .references(() => chat.id),
+    messageId: uuid("messageId")
+      .notNull()
+      .references(() => message.id),
+    isUpvoted: boolean("isUpvoted").notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.chatId, table.messageId] }),
+  })
+);
+```
+
+## Query Patterns
+
+### Basic Queries
+
+```typescript
+// Reference: lib/db/queries.ts
+import { db } from "./utils";
+import { user, chat, message } from "./schema";
+import { eq, desc, and } from "drizzle-orm";
+
+// Get user by email
+export async function getUser(email: string) {
+  return await db.select().from(user).where(eq(user.email, email));
+}
+
+// Get chat history for user
+export async function getChatsByUserId({ id }: { id: string }) {
+  return await db
+    .select()
+    .from(chat)
+    .where(eq(chat.userId, id))
+    .orderBy(desc(chat.createdAt));
+}
+```
+
+### Complex Queries with Joins
+
+```typescript
+// Get messages with user information
+export async function getMessagesByChatId({ id }: { id: string }) {
+  return await db
+    .select({
+      id: message.id,
+      chatId: message.chatId,
+      role: message.role,
+      parts: message.parts,
+      attachments: message.attachments,
+      createdAt: message.createdAt,
+    })
+    .from(message)
+    .where(eq(message.chatId, id))
+    .orderBy(desc(message.createdAt));
+}
+```
+
+### Pagination Patterns
+
+```typescript
+// Paginated chat history
+export async function getChatHistory({
+  userId,
+  offset = 0,
+  limit = 50,
+}: {
+  userId: string;
+  offset?: number;
+  limit?: number;
+}) {
+  return await db
+    .select()
+    .from(chat)
+    .where(eq(chat.userId, userId))
+    .orderBy(desc(chat.createdAt))
+    .offset(offset)
+    .limit(limit);
+}
+```
+
+### Transaction Patterns
+
+```typescript
+// Multi-table operations in transactions
+export async function createChatWithMessage({
+  userId,
+  title,
+  message: messageContent,
+}: {
+  userId: string;
+  title: string;
+  message: string;
+}) {
+  return await db.transaction(async (tx) => {
+    const [newChat] = await tx
+      .insert(chat)
+      .values({
+        userId,
+        title,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    await tx.insert(message).values({
+      chatId: newChat.id,
+      role: "user",
+      parts: [{ type: "text", text: messageContent }],
+      attachments: [],
+      createdAt: new Date(),
+    });
+
+    return newChat;
+  });
+}
+```
+
+## Migration Management
+
+### Migration Files
+
+- **Sequential numbering** (0000*, 0001*, etc.)
+- **Descriptive names** for changes
+- **SQL files** in [lib/db/migrations/](mdc:lib/db/migrations/)
+- **Metadata tracking** in meta/ subdirectory
+
+### Migration Commands
+
+```bash
+# Generate new migration
+pnpm db:generate
+
+# Run migrations
+pnpm db:migrate
+
+# Open Drizzle Studio
+pnpm db:studio
+
+# Push schema changes (development)
+pnpm db:push
+```
+
+### Migration Best Practices
+
+- **Backup before migrations** in production
+- **Test migrations** on staging environment
+- **Rollback plans** for failed migrations
+- **Data migration scripts** for complex changes
+
+## Data Validation & Types
+
+### Runtime Validation
+
+```typescript
+// Use Zod for API input validation
+import { z } from "zod";
+
+const createChatSchema = z.object({
+  title: z.string().min(1).max(255),
+  visibility: z.enum(["public", "private"]),
+});
+
+// Validate before database operations
+const validatedData = createChatSchema.parse(input);
+```
+
+### Type-Safe Queries
+
+```typescript
+// Drizzle provides full type safety
+const result = await db
+  .select({
+    id: chat.id,
+    title: chat.title,
+    messageCount: sql<number>`count(${message.id})`,
+  })
+  .from(chat)
+  .leftJoin(message, eq(chat.id, message.chatId))
+  .groupBy(chat.id);
+
+// Result is fully typed automatically
+```
+
+## Performance Optimization
+
+### Indexing Strategy
+
+- **Primary keys** on all tables
+- **Foreign key indexes** for join performance
+- **Composite indexes** for common query patterns
+- **Partial indexes** for filtered queries
+
+### Query Optimization
+
+- **Select specific columns** instead of SELECT \*
+- **Use appropriate WHERE clauses** with indexed columns
+- **Limit result sets** with pagination
+- **Avoid N+1 queries** with proper joins
+
+### Connection Management
+
+```typescript
+// Reference: lib/db/utils.ts
+import { drizzle } from "drizzle-orm/vercel-postgres";
+import { sql } from "@vercel/postgres";
+
+export const db = drizzle(sql, {
+  schema: {
+    user,
+    chat,
+    message,
+    vote,
+    document,
+    suggestion,
+    stream,
+  },
+});
+```
+
+## Testing Database Operations
+
+### Test Database Setup
+
+- **Separate test database** for isolation
+- **Transaction rollback** for test cleanup
+- **Seed data** for consistent tests
+- **Mock database** for unit tests
+
+### Query Testing
+
+```typescript
+// Test database queries
+describe("Chat queries", () => {
+  beforeEach(async () => {
+    // Setup test data
+    await seedTestData();
+  });
+
+  afterEach(async () => {
+    // Cleanup
+    await cleanupTestData();
+  });
+
+  it("should get chats by user ID", async () => {
+    const chats = await getChatsByUserId({ id: "test-user-id" });
+    expect(chats).toHaveLength(2);
+    expect(chats[0].title).toBe("Test Chat 1");
+  });
+});
+```
+
+## Security Considerations
+
+### Data Access Control
+
+- **Row-level security** where appropriate
+- **User context** in all queries
+- **Input sanitization** with Zod validation
+- **SQL injection prevention** with parameterized queries
+
+### Sensitive Data Handling
+
+- **Password hashing** with bcrypt-ts
+- **Email normalization** for consistency
+- **Audit logging** for sensitive operations
+- **Data retention policies** for compliance

@@ -1,0 +1,322 @@
+---
+globs: lib/ai/**/*,app/**/api/**/*
+description: AI SDK integration patterns, tool definitions, and streaming implementations
+---
+
+# AI SDK Integration & Tool Development
+
+## AI SDK Architecture
+
+### Core Configuration
+
+- **Model providers** configured in [lib/ai/models.ts](mdc:lib/ai/models.ts) and [lib/ai/providers.ts](mdc:lib/ai/providers.ts)
+- **Default model** is xAI Grok, with support for OpenAI, Anthropic, and others
+- **Streaming responses** with real-time updates and data transmission
+- **Tool calling** with structured schemas for enhanced functionality
+
+### Chat Integration Pattern
+
+```typescript
+// Reference: components/chat.tsx
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+
+const { messages, sendMessage, status, stop, regenerate, resumeStream } =
+  useChat<ChatMessage>({
+    id,
+    messages: initialMessages,
+    experimental_throttle: 100,
+    generateId: generateUUID,
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      fetch: fetchWithErrorHandlers,
+      prepareSendMessagesRequest({ messages, id, body }) {
+        return {
+          body: {
+            id,
+            message: messages.at(-1),
+            selectedChatModel: initialChatModel,
+            selectedVisibilityType: visibilityType,
+            ...body,
+          },
+        };
+      },
+    }),
+  });
+```
+
+## Tool Development Patterns
+
+### Tool Definition Structure
+
+All tools follow this pattern from [lib/ai/tools/](mdc:lib/ai/tools/):
+
+```typescript
+// Reference: lib/ai/tools/create-document.ts
+import { tool } from "ai";
+import { z } from "zod";
+import type { Session } from "next-auth";
+
+interface ToolProps {
+  session: Session;
+  dataStream: UIMessageStreamWriter<ChatMessage>;
+}
+
+export const toolName = ({ session, dataStream }: ToolProps) =>
+  tool({
+    description: "Clear description of what the tool does",
+    inputSchema: z.object({
+      param1: z.string(),
+      param2: z.enum(["option1", "option2"]),
+    }),
+    execute: async ({ param1, param2 }) => {
+      // Tool implementation
+
+      // Stream data updates
+      dataStream.write({
+        type: "data-kind",
+        data: param2,
+        transient: true,
+      });
+
+      return {
+        result: "Tool execution result",
+      };
+    },
+  });
+```
+
+### Available Tools
+
+- **[create-document.ts](mdc:lib/ai/tools/create-document.ts)** - Creates artifacts (text, code, image, sheet)
+- **[update-document.ts](mdc:lib/ai/tools/update-document.ts)** - Updates existing documents
+- **[get-weather.ts](mdc:lib/ai/tools/get-weather.ts)** - Weather information retrieval
+- **[request-suggestions.ts](mdc:lib/ai/tools/request-suggestions.ts)** - Document suggestions
+
+### Tool Schema Validation
+
+- Use **Zod schemas** for input validation
+- **Enum types** for predefined options
+- **Optional parameters** with default values
+- **Nested objects** for complex inputs
+
+```typescript
+const inputSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  kind: z.enum(["text", "code", "image", "sheet"]),
+  content: z.string().optional(),
+  metadata: z
+    .object({
+      language: z.string().optional(),
+      framework: z.string().optional(),
+    })
+    .optional(),
+});
+```
+
+## Streaming & Data Flow
+
+### Data Stream Pattern
+
+```typescript
+// Reference: components/data-stream-provider.tsx
+export function DataStreamProvider({ children }: { children: ReactNode }) {
+  const [dataStream, setDataStream] = useState<Array<DataStreamPart>>([]);
+
+  return (
+    <DataStreamContext.Provider value={{ dataStream, setDataStream }}>
+      {children}
+    </DataStreamContext.Provider>
+  );
+}
+
+// Usage in components
+const { setDataStream } = useDataStream();
+```
+
+### Stream Data Types
+
+```typescript
+// Common data stream types
+type DataStreamPart =
+  | { type: "data-kind"; data: ArtifactKind; transient: true }
+  | { type: "data-id"; data: string; transient: true }
+  | { type: "data-title"; data: string; transient: true }
+  | { type: "data-clear"; data: null; transient: true }
+  | { type: "data-finish"; data: null; transient: true };
+```
+
+### Real-time Updates
+
+- **Throttled streaming** (100ms) for performance
+- **Transient data** for UI state updates
+- **Persistent messages** for chat history
+- **Error handling** with custom error types
+
+## API Route Patterns
+
+### Chat API Structure
+
+```typescript
+// Reference: app/(chat)/api/chat/route.ts
+import { auth } from "@/(auth)/auth";
+import { createAI } from "ai";
+
+export async function POST(request: Request) {
+  const session = await auth();
+
+  if (!session) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const { message, selectedChatModel } = await request.json();
+
+  // Model configuration
+  const model = getModelByProvider(selectedChatModel);
+
+  // Tool setup
+  const tools = {
+    createDocument: createDocument({ session, dataStream }),
+    updateDocument: updateDocument({ session, dataStream }),
+  };
+
+  // Stream generation
+  const result = await streamText({
+    model,
+    messages: [message],
+    tools,
+    maxTokens: 8192,
+    temperature: 0.7,
+  });
+
+  return result.toDataStreamResponse({
+    getErrorMessage: (error) => {
+      return "Error processing request";
+    },
+  });
+}
+```
+
+### Error Handling in APIs
+
+```typescript
+// Reference: lib/errors.ts
+export class ChatSDKError extends Error {
+  constructor(message: string, public code?: string) {
+    super(message);
+    this.name = "ChatSDKError";
+  }
+}
+
+// Usage in API routes
+try {
+  // API logic
+} catch (error) {
+  if (error instanceof ChatSDKError) {
+    return Response.json({ error: error.message }, { status: 400 });
+  }
+  return Response.json({ error: "Internal server error" }, { status: 500 });
+}
+```
+
+## Model Provider Configuration
+
+### Provider Setup
+
+```typescript
+// Reference: lib/ai/providers.ts
+import { xai } from "@ai-sdk/xai";
+import { openai } from "@ai-sdk/openai";
+
+export function getModelByProvider(modelId: string) {
+  switch (modelId) {
+    case "chat-model":
+      return xai("grok-2-1212");
+    case "chat-model-reasoning":
+      return xai("grok-2-reasoning");
+    default:
+      return xai("grok-2-1212");
+  }
+}
+```
+
+### Model Configuration
+
+- **Environment variables** for API keys
+- **Model fallbacks** for reliability
+- **Rate limiting** considerations
+- **Token management** and cost optimization
+
+## Message Format & Types
+
+### Message Structure
+
+```typescript
+// Reference: lib/types.ts
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  parts: Array<MessagePart>;
+  attachments?: Array<Attachment>;
+  createdAt?: Date;
+}
+
+export type MessagePart =
+  | { type: "text"; text: string }
+  | { type: "image"; image: string | Uint8Array }
+  | { type: "file"; file: File };
+```
+
+### Multi-modal Support
+
+- **Text messages** with rich formatting
+- **Image uploads** with base64 encoding
+- **File attachments** with type validation
+- **Voice inputs** (future capability)
+
+## Testing AI Integration
+
+### Tool Testing
+
+```typescript
+// Test tool execution
+const mockSession = { user: { id: "test-user" } };
+const mockDataStream = {
+  write: jest.fn(),
+};
+
+const tool = createDocument({
+  session: mockSession,
+  dataStream: mockDataStream,
+});
+const result = await tool.execute({ title: "Test", kind: "text" });
+
+expect(result).toEqual({
+  id: expect.any(String),
+  title: "Test",
+  kind: "text",
+});
+```
+
+### API Route Testing
+
+- **Mock authentication** for protected routes
+- **Stream testing** with proper assertions
+- **Error scenario testing** for edge cases
+- **Integration testing** with actual AI providers
+
+## Performance Considerations
+
+### Streaming Optimization
+
+- **Throttled updates** to prevent UI flooding
+- **Debounced user inputs** for better UX
+- **Request cancellation** when needed
+- **Memory management** for long conversations
+
+### Cost Management
+
+- **Token limits** per request and user
+- **Model selection** based on use case
+- **Caching strategies** for repeated queries
+- **Rate limiting** to prevent abuse

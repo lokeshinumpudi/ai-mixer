@@ -1,0 +1,596 @@
+---
+globs: artifacts/**/*,components/artifact*,lib/artifacts/**/*
+description: Artifacts system patterns for generating and editing code, text, images, and spreadsheets
+---
+
+# Artifacts System Architecture
+
+## Overview
+
+The artifacts system enables real-time generation and editing of different content types (text, code, images, spreadsheets) with live preview, version control, and collaborative editing features.
+
+## Core Architecture
+
+### Artifact Types
+
+- **Text** - Rich text documents with markdown support
+- **Code** - Interactive code editor with syntax highlighting
+- **Image** - Image generation and editing capabilities
+- **Sheet** - Spreadsheet functionality with data manipulation
+
+### Directory Structure
+
+```
+artifacts/
+├── actions.ts          # Server actions for artifacts
+├── text/
+│   ├── client.tsx      # Text artifact client component
+│   └── server.ts       # Text artifact server handler
+├── code/
+│   ├── client.tsx      # Code editor client component
+│   └── server.ts       # Code artifact server handler
+├── image/
+│   ├── client.tsx      # Image editor client component
+│   └── server.ts       # Image artifact server handler
+└── sheet/
+    ├── client.tsx      # Spreadsheet client component
+    └── server.ts       # Sheet artifact server handler
+```
+
+## Artifact Definition Pattern
+
+### Client-Side Artifact Structure
+
+```typescript
+// Reference: artifacts/text/client.tsx
+import type { ArtifactDefinition } from "@/components/artifact";
+
+export const textArtifact: ArtifactDefinition = {
+  kind: "text",
+  title: "Text Document",
+  description: "Rich text document with markdown support",
+  component: TextEditor,
+  previewComponent: TextPreview,
+  actions: ["edit", "copy", "download", "share"],
+};
+
+// Editor component implementation
+function TextEditor({ content, onChange, isReadonly }: ArtifactEditorProps) {
+  return (
+    <div className="h-full">
+      <ProseMirrorEditor
+        content={content}
+        onChange={onChange}
+        editable={!isReadonly}
+      />
+    </div>
+  );
+}
+```
+
+### Server-Side Handler Pattern
+
+```typescript
+// Reference: artifacts/text/server.ts
+import type { DocumentHandler } from "@/lib/artifacts/server";
+
+export const textDocumentHandler: DocumentHandler = {
+  kind: "text",
+  onCreateDocument: async ({ id, title, dataStream, session }) => {
+    // Initialize document creation
+    dataStream.write({
+      type: "text-delta",
+      data: "Creating new text document...",
+      transient: true,
+    });
+
+    // Create document in database
+    const document = await createDocument({
+      id,
+      title,
+      kind: "text",
+      userId: session.user.id,
+    });
+
+    return document;
+  },
+  onUpdateDocument: async ({ documentId, delta, session }) => {
+    // Handle document updates
+    const updatedDocument = await updateDocumentContent({
+      id: documentId,
+      content: delta.content,
+      userId: session.user.id,
+    });
+
+    return updatedDocument;
+  },
+};
+```
+
+## Core Components
+
+### Artifact Container
+
+```typescript
+// Reference: components/artifact.tsx
+export interface UIArtifact {
+  title: string;
+  documentId: string;
+  kind: ArtifactKind;
+  content: string;
+  isVisible: boolean;
+  status: "streaming" | "idle";
+  boundingBox: {
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  };
+}
+
+export function Artifact({
+  chatId,
+  input,
+  setInput,
+  status,
+  messages,
+  votes,
+  isReadonly,
+}: ArtifactProps) {
+  const { artifact, setArtifact } = useArtifact();
+
+  // Find appropriate artifact definition
+  const artifactDefinition = artifactDefinitions.find(
+    (def) => def.kind === artifact.kind
+  );
+
+  if (!artifactDefinition) {
+    return <div>Unsupported artifact type</div>;
+  }
+
+  return (
+    <ResizablePanelGroup direction="horizontal">
+      <ResizablePanel>
+        <artifactDefinition.component
+          content={artifact.content}
+          onChange={handleContentChange}
+          isReadonly={isReadonly}
+        />
+      </ResizablePanel>
+
+      <ResizableHandle />
+
+      <ResizablePanel>
+        <ArtifactMessages chatId={chatId} documentId={artifact.documentId} />
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
+}
+```
+
+### State Management
+
+```typescript
+// Reference: hooks/use-artifact.ts
+export function useArtifact() {
+  const [artifact, setArtifact] = useState<UIArtifact>({
+    title: "",
+    documentId: "init",
+    kind: "text",
+    content: "",
+    isVisible: false,
+    status: "idle",
+    boundingBox: { top: 0, left: 0, width: 0, height: 0 },
+  });
+
+  const [metadata, setMetadata] = useState<ArtifactMetadata>({
+    language: "",
+    framework: "",
+    dependencies: [],
+  });
+
+  return {
+    artifact,
+    setArtifact,
+    metadata,
+    setMetadata,
+  };
+}
+```
+
+## Artifact Type Implementations
+
+### Text Artifacts
+
+```typescript
+// Reference: artifacts/text/client.tsx
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+
+export function TextEditor({ content, onChange, isReadonly }: TextEditorProps) {
+  const editor = useEditor({
+    extensions: [StarterKit],
+    content,
+    editable: !isReadonly,
+    onUpdate: ({ editor }) => {
+      onChange(editor.getHTML());
+    },
+  });
+
+  return (
+    <div className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl mx-auto">
+      <EditorContent editor={editor} />
+    </div>
+  );
+}
+```
+
+### Code Artifacts
+
+```typescript
+// Reference: artifacts/code/client.tsx
+import CodeMirror from "@uiw/react-codemirror";
+import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python";
+
+export function CodeEditor({
+  content,
+  onChange,
+  language,
+  isReadonly,
+}: CodeEditorProps) {
+  const extensions = [language === "python" ? python() : javascript()];
+
+  return (
+    <CodeMirror
+      value={content}
+      height="100%"
+      extensions={extensions}
+      onChange={onChange}
+      editable={!isReadonly}
+      theme="dark"
+    />
+  );
+}
+```
+
+### Image Artifacts
+
+```typescript
+// Reference: artifacts/image/client.tsx
+export function ImageEditor({
+  content,
+  onChange,
+  isReadonly,
+}: ImageEditorProps) {
+  const [imageUrl, setImageUrl] = useState(content);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 flex items-center justify-center">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt="Generated image"
+            className="max-w-full max-h-full object-contain"
+          />
+        ) : (
+          <div className="text-muted-foreground">No image generated yet</div>
+        )}
+      </div>
+
+      {!isReadonly && (
+        <div className="p-4 border-t">
+          <ImageGenerationControls onGenerate={handleImageGeneration} />
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### Sheet Artifacts
+
+```typescript
+// Reference: artifacts/sheet/client.tsx
+import DataGrid from "react-data-grid";
+
+export function SheetEditor({
+  content,
+  onChange,
+  isReadonly,
+}: SheetEditorProps) {
+  const [data, setData] = useState(() => {
+    try {
+      return JSON.parse(content);
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDataChange = (newData: any[]) => {
+    setData(newData);
+    onChange(JSON.stringify(newData));
+  };
+
+  return (
+    <DataGrid
+      columns={columns}
+      rows={data}
+      onRowsChange={handleDataChange}
+      className="fill-grid"
+      readonly={isReadonly}
+    />
+  );
+}
+```
+
+## Data Streaming Integration
+
+### Stream Data Types
+
+```typescript
+// Artifact-specific stream data types
+type ArtifactStreamData =
+  | { type: "text-delta"; data: string; transient: true }
+  | { type: "code-delta"; data: string; transient: true }
+  | { type: "image-url"; data: string; transient: true }
+  | { type: "sheet-data"; data: any[]; transient: true }
+  | { type: "data-kind"; data: ArtifactKind; transient: true }
+  | { type: "data-id"; data: string; transient: true }
+  | { type: "data-title"; data: string; transient: true };
+```
+
+### Stream Handler Pattern
+
+```typescript
+// Reference: components/data-stream-handler.tsx
+export function DataStreamHandler() {
+  const { dataStream } = useDataStream();
+  const { setArtifact } = useArtifact();
+
+  useEffect(() => {
+    if (!dataStream) return;
+
+    for (const data of dataStream) {
+      switch (data.type) {
+        case "data-kind":
+          setArtifact((prev) => ({ ...prev, kind: data.data }));
+          break;
+        case "data-id":
+          setArtifact((prev) => ({ ...prev, documentId: data.data }));
+          break;
+        case "text-delta":
+          setArtifact((prev) => ({
+            ...prev,
+            content: prev.content + data.data,
+          }));
+          break;
+      }
+    }
+  }, [dataStream, setArtifact]);
+
+  return null;
+}
+```
+
+## Version Control & Collaboration
+
+### Document Versioning
+
+```typescript
+// Automatic versioning on content changes
+const debouncedSave = useDebounceCallback((content: string) => {
+  updateDocumentContent({
+    id: artifact.documentId,
+    content,
+    version: Date.now(),
+  });
+}, 1000);
+```
+
+### Suggestion System
+
+```typescript
+// Reference: lib/db/schema.ts - suggestion table
+export const suggestion = pgTable("Suggestion", {
+  id: uuid("id").notNull().defaultRandom(),
+  documentId: uuid("documentId").notNull(),
+  originalText: text("originalText").notNull(),
+  suggestedText: text("suggestedText").notNull(),
+  description: text("description"),
+  isResolved: boolean("isResolved").notNull().default(false),
+  userId: uuid("userId")
+    .notNull()
+    .references(() => user.id),
+  createdAt: timestamp("createdAt").notNull(),
+});
+```
+
+### Diff Visualization
+
+```typescript
+// Reference: components/diffview.tsx
+import * as Diff from "diff";
+
+export function DiffView({ original, modified }: DiffViewProps) {
+  const diff = Diff.diffWords(original, modified);
+
+  return (
+    <div className="font-mono text-sm">
+      {diff.map((part, index) => (
+        <span
+          key={index}
+          className={cn(
+            part.added && "bg-green-100 text-green-800",
+            part.removed && "bg-red-100 text-red-800"
+          )}
+        >
+          {part.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+```
+
+## Actions & Toolbar
+
+### Artifact Actions
+
+```typescript
+// Reference: components/artifact-actions.tsx
+export function ArtifactActions({
+  artifact,
+  onEdit,
+  onCopy,
+  onDownload,
+}: ArtifactActionsProps) {
+  return (
+    <div className="flex items-center gap-2">
+      <Button variant="ghost" size="sm" onClick={onEdit}>
+        <Edit className="w-4 h-4" />
+        Edit
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => onCopy(artifact.content)}
+      >
+        <Copy className="w-4 h-4" />
+        Copy
+      </Button>
+
+      <Button variant="ghost" size="sm" onClick={() => onDownload(artifact)}>
+        <Download className="w-4 h-4" />
+        Download
+      </Button>
+    </div>
+  );
+}
+```
+
+### Toolbar Integration
+
+```typescript
+// Reference: components/toolbar.tsx
+export function Toolbar({ artifact, mode, setMode }: ToolbarProps) {
+  const artifactDefinition = artifactDefinitions.find(
+    (def) => def.kind === artifact.kind
+  );
+
+  return (
+    <div className="flex items-center justify-between p-2 border-b">
+      <div className="flex items-center gap-2">
+        <h3 className="font-medium">{artifact.title}</h3>
+        <Badge variant="secondary">{artifactDefinition?.title}</Badge>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <ToggleGroup type="single" value={mode} onValueChange={setMode}>
+          <ToggleGroupItem value="edit">Edit</ToggleGroupItem>
+          <ToggleGroupItem value="diff">Diff</ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+    </div>
+  );
+}
+```
+
+## Performance & UX Considerations
+
+### Debounced Auto-save
+
+```typescript
+const debouncedSave = useDebounceCallback((content: string) => {
+  // Save to database
+  updateDocument({ id: artifact.documentId, content });
+}, 1000); // 1 second delay
+```
+
+### Virtualization for Large Content
+
+```typescript
+// For large datasets in sheets
+import { FixedSizeGrid as Grid } from "react-window";
+
+export function VirtualizedSheet({ data }: VirtualizedSheetProps) {
+  return (
+    <Grid
+      columnCount={data[0]?.length || 0}
+      columnWidth={100}
+      height={600}
+      rowCount={data.length}
+      rowHeight={35}
+      itemData={data}
+    >
+      {CellRenderer}
+    </Grid>
+  );
+}
+```
+
+### Lazy Loading Artifacts
+
+```typescript
+// Dynamic imports for artifact components
+const LazyTextEditor = lazy(() => import("@/artifacts/text/client"));
+const LazyCodeEditor = lazy(() => import("@/artifacts/code/client"));
+
+export function ArtifactRenderer({ kind }: { kind: ArtifactKind }) {
+  switch (kind) {
+    case "text":
+      return (
+        <Suspense fallback={<ArtifactSkeleton />}>
+          <LazyTextEditor />
+        </Suspense>
+      );
+    // ... other cases
+  }
+}
+```
+
+## Testing Artifacts
+
+### Component Testing
+
+```typescript
+// Test artifact components
+describe("TextEditor", () => {
+  it("should update content on change", () => {
+    const mockOnChange = jest.fn();
+    render(
+      <TextEditor
+        content="Initial content"
+        onChange={mockOnChange}
+        isReadonly={false}
+      />
+    );
+
+    // Simulate user input
+    // Assert onChange called with new content
+  });
+});
+```
+
+### Integration Testing
+
+```typescript
+// Test full artifact workflow
+it("should create and update text artifact", async () => {
+  // Create artifact
+  const createResponse = await createDocument({
+    title: "Test Document",
+    kind: "text",
+  });
+
+  // Update content
+  const updateResponse = await updateDocument({
+    id: createResponse.id,
+    content: "Updated content",
+  });
+
+  expect(updateResponse.content).toBe("Updated content");
+});
+```
