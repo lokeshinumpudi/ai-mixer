@@ -1,9 +1,10 @@
 import type { UserType } from '@/app/(auth)/auth';
-import { chatModels, type ChatModel } from './models';
+import type { ChatModel } from './models';
+import { SUPPORTED_MODEL_IDS } from '@/lib/constants';
 
 interface Entitlements {
   maxMessagesPerDay: number;
-  getAvailableModels: () => Array<ChatModel>;
+  getAllowedModelIds: () => Array<string>;
 }
 
 export const entitlementsByUserType: Record<UserType, Entitlements> = {
@@ -12,10 +13,14 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    */
   guest: {
     maxMessagesPerDay: 20,
-    getAvailableModels: () => {
+    getAllowedModelIds: () => {
       // Guest users get access to basic models only
-      return chatModels.filter(
-        (model) => model.id.includes('grok-3-mini'), // Only mini models for guests
+      return SUPPORTED_MODEL_IDS.filter(
+        (modelId) =>
+          modelId.includes('grok-3-mini') ||
+          modelId.includes('gpt-3.5') ||
+          modelId.includes('gemma2-9b') ||
+          modelId.includes('ministral-3b'),
       );
     },
   },
@@ -25,9 +30,9 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    */
   regular: {
     maxMessagesPerDay: 100,
-    getAvailableModels: () => {
-      // Regular users get access to all models
-      return chatModels;
+    getAllowedModelIds: () => {
+      // Regular users get access to all supported models
+      return SUPPORTED_MODEL_IDS;
     },
   },
 
@@ -36,15 +41,18 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    */
 };
 
-// Helper functions for backward compatibility and convenience
-export const getAvailableModelsForUser = (
+// Helper function to get allowed model IDs for a user type
+export const getAllowedModelIdsForUser = (
   userType: UserType,
-): Array<ChatModel> => {
-  return entitlementsByUserType[userType].getAvailableModels();
+): Array<string> => {
+  return entitlementsByUserType[userType].getAllowedModelIds();
 };
 
-export const getAvailableModelIdsForUser = (
+// Filter models from /api/models based on user entitlements
+export const filterModelsForUser = (
+  models: ChatModel[],
   userType: UserType,
-): Array<ChatModel['id']> => {
-  return getAvailableModelsForUser(userType).map((model) => model.id);
+): ChatModel[] => {
+  const allowedIds = getAllowedModelIdsForUser(userType);
+  return models.filter((model) => allowedIds.includes(model.id));
 };

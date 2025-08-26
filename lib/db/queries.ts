@@ -58,6 +58,15 @@ export async function getUser(email: string): Promise<Array<User>> {
   }
 }
 
+export async function getUserById(id: string): Promise<User | null> {
+  try {
+    const users = await db.select().from(user).where(eq(user.id, id)).limit(1);
+    return users[0] || null;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get user by ID');
+  }
+}
+
 export async function createUser(email: string, password: string) {
   const hashedPassword = generateHashedPassword(password);
 
@@ -659,16 +668,14 @@ export async function upsertDailyUsage({
   day?: Date;
 }) {
   const d = day ? new Date(day) : new Date();
-  const dayOnly = new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
-  );
+  const dayOnly = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 
   try {
     await db
       .insert(usageDaily)
       .values({
         userId,
-        day: dayOnly as unknown as any,
+        day: dayOnly,
         modelId,
         tokensIn,
         tokensOut,

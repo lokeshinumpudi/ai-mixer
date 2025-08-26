@@ -1172,3 +1172,104 @@ export const WarningIcon = ({ size = 16 }: { size?: number }) => {
     </svg>
   );
 };
+
+export const SearchIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    height={size}
+    strokeLinejoin="round"
+    viewBox="0 0 16 16"
+    width={size}
+    style={{ color: 'currentcolor' }}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M6.5 1.5C3.73858 1.5 1.5 3.73858 1.5 6.5C1.5 9.26142 3.73858 11.5 6.5 11.5C7.70435 11.5 8.81838 11.0645 9.67678 10.3179L13.6795 14.3205C13.9724 14.6134 14.4473 14.6134 14.7402 14.3205C15.0331 14.0276 15.0331 13.5527 14.7402 13.2598L10.7376 9.25714C11.4842 8.39874 11.9197 7.28471 11.9197 6.08036C11.9197 3.31878 9.68114 1.08036 6.91972 1.08036C6.78016 1.01633 6.64014 1 6.5 1.5ZM3 6.5C3 4.567 4.567 3 6.5 3C8.433 3 10 4.567 10 6.5C10 8.433 8.433 10 6.5 10C4.567 10 3 8.433 3 6.5Z"
+      fill="currentColor"
+    />
+  </svg>
+);
+
+export const StarIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    height={size}
+    strokeLinejoin="round"
+    viewBox="0 0 16 16"
+    width={size}
+    style={{ color: 'currentcolor' }}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M8 0.25L9.87336 5.60796L15.75 6.24074L11.9962 9.64204L13.0467 15.75L8 12.75L2.95329 15.75L4.00383 9.64204L0.25 6.24074L6.12664 5.60796L8 0.25Z"
+    />
+  </svg>
+);
+
+export const BrainIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    height={size}
+    strokeLinejoin="round"
+    viewBox="0 0 16 16"
+    width={size}
+    style={{ color: 'currentcolor' }}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M3.5 2.5C2.67157 2.5 2 3.17157 2 4C2 4.82843 2.67157 5.5 3.5 5.5C4.32843 5.5 5 4.82843 5 4C5 3.17157 4.32843 2.5 3.5 2.5ZM0.5 4C0.5 2.34315 1.84315 1 3.5 1C5.15685 1 6.5 2.34315 6.5 4C6.5 5.65685 5.15685 7 3.5 7C1.84315 7 0.5 5.65685 0.5 4Z"
+      fill="currentColor"
+    />
+  </svg>
+);
+
+export const DiamondIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    height={size}
+    strokeLinejoin="round"
+    viewBox="0 0 16 16"
+    width={size}
+    style={{ color: 'currentcolor' }}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M8 1L12 5L8 15L4 5L8 1Z"
+      fill="currentColor"
+    />
+  </svg>
+);
+
+export const FlaskIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    height={size}
+    strokeLinejoin="round"
+    viewBox="0 0 16 16"
+    width={size}
+    style={{ color: 'currentcolor' }}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M5.5 1.75C5.5 1.33579 5.83579 1 6.25 1H9.75C10.1642 1 10.5 1.33579 10.5 1.75C10.5 2.16421 10.1642 2.5 9.75 2.5H9V6.5L13.5 12.5V14.25C13.5 14.6642 13.1642 15 12.75 15H3.25C2.83579 15 2.5 14.6642 2.5 14.25V12.5L7 6.5V2.5H6.25C5.83579 2.5 5.5 2.16421 5.5 1.75ZM4.25 12.5L7.5 7.75V2.5H8.5V7.75L11.75 12.5H4.25Z"
+      fill="currentColor"
+    />
+  </svg>
+);
+
+export const CheckIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    height={size}
+    strokeLinejoin="round"
+    viewBox="0 0 16 16"
+    width={size}
+    style={{ color: 'currentcolor' }}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M13.8536 3.64645C14.1465 3.93934 14.1465 4.41421 13.8536 4.70711L6.35355 12.2071C6.06066 12.5 5.58579 12.5 5.29289 12.2071L2.14645 9.06066C1.85355 8.76777 1.85355 8.29289 2.14645 8C2.43934 7.70711 2.91421 7.70711 3.20711 8L5.82322 10.6161L13.1464 3.29289C13.4393 3 13.9142 3 14.2071 3.29289L13.8536 3.64645Z"
+      fill="currentColor"
+    />
+  </svg>
+);

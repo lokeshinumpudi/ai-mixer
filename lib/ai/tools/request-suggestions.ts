@@ -4,14 +4,18 @@ import { streamObject, tool, type UIMessageStreamWriter } from 'ai';
 import { getDocumentById, saveSuggestions } from '@/lib/db/queries';
 import type { Suggestion } from '@/lib/db/schema';
 import { generateUUID } from '@/lib/utils';
-import { myProvider } from '../providers';
+import { getLanguageModel } from '../providers';
 import type { ChatMessage } from '@/lib/types';
-import type { ChatModel } from '../models';
+interface SelectedModel {
+  id: string;
+  supportsArtifacts: boolean;
+  supportsReasoning: boolean;
+}
 
 interface RequestSuggestionsProps {
   session: Session;
   dataStream: UIMessageStreamWriter<ChatMessage>;
-  selectedModel: ChatModel;
+  selectedModel: SelectedModel;
 }
 
 export const requestSuggestions = ({
@@ -40,7 +44,7 @@ export const requestSuggestions = ({
       > = [];
 
       const { elementStream } = streamObject({
-        model: myProvider.languageModel(selectedModel.id),
+        model: getLanguageModel(selectedModel.id),
         system:
           'You are a help writing assistant. Given a piece of writing, please offer suggestions to improve the piece of writing and describe the change. It is very important for the edits to contain full sentences instead of just words. Max 5 suggestions.',
         prompt: document.content,

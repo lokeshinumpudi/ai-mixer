@@ -4,12 +4,16 @@ import { z } from 'zod';
 import { getDocumentById } from '@/lib/db/queries';
 import { documentHandlersByArtifactKind } from '@/lib/artifacts/server';
 import type { ChatMessage } from '@/lib/types';
-import type { ChatModel } from '../models';
+interface SelectedModel {
+  id: string;
+  supportsArtifacts: boolean;
+  supportsReasoning: boolean;
+}
 
 interface UpdateDocumentProps {
   session: Session;
   dataStream: UIMessageStreamWriter<ChatMessage>;
-  selectedModel: ChatModel;
+  selectedModel: SelectedModel;
 }
 
 export const updateDocument = ({

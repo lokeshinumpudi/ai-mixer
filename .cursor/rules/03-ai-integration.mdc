@@ -1,401 +1,470 @@
 ---
-description: AI SDK integration patterns, multi-provider model system, tool definitions, and streaming implementations
+description: AI SDK Gateway integration patterns, unified model configuration, and dynamic capabilities system
 ---
 
-# AI SDK Integration & Multi-Provider Model System
+# AI SDK Gateway Integration Architecture
 
-## AI SDK Architecture
+## Overview
 
-### Core Configuration
+The application uses **AI SDK v5 with Gateway architecture** for a unified, scalable AI integration. This replaces custom provider abstractions with direct gateway usage while maintaining dynamic model management and capability-based features.
 
-- **Multi-provider system** with dynamic model mapping in [lib/ai/models.ts](mdc:lib/ai/models.ts) and [lib/ai/providers.ts](mdc:lib/ai/providers.ts)
-- **Flexible model definitions** with provider, reasoning, and artifact capabilities
-- **Dynamic entitlements** based on user type and model capabilities
-- **Streaming responses** with real-time updates and data transmission
-- **Tool calling** with structured schemas for enhanced functionality
+## Core Architecture
 
-### Model System Architecture
+### 1. AI SDK Gateway Configuration
 
 ```typescript
-// Reference: lib/ai/models.ts - New flexible model interface
-export interface ChatModel {
-  id: string; // Format: "provider:model-name"
-  name: string; // Display name
-  description: string; // User-friendly description
-  provider: string; // Provider identifier (xai, openai, etc.)
-  supportsReasoning: boolean; // Shows step-by-step reasoning
-  supportsArtifacts: boolean; // Can use artifact tools
-}
+// Reference: lib/gateway.ts - Simple gateway provider
+import { createGatewayProvider } from "@ai-sdk/gateway";
 
-export const chatModels: Array<ChatModel> = [
-  {
-    id: "xai:grok-3-mini",
-    name: "Grok 3 Mini",
-    description: "Fast and efficient model for general chat",
-    provider: "xai",
+export const gateway = createGatewayProvider({
+  baseURL: process.env.AI_GATEWAY_BASE_URL,
+});
+```
+
+### 2. Unified Model Configuration
+
+```typescript
+// Reference: lib/constants.ts - Single source of truth
+export const SUPPORTED_MODELS = {
+  "xai/grok-3": {
+    supportsReasoning: true,
+    supportsArtifacts: true,
+  },
+  "xai/grok-3-mini": {
+    supportsReasoning: true,
+    supportsArtifacts: true,
+  },
+  "openai/gpt-4o-mini": {
     supportsReasoning: false,
     supportsArtifacts: true,
   },
-  // Additional models...
-];
+  // ... more models
+} as const;
+
+// Derived constants for convenience
+export const SUPPORTED_MODEL_IDS = Object.keys(SUPPORTED_MODELS);
+export const DEFAULT_MODEL = "xai/grok-3-mini";
+export const DEFAULT_IMAGE_MODEL = "xai/grok-2-image-1212";
 ```
 
-### Dynamic Provider Configuration
+### 3. Gateway Model Access
 
 ```typescript
-// Reference: lib/ai/providers.ts - Dynamic model mapping
-const createLanguageModels = () => {
-  const models: Record<string, any> = {};
+// Reference: lib/ai/providers.ts - Direct gateway usage
+import { gateway } from "@/lib/gateway";
+import { getModelCapabilities } from "@/lib/constants";
 
-  // Add all chat models dynamically
-  for (const model of chatModels) {
-    const baseModelId = model.id.split(":")[1]; // Extract model ID after provider prefix
-
-    if (model.provider === "xai") {
-      if (model.supportsReasoning) {
-        models[model.id] = wrapLanguageModel({
-          model: xai(baseModelId),
-          middleware: extractReasoningMiddleware({ tagName: "think" }),
-        });
-      } else {
-        models[model.id] = xai(baseModelId);
-      }
-    }
-    // Future: Add other providers like OpenAI, Anthropic, etc.
+export const getLanguageModel = (modelId: string) => {
+  if (isTestEnvironment) {
+    return chatModel; // Test model
   }
 
-  return models;
+  const capabilities = getModelCapabilities(modelId);
+  const baseModel = gateway.languageModel(modelId);
+
+  // Apply reasoning middleware if supported
+  if (capabilities?.supportsReasoning) {
+    return wrapLanguageModel({
+      model: baseModel,
+      middleware: extractReasoningMiddleware({ tagName: "thinking" }),
+    });
+  }
+
+  return baseModel;
+};
+
+export const modelSupports = (
+  modelId: string,
+  feature: "reasoning" | "artifacts"
+): boolean => {
+  const capabilities = getModelCapabilities(modelId);
+  return feature === "reasoning"
+    ? capabilities.supportsReasoning
+    : capabilities.supportsArtifacts;
 };
 ```
 
-### Chat Integration Pattern
+## API Integration Patterns
+
+### 1. Dynamic Models API
 
 ```typescript
-// Reference: components/chat.tsx
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+// Reference: app/(chat)/api/models/route.ts - Server-side filtering
+export const GET = withSecurity(async (securityContext) => {
+  const allModels = await gateway.getAvailableModels();
+  const allowedModelIds = getAllowedModelIdsForUser(securityContext.user.type);
 
-const { messages, sendMessage, status, stop, regenerate, resumeStream } =
-  useChat<ChatMessage>({
-    id,
-    messages: initialMessages,
-    experimental_throttle: 100,
-    generateId: generateUUID,
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      fetch: fetchWithErrorHandlers,
-      prepareSendMessagesRequest({ messages, id, body }) {
-        return {
-          body: {
-            id,
-            message: messages.at(-1),
-            selectedChatModel: initialChatModel,
-            selectedVisibilityType: visibilityType,
-            ...body,
-          },
-        };
-      },
-    }),
+  const supportedModels = allModels.models
+    .filter((model) => SUPPORTED_MODEL_IDS.includes(model.id))
+    .map((model) => ({
+      ...enrichModelWithCapabilities(model),
+      enabled: allowedModelIds.includes(model.id), // Server-side entitlement
+    }));
+
+  return NextResponse.json({
+    models: supportedModels,
+    userType: securityContext.user.type,
   });
+});
 ```
 
-## Enhanced Entitlements System
-
-### Dynamic Model Filtering
+### 2. Enhanced Chat API
 
 ```typescript
-// Reference: lib/ai/entitlements.ts - New dynamic approach
-interface Entitlements {
-  maxMessagesPerDay: number;
-  getAvailableModels: () => Array<ChatModel>;
+// Reference: app/(chat)/api/chat/route.ts - Gateway integration
+export async function POST(request: Request) {
+  const { selectedChatModel } = await request.json();
+  const session = await auth();
+
+  // Validate model access with security logging
+  const allowedModelIds = getAllowedModelIdsForUser(session.user.type);
+  validateModelAccess(
+    selectedChatModel,
+    session.user.type,
+    session.user.id,
+    allowedModelIds
+  );
+
+  // Get model with dynamic capabilities
+  const model = getLanguageModel(selectedChatModel);
+  const supportsArtifacts = modelSupports(selectedChatModel, "artifacts");
+  const supportsReasoning = modelSupports(selectedChatModel, "reasoning");
+
+  const result = await streamText({
+    model,
+    system: systemPrompt({
+      selectedModel: {
+        id: selectedChatModel,
+        supportsArtifacts,
+        supportsReasoning,
+      },
+      requestHints,
+    }),
+    experimental_activeTools: supportsArtifacts
+      ? ["getWeather", "createDocument", "updateDocument", "requestSuggestions"]
+      : ["getWeather"],
+    tools: {
+      getWeather,
+      createDocument: createDocument({ session, dataStream, selectedModel }),
+      updateDocument: updateDocument({ session, dataStream, selectedModel }),
+      requestSuggestions: requestSuggestions({
+        session,
+        dataStream,
+        selectedModel,
+      }),
+    },
+  });
+
+  return result.toUIMessageStream({
+    sendReasoning: supportsReasoning,
+  });
+}
+```
+
+### 3. Security-Enhanced API Routes
+
+```typescript
+// Reference: lib/security.ts - Comprehensive security middleware
+export const withSecurity = (
+  handler: (securityContext: SecurityContext) => Promise<Response>,
+  options?: {
+    requireAuth?: boolean;
+    rateLimit?: boolean;
+    maxRequestSize?: number;
+  }
+) => {
+  return async (request: Request): Promise<Response> => {
+    try {
+      validateRequestSize(request, options?.maxRequestSize);
+      const securityContext = await requireAuth(); // DB verification included
+
+      if (options?.rateLimit && !checkRateLimit(securityContext.user.id)) {
+        throw new ChatSDKError("rate_limit:api");
+      }
+
+      return await handler(securityContext);
+    } catch (error) {
+      return error instanceof ChatSDKError
+        ? error.toResponse()
+        : new ChatSDKError("bad_request:api").toResponse();
+    }
+  };
+};
+```
+
+## Client-Side Integration
+
+### 1. Dynamic Model Fetching
+
+```typescript
+// Reference: hooks/use-models.ts - Server-side filtering
+export function useModels() {
+  const { data, error, isLoading } = useSWR<ModelsResponse>(
+    "/api/models",
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      refreshInterval: 5 * 60 * 1000, // 5 minutes
+    }
+  );
+
+  return {
+    models: data?.models ?? [],
+    userType: data?.userType ?? "guest",
+    isLoading,
+    error,
+  };
 }
 
+export function isModelEnabled(model: ChatModel): boolean {
+  return model.enabled !== false;
+}
+```
+
+### 2. Enhanced Model Selector
+
+```typescript
+// Reference: components/model-selector.tsx - Server-filtered models
+export function ModelSelector({
+  session,
+  selectedModelId,
+}: ModelSelectorProps) {
+  const { models: allModels, isLoading } = useModels();
+
+  return (
+    <DropdownMenuContent>
+      {allModels.map((chatModel) => {
+        const enabled = isModelEnabled(chatModel);
+
+        return (
+          <DropdownMenuItem
+            key={chatModel.id}
+            disabled={!enabled}
+            onSelect={() => {
+              if (!enabled) return; // Prevent disabled model selection
+              saveChatModelAsCookie(chatModel.id);
+            }}
+          >
+            <div className="flex items-center gap-2">
+              {chatModel.name}
+              {!enabled && (
+                <span className="text-xs px-1.5 py-0.5 bg-muted rounded">
+                  Pro
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {chatModel.description}
+            </div>
+          </DropdownMenuItem>
+        );
+      })}
+    </DropdownMenuContent>
+  );
+}
+```
+
+## Server Actions & Artifact Integration
+
+### 1. Gateway-Based Server Actions
+
+```typescript
+// Reference: app/(chat)/actions.ts - No hardcoded models
+export async function generateTitleFromUserMessage({
+  message,
+}: {
+  message: UIMessage;
+}) {
+  const { text: title } = await generateText({
+    model: getLanguageModel(DEFAULT_MODEL), // Dynamic model
+    system: `Generate a short title based on the first message...`,
+    prompt: JSON.stringify(message),
+  });
+
+  return title;
+}
+```
+
+### 2. Artifact Handlers
+
+```typescript
+// Reference: artifacts/text/server.ts - Gateway integration
+export const textDocumentHandler = createDocumentHandler<"text">({
+  kind: "text",
+  onCreateDocument: async ({ title, dataStream, selectedModel }) => {
+    const { fullStream } = streamText({
+      model: getLanguageModel(selectedModel.id), // Dynamic model selection
+      system: "Write about the given topic...",
+      prompt: title,
+    });
+    // ... streaming logic
+  },
+});
+```
+
+### 3. Image Generation
+
+```typescript
+// Reference: artifacts/image/server.ts - Gateway image models
+export const imageDocumentHandler = createDocumentHandler<"image">({
+  kind: "image",
+  onCreateDocument: async ({ title, dataStream }) => {
+    const { image } = await experimental_generateImage({
+      model: gateway.imageModel(DEFAULT_IMAGE_MODEL), // Configurable image model
+      prompt: title,
+      n: 1,
+    });
+    // ... processing logic
+  },
+});
+```
+
+## Model Management Best Practices
+
+### 1. Adding New Models
+
+```typescript
+// lib/constants.ts - Add to unified configuration
+export const SUPPORTED_MODELS = {
+  // ... existing models
+  "anthropic/claude-3.5-haiku": {
+    supportsReasoning: false,
+    supportsArtifacts: true,
+  },
+} as const;
+```
+
+### 2. Capability-Based Features
+
+```typescript
+// Always check capabilities, never hardcode model names
+const supportsArtifacts = modelSupports(selectedModelId, "artifacts");
+const supportsReasoning = modelSupports(selectedModelId, "reasoning");
+
+if (supportsArtifacts) {
+  // Enable artifact tools
+}
+
+if (supportsReasoning) {
+  // Show reasoning UI
+}
+```
+
+### 3. Entitlements Configuration
+
+```typescript
+// Reference: lib/ai/entitlements.ts - Dynamic filtering
 export const entitlementsByUserType: Record<UserType, Entitlements> = {
   guest: {
     maxMessagesPerDay: 20,
-    getAvailableModels: () => {
-      // Guest users get access to basic models only
-      return chatModels.filter(
-        (model) => model.id.includes("grok-3-mini") // Only mini models for guests
+    getAllowedModelIds: () => {
+      return SUPPORTED_MODEL_IDS.filter(
+        (modelId) =>
+          modelId.includes("grok-3-mini") || modelId.includes("gpt-3.5")
       );
     },
   },
   regular: {
     maxMessagesPerDay: 100,
-    getAvailableModels: () => {
-      // Regular users get access to all models
-      return chatModels;
-    },
+    getAllowedModelIds: () => SUPPORTED_MODEL_IDS, // All models
   },
 };
-
-// Helper functions for backward compatibility
-export const getAvailableModelsForUser = (
-  userType: UserType
-): Array<ChatModel> => {
-  return entitlementsByUserType[userType].getAvailableModels();
-};
 ```
 
-## Tool Development Patterns
+## Security Implementation
 
-### Tool Definition Structure
-
-All tools follow this pattern from [lib/ai/tools/](mdc:lib/ai/tools/):
+### 1. Model Access Validation
 
 ```typescript
-// Reference: lib/ai/tools/create-document.ts
-import { tool } from "ai";
-import { z } from "zod";
-import type { Session } from "next-auth";
-
-interface ToolProps {
-  session: Session;
-  dataStream: UIMessageStreamWriter<ChatMessage>;
+// Always validate model access server-side
+export function validateModelAccess(
+  modelId: string,
+  userType: UserType,
+  userId: string,
+  allowedModelIds: string[]
+): void {
+  if (!allowedModelIds.includes(modelId)) {
+    logSecurityEvent("forbidden_model", {
+      userId,
+      userType,
+      attemptedValue: modelId,
+      allowedValues: allowedModelIds,
+    });
+    throw new ChatSDKError("forbidden:chat");
+  }
 }
-
-export const toolName = ({ session, dataStream }: ToolProps) =>
-  tool({
-    description: "Clear description of what the tool does",
-    inputSchema: z.object({
-      param1: z.string(),
-      param2: z.enum(["option1", "option2"]),
-    }),
-    execute: async ({ param1, param2 }) => {
-      // Tool implementation
-
-      // Stream data updates
-      dataStream.write({
-        type: "data-kind",
-        data: param2,
-        transient: true,
-      });
-
-      return {
-        result: "Tool execution result",
-      };
-    },
-  });
 ```
 
-### Available Tools
-
-- **[create-document.ts](mdc:lib/ai/tools/create-document.ts)** - Creates artifacts (text, code, image, sheet)
-- **[update-document.ts](mdc:lib/ai/tools/update-document.ts)** - Updates existing documents
-- **[get-weather.ts](mdc:lib/ai/tools/get-weather.ts)** - Weather information retrieval
-- **[request-suggestions.ts](mdc:lib/ai/tools/request-suggestions.ts)** - Document suggestions
-
-## Enhanced API Route Patterns
-
-### Model-Aware Chat API
+### 2. Rate Limiting & Authentication
 
 ```typescript
-// Reference: app/(chat)/api/chat/route.ts - Enhanced with model validation
-export async function POST(request: Request) {
+// lib/security.ts - Enhanced security checks
+export async function requireAuth(): Promise<SecurityContext> {
   const session = await auth();
-  const { selectedChatModel } = await request.json();
+  if (!session?.user?.id) throw new ChatSDKError("unauthorized:chat");
 
-  // Validate user has access to selected model
-  const availableModels = getAvailableModelsForUser(session.user.type);
-  const selectedModel = availableModels.find(
-    (model) => model.id === selectedChatModel
-  );
+  // Database verification for real-time deactivation
+  const dbUser = await getUserById(session.user.id);
+  if (!dbUser) throw new ChatSDKError("unauthorized:chat");
 
-  if (!selectedModel) {
-    return new ChatSDKError("forbidden:chat").toResponse();
-  }
+  return {
+    user: { id: session.user.id, type: session.user.type },
+    isAuthenticated: true,
+  };
+}
+```
 
-  // Configure tools based on model capabilities
-  const result = await streamText({
-    model: myProvider.languageModel(selectedChatModel),
-    system: systemPrompt({ selectedModel, requestHints }),
-    experimental_activeTools: selectedModel.supportsArtifacts
-      ? ["getWeather", "createDocument", "updateDocument", "requestSuggestions"]
-      : ["getWeather"],
-    tools: {
-      getWeather,
-      createDocument: createDocument({ session, dataStream }),
-      updateDocument: updateDocument({ session, dataStream }),
-      requestSuggestions: requestSuggestions({ session, dataStream }),
-    },
+## Testing Patterns
+
+### 1. Model Configuration Testing
+
+```typescript
+describe("Gateway Integration", () => {
+  it("should handle model capabilities correctly", () => {
+    expect(modelSupports("xai/grok-3-mini", "reasoning")).toBe(true);
+    expect(modelSupports("openai/gpt-3.5-turbo", "artifacts")).toBe(false);
   });
 
-  return result.toUIMessageStream({
-    sendReasoning: selectedModel.supportsReasoning,
-  });
-}
-```
-
-### Dynamic Schema Validation
-
-```typescript
-// Reference: app/(chat)/api/chat/schema.ts - Dynamic model validation
-import { chatModels } from "@/lib/ai/models";
-
-// Create dynamic enum from available models
-const availableModelIds = chatModels.map((model) => model.id) as [
-  string,
-  ...string[]
-];
-
-export const postRequestBodySchema = z.object({
-  id: z.string().uuid(),
-  message: z.object({
-    id: z.string().uuid(),
-    role: z.enum(["user"]),
-    parts: z.array(partSchema),
-  }),
-  selectedChatModel: z.enum(availableModelIds), // Dynamic validation
-  selectedVisibilityType: z.enum(["public", "private"]),
-});
-```
-
-## Model-Aware System Prompts
-
-### Capability-Based Prompts
-
-```typescript
-// Reference: lib/ai/prompts.ts - Updated for model capabilities
-export const systemPrompt = ({
-  selectedModel,
-  requestHints,
-}: {
-  selectedModel: ChatModel;
-  requestHints: RequestHints;
-}) => {
-  const requestPrompt = getRequestPromptFromHints(requestHints);
-
-  if (selectedModel.supportsArtifacts) {
-    return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
-  } else {
-    return `${regularPrompt}\n\n${requestPrompt}`;
-  }
-};
-```
-
-## Adding New Providers
-
-### Step-by-Step Provider Addition
-
-1. **Add to models definition**:
-
-```typescript
-// lib/ai/models.ts
-{
-  id: 'openai:gpt-4o',
-  name: 'GPT-4o',
-  description: 'OpenAI\'s latest model',
-  provider: 'openai',
-  supportsReasoning: false,
-  supportsArtifacts: true,
-}
-```
-
-2. **Update provider mapping**:
-
-```typescript
-// lib/ai/providers.ts - Add provider case
-if (model.provider === "openai") {
-  models[model.id] = openai(baseModelId);
-}
-```
-
-3. **Update entitlements** (if needed):
-
-```typescript
-// lib/ai/entitlements.ts - Filter by provider or model capabilities
-getAvailableModels: () => {
-  return chatModels.filter(
-    (model) => user.tier === "premium" || model.provider === "xai"
-  );
-};
-```
-
-## Streaming & Data Flow
-
-### Data Stream Pattern
-
-```typescript
-// Reference: components/data-stream-provider.tsx
-export function DataStreamProvider({ children }: { children: ReactNode }) {
-  const [dataStream, setDataStream] = useState<Array<DataStreamPart>>([]);
-
-  return (
-    <DataStreamContext.Provider value={{ dataStream, setDataStream }}>
-      {children}
-    </DataStreamContext.Provider>
-  );
-}
-```
-
-### Stream Data Types
-
-```typescript
-// Common data stream types
-type DataStreamPart =
-  | { type: "data-kind"; data: ArtifactKind; transient: true }
-  | { type: "data-id"; data: string; transient: true }
-  | { type: "data-title"; data: string; transient: true }
-  | { type: "data-clear"; data: null; transient: true }
-  | { type: "data-finish"; data: null; transient: true };
-```
-
-## Testing Multi-Provider System
-
-### Model Configuration Testing
-
-```typescript
-// Test dynamic model mapping
-describe("Provider System", () => {
-  it("should map models correctly based on capabilities", () => {
-    const models = createLanguageModels();
-
-    expect(models["xai:grok-3-mini"]).toBeDefined();
-    expect(models["xai:grok-3-mini-reasoning"]).toHaveProperty("middleware");
-  });
-
-  it("should filter models by user entitlements", () => {
-    const guestModels = getAvailableModelsForUser("guest");
-    const regularModels = getAvailableModelsForUser("regular");
-
-    expect(guestModels.length).toBeLessThan(regularModels.length);
+  it("should validate model access", () => {
+    expect(() =>
+      validateModelAccess("premium-model", "guest", "user-id", ["basic-model"])
+    ).toThrow();
   });
 });
 ```
 
-### API Integration Testing
+### 2. API Security Testing
 
 ```typescript
-// Test model validation in API routes
-it("should reject invalid model selection", async () => {
-  const response = await POST(
-    new Request("/api/chat", {
-      method: "POST",
-      body: JSON.stringify({
-        selectedChatModel: "invalid:model",
-        message: {
-          /* message data */
-        },
-      }),
-    })
-  );
+describe("API Security", () => {
+  it("should reject unauthorized model access", async () => {
+    const response = await POST(
+      createRequest({
+        selectedChatModel: "premium-model",
+        session: { user: { type: "guest" } },
+      })
+    );
 
-  expect(response.status).toBe(403);
+    expect(response.status).toBe(403);
+  });
 });
 ```
 
-## Performance Considerations
+## Migration Guidelines
 
-### Model Selection Optimization
+### From Custom Provider to Gateway
 
-- **Client-side filtering** of available models based on user type
-- **Caching** of model configurations
-- **Lazy loading** of provider-specific modules
-- **Request validation** before AI API calls
+1. **Replace provider imports**: Use `getLanguageModel()` instead of `myProvider.languageModel()`
+2. **Update model references**: Use constants instead of hardcoded strings
+3. **Implement capability checks**: Use `modelSupports()` for feature detection
+4. **Add security validation**: Use `validateModelAccess()` for authorization
+5. **Update client components**: Use `/api/models` for dynamic model listing
 
-### Cost Management
+### Key Architecture Benefits
 
-- **Model-based rate limiting** (cheaper models = higher limits)
-- **User tier restrictions** on premium models
-- **Token usage tracking** per model and user
-- **Fallback models** for reliability
+- ✅ **Unified Gateway**: All models through single AI SDK Gateway
+- ✅ **No Hardcoding**: Models configured via constants
+- ✅ **Server-Side Security**: Authentication + entitlement validation
+- ✅ **Dynamic Capabilities**: Features based on model capabilities
+- ✅ **Real-time Updates**: Models fetched fresh from gateway
+- ✅ **Type Safety**: TypeScript ensures configuration consistency

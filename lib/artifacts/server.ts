@@ -8,7 +8,11 @@ import { saveDocument } from '../db/queries';
 import type { Session } from 'next-auth';
 import type { UIMessageStreamWriter } from 'ai';
 import type { ChatMessage } from '../types';
-import type { ChatModel } from '../ai/models';
+interface SelectedModel {
+  id: string;
+  supportsArtifacts: boolean;
+  supportsReasoning: boolean;
+}
 
 export interface SaveDocumentProps {
   id: string;
@@ -23,7 +27,7 @@ export interface CreateDocumentCallbackProps {
   title: string;
   dataStream: UIMessageStreamWriter<ChatMessage>;
   session: Session;
-  selectedModel: ChatModel;
+  selectedModel: SelectedModel;
 }
 
 export interface UpdateDocumentCallbackProps {
@@ -31,7 +35,7 @@ export interface UpdateDocumentCallbackProps {
   description: string;
   dataStream: UIMessageStreamWriter<ChatMessage>;
   session: Session;
-  selectedModel: ChatModel;
+  selectedModel: SelectedModel;
 }
 
 export interface DocumentHandler<T = ArtifactKind> {

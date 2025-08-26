@@ -16,6 +16,7 @@ import {
   getMessagesByChatId,
   saveChat,
   saveMessages,
+  upsertDailyUsage,
 } from '@/lib/db/queries';
 import { convertToUIMessages, generateUUID } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
@@ -24,12 +25,12 @@ import { updateDocument } from '@/lib/ai/tools/update-document';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
-import { myProvider } from '@/lib/ai/providers';
-import { upsertDailyUsage } from '@/lib/db/queries';
+import { getLanguageModel, modelSupports } from '@/lib/ai/providers';
 import {
   entitlementsByUserType,
-  getAvailableModelsForUser,
+  getAllowedModelIdsForUser,
 } from '@/lib/ai/entitlements';
+import { validateModelAccess } from '@/lib/security';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
 import {
@@ -107,14 +108,13 @@ export async function POST(request: Request) {
     }
 
     // Validate that the user has access to the selected model
-    const availableModels = getAvailableModelsForUser(userType);
-    const selectedModel = availableModels.find(
-      (model) => model.id === selectedChatModel,
+    const allowedModelIds = getAllowedModelIdsForUser(userType);
+    validateModelAccess(
+      selectedChatModel,
+      userType,
+      session.user.id,
+      allowedModelIds,
     );
-
-    if (!selectedModel) {
-      return new ChatSDKError('forbidden:chat').toResponse();
-    }
 
     const chat = await getChatById({ id });
 
@@ -165,12 +165,23 @@ export async function POST(request: Request) {
 
     const stream = createUIMessageStream({
       execute: ({ writer: dataStream }) => {
+        const model = getLanguageModel(selectedChatModel);
+        const supportsArtifacts = modelSupports(selectedChatModel, 'artifacts');
+        const supportsReasoning = modelSupports(selectedChatModel, 'reasoning');
+
         const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedModel, requestHints }),
+          model,
+          system: systemPrompt({
+            selectedModel: {
+              id: selectedChatModel,
+              supportsArtifacts,
+              supportsReasoning,
+            },
+            requestHints,
+          }),
           messages: convertToModelMessages(uiMessages),
           stopWhen: stepCountIs(5),
-          experimental_activeTools: selectedModel.supportsArtifacts
+          experimental_activeTools: supportsArtifacts
             ? [
                 'getWeather',
                 'createDocument',
@@ -184,17 +195,29 @@ export async function POST(request: Request) {
             createDocument: createDocument({
               session,
               dataStream,
-              selectedModel,
+              selectedModel: {
+                id: selectedChatModel,
+                supportsArtifacts,
+                supportsReasoning,
+              },
             }),
             updateDocument: updateDocument({
               session,
               dataStream,
-              selectedModel,
+              selectedModel: {
+                id: selectedChatModel,
+                supportsArtifacts,
+                supportsReasoning,
+              },
             }),
             requestSuggestions: requestSuggestions({
               session,
               dataStream,
-              selectedModel,
+              selectedModel: {
+                id: selectedChatModel,
+                supportsArtifacts,
+                supportsReasoning,
+              },
             }),
           },
           experimental_telemetry: {
@@ -207,7 +230,7 @@ export async function POST(request: Request) {
 
         dataStream.merge(
           result.toUIMessageStream({
-            sendReasoning: selectedModel.supportsReasoning,
+            sendReasoning: supportsReasoning,
           }),
         );
       },

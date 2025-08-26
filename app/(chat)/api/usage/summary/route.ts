@@ -19,6 +19,7 @@ export async function GET() {
 
   const now = new Date();
   const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const startDateString = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`;
 
   const usage = await db
     .select()
@@ -26,7 +27,7 @@ export async function GET() {
     .where(
       and(
         eq(usageDaily.userId, session.user.id),
-        gte(usageDaily.day as unknown as any, start as unknown as any),
+        gte(usageDaily.day, startDateString),
       ),
     )
     .orderBy(desc(usageDaily.day));
