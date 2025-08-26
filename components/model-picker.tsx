@@ -374,7 +374,7 @@ export function ModelPicker({
           {/* Search - only in expanded mode */}
           {isExpanded && (
             <div className="relative mb-4">
-              <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                 <SearchIcon size={16} />
               </div>
               <Input

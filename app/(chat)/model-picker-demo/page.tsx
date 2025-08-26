@@ -34,19 +34,19 @@ export default async function ModelPickerDemo() {
               <h3 className="font-medium mb-2">Compact View</h3>
               <ul className="space-y-2 text-sm">
                 <li className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <span className="size-2 bg-blue-500 rounded-full" />
                   Quick access to favorites + top models
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <span className="size-2 bg-blue-500 rounded-full" />
                   Smaller dialog (max-w-2xl)
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <span className="size-2 bg-blue-500 rounded-full" />
                   Up to 8 most relevant models
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <span className="size-2 bg-blue-500 rounded-full" />
                   "Show all" button to expand
                 </li>
               </ul>
@@ -55,19 +55,19 @@ export default async function ModelPickerDemo() {
               <h3 className="font-medium mb-2">Expanded View</h3>
               <ul className="space-y-2 text-sm">
                 <li className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="size-2 bg-green-500 rounded-full" />
                   Search functionality with real-time filtering
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="size-2 bg-green-500 rounded-full" />
                   Larger dialog (max-w-6xl) with more height
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="size-2 bg-green-500 rounded-full" />
                   All models organized by favorites/others
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="size-2 bg-green-500 rounded-full" />
                   "Show less" button to compact
                 </li>
               </ul>
@@ -78,31 +78,31 @@ export default async function ModelPickerDemo() {
             <h3 className="font-medium mb-2">Universal Features</h3>
             <ul className="space-y-2 text-sm">
               <li className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-purple-500 rounded-full" />
+                <span className="size-2 bg-purple-500 rounded-full" />
                 Hover tooltips with detailed model information
               </li>
               <li className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-blue-500 rounded-full" />🧠
+                <span className="size-2 bg-blue-500 rounded-full" />🧠
                 Reasoning capability indicator (blue brain icon)
               </li>
               <li className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-purple-500 rounded-full" />
+                <span className="size-2 bg-purple-500 rounded-full" />
                 🖼️ Image analysis support indicator (purple image icon)
               </li>
               <li className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full" />💻
+                <span className="size-2 bg-green-500 rounded-full" />💻
                 Artifact generation support (green code icon)
               </li>
               <li className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-purple-500 rounded-full" />
+                <span className="size-2 bg-purple-500 rounded-full" />
                 Provider-specific icons and branding
               </li>
               <li className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-purple-500 rounded-full" />
+                <span className="size-2 bg-purple-500 rounded-full" />
                 Space-efficient design without inline descriptions
               </li>
               <li className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-purple-500 rounded-full" />
+                <span className="size-2 bg-purple-500 rounded-full" />
                 Favorites system with visual feedback
               </li>
             </ul>

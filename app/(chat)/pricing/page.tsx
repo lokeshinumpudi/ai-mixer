@@ -172,7 +172,7 @@ export default function PricingPage() {
                 className={`relative ${plan.popular ? 'border-primary shadow-lg' : ''}`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <span className="bg-primary text-primary-foreground px-3 py-1 text-sm font-medium rounded-full">
                       Most Popular
                     </span>
@@ -196,7 +196,7 @@ export default function PricingPage() {
                         key={`${plan.name}-feature-${index}`}
                         className="flex items-center gap-2"
                       >
-                        <Check className="h-4 w-4 text-primary" />
+                        <Check className="size-4 text-primary" />
                         <span className="text-sm">{feature}</span>
                       </li>
                     ))}
@@ -244,7 +244,7 @@ export default function PricingPage() {
                         key={`${plan.name}-feature-${index}`}
                         className="flex items-center gap-2"
                       >
-                        <Check className="h-4 w-4 text-primary" />
+                        <Check className="size-4 text-primary" />
                         <span className="text-sm">{feature}</span>
                       </li>
                     ))}
