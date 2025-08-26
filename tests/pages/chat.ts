@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { chatModels } from '@/lib/ai/models';
+import { SUPPORTED_MODELS } from '@/lib/constants';
 import { expect, type Page } from '@playwright/test';
 
 export class ChatPage {
@@ -102,9 +102,8 @@ export class ChatPage {
   }
 
   public async chooseModelFromSelector(chatModelId: string) {
-    const chatModel = chatModels.find(
-      (chatModel) => chatModel.id === chatModelId,
-    );
+    const chatModel =
+      SUPPORTED_MODELS[chatModelId as keyof typeof SUPPORTED_MODELS];
 
     if (!chatModel) {
       throw new Error(`Model with id ${chatModelId} not found`);
@@ -112,7 +111,7 @@ export class ChatPage {
 
     await this.page.getByTestId('model-selector').click();
     await this.page.getByTestId(`model-selector-item-${chatModelId}`).click();
-    expect(await this.getSelectedModel()).toBe(chatModel.name);
+    expect(await this.getSelectedModel()).toBe(chatModelId);
   }
 
   public async getSelectedVisibility() {
