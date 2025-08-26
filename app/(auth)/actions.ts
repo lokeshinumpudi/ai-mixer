@@ -82,3 +82,53 @@ export const register = async (
     return { status: 'failed' };
   }
 };
+
+export interface AuthenticateActionState {
+  status: 'idle' | 'in_progress' | 'success' | 'failed' | 'invalid_data';
+  isNewUser?: boolean;
+}
+
+export const authenticate = async (
+  _: AuthenticateActionState,
+  formData: FormData,
+): Promise<AuthenticateActionState> => {
+  try {
+    const validatedData = authFormSchema.parse({
+      email: formData.get('email'),
+      password: formData.get('password'),
+    });
+
+    // First, try to login with existing credentials
+    try {
+      await signIn('credentials', {
+        email: validatedData.email,
+        password: validatedData.password,
+        redirect: false,
+      });
+      return { status: 'success', isNewUser: false };
+    } catch (loginError) {
+      // If login fails, check if user exists
+      const users = await getUser(validatedData.email);
+
+      if (users.length > 0) {
+        // User exists but wrong password
+        return { status: 'failed' };
+      }
+
+      // User doesn't exist, create account and login
+      await createUser(validatedData.email, validatedData.password);
+      await signIn('credentials', {
+        email: validatedData.email,
+        password: validatedData.password,
+        redirect: false,
+      });
+      return { status: 'success', isNewUser: true };
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { status: 'invalid_data' };
+    }
+
+    return { status: 'failed' };
+  }
+};

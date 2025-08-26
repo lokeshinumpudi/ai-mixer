@@ -23,14 +23,19 @@ export async function middleware(request: NextRequest) {
     secureCookie: !isDevelopmentEnvironment,
   });
 
-  // Handle login and register pages based on authentication status
-  if (['/login', '/register'].includes(pathname)) {
+  // Handle login page based on authentication status
+  if (pathname === '/login') {
     if (token) {
-      // Authenticated users trying to access login/register should go to home
+      // Authenticated users trying to access login should go to home
       return NextResponse.redirect(new URL('/', request.url));
     }
-    // Unauthenticated users can access login/register
+    // Unauthenticated users can access login
     return NextResponse.next();
+  }
+
+  // Redirect old register route to unified login
+  if (pathname === '/register') {
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   if (!token) {
@@ -47,7 +52,7 @@ export const config = {
     '/chat/:id',
     '/api/:path*',
     '/login',
-    '/register',
+    '/register', // Keep for redirect to login
 
     /*
      * Match all request paths except for the ones starting with:
