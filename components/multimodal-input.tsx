@@ -12,9 +12,6 @@ import {
   type SetStateAction,
   type ChangeEvent,
   memo,
-  useMemo,
-  useOptimistic,
-  startTransition,
 } from 'react';
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
@@ -32,15 +29,7 @@ import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
 import type { Session } from 'next-auth';
-import { ChevronDownIcon, CheckCircleFillIcon } from './icons';
-import { useModels, isModelEnabled } from '@/hooks/use-models';
-import { saveChatModelAsCookie } from '@/app/(chat)/actions';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from './ui/dropdown-menu';
+import { ModelPicker } from './model-picker';
 
 function PureMultimodalInput({
   chatId,
@@ -324,10 +313,11 @@ function PureMultimodalInput({
 
       <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start items-center gap-1">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
-        <CompactModelSelector
+        <ModelPicker
           session={session}
           selectedModelId={selectedModelId}
-          status={status}
+          disabled={status !== 'ready'}
+          compact={true}
         />
       </div>
 
@@ -439,95 +429,3 @@ const SendButton = memo(PureSendButton, (prevProps, nextProps) => {
   if (prevProps.input !== nextProps.input) return false;
   return true;
 });
-
-function PureCompactModelSelector({
-  session,
-  selectedModelId,
-  status,
-}: {
-  session: Session;
-  selectedModelId: string;
-  status: UseChatHelpers<ChatMessage>['status'];
-}) {
-  const [open, setOpen] = useState(false);
-  const [optimisticModelId, setOptimisticModelId] =
-    useOptimistic(selectedModelId);
-
-  const { models: allModels } = useModels();
-
-  const selectedChatModel = useMemo(
-    () => allModels.find((chatModel) => chatModel.id === optimisticModelId),
-    [optimisticModelId, allModels],
-  );
-
-  return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          data-testid="compact-model-selector"
-          variant="ghost"
-          className="rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200 text-xs max-w-[100px]"
-          disabled={status !== 'ready'}
-        >
-          <span className="truncate">{selectedChatModel?.name}</span>
-          <ChevronDownIcon size={12} />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="min-w-[300px]">
-        {allModels.map((chatModel) => {
-          const { id } = chatModel;
-          const enabled = isModelEnabled(chatModel);
-
-          return (
-            <DropdownMenuItem
-              data-testid={`compact-model-selector-item-${id}`}
-              key={id}
-              onSelect={() => {
-                if (!enabled) return; // Prevent selection of disabled models
-
-                setOpen(false);
-
-                startTransition(() => {
-                  setOptimisticModelId(id);
-                  saveChatModelAsCookie(id);
-                });
-              }}
-              data-active={id === optimisticModelId}
-              disabled={!enabled}
-              asChild
-            >
-              <button
-                type="button"
-                className={cx(
-                  'gap-4 group/item flex flex-row justify-between items-center w-full',
-                  !enabled && 'opacity-50 cursor-not-allowed',
-                )}
-                disabled={!enabled}
-              >
-                <div className="flex flex-col gap-1 items-start">
-                  <div className="flex items-center gap-2">
-                    {chatModel.name}
-                    {!enabled && (
-                      <span className="text-xs px-1.5 py-0.5 bg-muted rounded text-muted-foreground">
-                        Pro
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {chatModel.description}
-                  </div>
-                </div>
-
-                <div className="text-foreground dark:text-foreground opacity-0 group-data-[active=true]/item:opacity-100">
-                  <CheckCircleFillIcon />
-                </div>
-              </button>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-const CompactModelSelector = memo(PureCompactModelSelector);

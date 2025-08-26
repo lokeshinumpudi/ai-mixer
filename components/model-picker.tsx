@@ -94,6 +94,7 @@ function ModelCard({
     <Tooltip>
       <TooltipTrigger asChild>
         <Card
+          data-testid={`model-selector-item-${model.id}`}
           className={cn(
             'relative cursor-pointer transition-all duration-200 hover:shadow-md',
             'border-2 hover:border-primary/20',
@@ -102,14 +103,14 @@ function ModelCard({
           )}
           onClick={enabled ? onSelect : undefined}
         >
-          <CardContent className="p-3 h-24 flex flex-col">
+          <CardContent className="p-4 h-28 flex flex-col">
             {/* Header with provider icon and favorite */}
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-lg">{providerIcon}</span>
-              <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xl">{providerIcon}</span>
+              <div className="flex items-center gap-2">
                 {!enabled && (
                   <div className="text-amber-500">
-                    <DiamondIcon size={12} />
+                    <DiamondIcon size={14} />
                   </div>
                 )}
                 <button
@@ -119,57 +120,57 @@ function ModelCard({
                     onToggleFavorite();
                   }}
                   className={cn(
-                    'p-0.5 hover:bg-accent rounded transition-colors',
+                    'p-1 hover:bg-accent rounded transition-colors',
                     isFavorite
                       ? 'text-amber-500'
                       : 'text-muted-foreground hover:text-amber-500',
                   )}
                 >
-                  <StarIcon size={10} />
+                  <StarIcon size={12} />
                 </button>
               </div>
             </div>
 
             {/* Model name - takes remaining space */}
-            <div className="flex-1 flex items-center">
-              <h3 className="font-medium text-sm line-clamp-2 leading-tight">
+            <div className="flex-1 flex items-start">
+              <h3 className="font-medium text-sm line-clamp-2 leading-tight flex-1">
                 {model.name}
               </h3>
               {isSelected && enabled && (
-                <div className="text-primary ml-auto">
-                  <CheckIcon size={14} />
+                <div className="text-primary ml-2 mt-0.5">
+                  <CheckIcon size={16} />
                 </div>
               )}
             </div>
 
-            {/* Bottom capabilities row */}
-            <div className="flex items-center justify-between mt-auto">
-              <div className="flex items-center gap-1">
+            {/* Bottom capabilities and badges row */}
+            <div className="flex items-center justify-between mt-auto pt-2">
+              <div className="flex items-center gap-2">
                 {supportsImageAnalysis && (
-                  <div className="text-purple-500 bg-purple-500/10 rounded p-1">
-                    <ImageIcon size={10} />
+                  <div className="text-purple-500 bg-purple-500/10 rounded-md p-1.5">
+                    <ImageIcon size={12} />
                   </div>
                 )}
                 {model.supportsReasoning && (
-                  <div className="text-blue-500 bg-blue-500/10 rounded p-1">
-                    <BrainIcon size={10} />
+                  <div className="text-blue-500 bg-blue-500/10 rounded-md p-1.5">
+                    <BrainIcon size={12} />
                   </div>
                 )}
                 {model.supportsArtifacts && (
-                  <div className="text-green-500 bg-green-500/10 rounded p-1">
-                    <CodeIcon size={10} />
+                  <div className="text-green-500 bg-green-500/10 rounded-md p-1.5">
+                    <CodeIcon size={12} />
                   </div>
                 )}
               </div>
 
-              <div className="flex gap-1">
+              <div className="flex gap-1.5">
                 {model.id.includes('mini') && (
-                  <div className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                     Fast
                   </div>
                 )}
                 {model.id.includes('pro') && (
-                  <div className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded flex items-center gap-1">
                     <SparklesIcon size={8} />
                     Pro
                   </div>
@@ -179,8 +180,8 @@ function ModelCard({
 
             {/* Premium overlay */}
             {!enabled && (
-              <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-background/20 rounded-lg flex items-end justify-center pb-2">
-                <Button size="sm" variant="default" className="text-xs h-6">
+              <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-background/20 rounded-lg flex items-end justify-center pb-3">
+                <Button size="sm" variant="default" className="text-xs h-7">
                   Upgrade
                 </Button>
               </div>
@@ -224,12 +225,16 @@ interface ModelPickerProps {
   session: Session;
   selectedModelId: string;
   className?: string;
+  compact?: boolean;
+  disabled?: boolean;
 }
 
 export function ModelPicker({
   session,
   selectedModelId,
   className,
+  compact = false,
+  disabled = false,
 }: ModelPickerProps) {
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -309,21 +314,36 @@ export function ModelPicker({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
           <Button
-            variant="outline"
+            data-testid="model-selector"
+            variant={compact ? 'ghost' : 'outline'}
             className={cn(
-              'flex items-center gap-2 min-w-[180px] justify-between',
+              compact
+                ? 'rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200 text-xs max-w-[100px] flex items-center gap-1'
+                : 'flex items-center gap-2 min-w-[180px] justify-between',
               className,
             )}
+            disabled={disabled}
           >
-            <div className="flex items-center gap-2">
-              <span>
-                {getProviderIcon(selectedModel?.provider || 'openai')}
-              </span>
-              <span className="truncate">
-                {selectedModel?.name || 'Select Model'}
-              </span>
-            </div>
-            <SearchIcon size={16} />
+            {compact ? (
+              <>
+                <span className="truncate text-xs">
+                  {selectedModel?.name || 'Select Model'}
+                </span>
+                <SearchIcon size={12} />
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <span>
+                    {getProviderIcon(selectedModel?.provider || 'openai')}
+                  </span>
+                  <span className="truncate">
+                    {selectedModel?.name || 'Select Model'}
+                  </span>
+                </div>
+                <SearchIcon size={16} />
+              </>
+            )}
           </Button>
         </DialogTrigger>
 
@@ -381,7 +401,7 @@ export function ModelPicker({
                     Show all
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                   {compactModels.map((model) => (
                     <ModelCard
                       key={model.id}
@@ -418,7 +438,7 @@ export function ModelPicker({
                       </div>
                       <h3 className="font-medium">Favorites</h3>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {favoriteModels.map((model) => (
                         <ModelCard
                           key={model.id}
@@ -439,7 +459,7 @@ export function ModelPicker({
                     <h3 className="font-medium mb-3">
                       {favoriteModels.length > 0 ? 'Others' : 'All Models'}
                     </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {otherModels.map((model) => (
                         <ModelCard
                           key={model.id}
