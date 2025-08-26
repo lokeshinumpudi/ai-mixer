@@ -57,6 +57,13 @@
       "when": 1756125312806,
       "tag": "0007_pale_phil_sheldon",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1756203395596,
+      "tag": "0008_furry_power_man",
+      "breakpoints": true
     }
   ]
 }

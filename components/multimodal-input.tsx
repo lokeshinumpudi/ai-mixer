@@ -28,6 +28,8 @@ import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
+import { useUsage } from '@/hooks/use-usage';
+import { useRouter } from 'next/navigation';
 import type { Session } from 'next-auth';
 import { ModelPicker } from './model-picker';
 
@@ -63,6 +65,8 @@ function PureMultimodalInput({
   selectedModelId: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const router = useRouter();
+  const { usage } = useUsage();
   const { width } = useWindowSize();
 
   useEffect(() => {
@@ -115,6 +119,18 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
 
   const submitForm = useCallback(() => {
+    // Check rate limits before sending
+    if (usage?.isOverLimit) {
+      toast.error('Message limit reached', {
+        description: `You've reached your ${usage.type} limit. Upgrade to continue.`,
+        action: {
+          label: 'Upgrade',
+          onClick: () => router.push('/pricing'),
+        },
+      });
+      return;
+    }
+
     window.history.replaceState({}, '', `/chat/${chatId}`);
 
     sendMessage({
@@ -150,6 +166,8 @@ function PureMultimodalInput({
     setLocalStorageInput,
     width,
     chatId,
+    usage,
+    router,
   ]);
 
   const uploadFile = async (file: File) => {

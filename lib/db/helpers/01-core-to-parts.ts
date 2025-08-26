@@ -10,7 +10,6 @@
 //   vote,
 //   voteDeprecated,
 // } from '../schema';
-// import { drizzle } from 'drizzle-orm/postgres-js';
 // import { inArray } from 'drizzle-orm';
 // import { appendResponseMessages, type UIMessage } from 'ai';
 

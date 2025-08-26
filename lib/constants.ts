@@ -16,6 +16,40 @@ export const DEFAULT_MODEL = 'xai/grok-3-mini';
 // Image model configuration
 export const DEFAULT_IMAGE_MODEL = 'xai/grok-2-image-1212'; // Or whatever image model is available via gateway
 
+// Pricing configuration
+export const PRICING = {
+  FREE_TIER: {
+    dailyMessages: 20,
+    name: 'Free Plan',
+    description: '20 messages per day with basic models',
+  },
+  PAID_TIER: {
+    monthlyMessages: 1000,
+    priceInRupees: 249,
+    name: 'Pro Plan',
+    description: '1000 messages per month with all models',
+  },
+} as const;
+
+// Free models (available to all users)
+export const FREE_MODELS = [
+  'xai/grok-3-mini',
+  'openai/gpt-3.5-turbo',
+  'google/gemma2-9b-it',
+  'meta/llama-3.1-8b',
+  'mistral/ministral-3b',
+  'amazon/nova-micro',
+] as const;
+
+// Pro models (require paid subscription)
+export const PRO_MODELS = [
+  'xai/grok-3',
+  'openai/gpt-4o-mini',
+  'anthropic/claude-3.5-haiku',
+  'google/gemini-2.0-flash',
+  'amazon/nova-lite',
+] as const;
+
 // Unified model configuration - single source of truth
 export const SUPPORTED_MODELS = {
   'xai/grok-3': {

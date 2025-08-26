@@ -356,7 +356,7 @@ export function ModelPicker({
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <span>Choose a Model</span>
-              {userType === 'guest' && (
+              {userType === 'free' && (
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground">
                     Unlock all models + higher limits

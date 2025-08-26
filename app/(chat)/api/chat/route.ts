@@ -12,11 +12,12 @@ import {
   createStreamId,
   deleteChatById,
   getChatById,
-  getMessageCountByUserId,
   getMessagesByChatId,
   saveChat,
   saveMessages,
   upsertDailyUsage,
+  upsertMonthlyUsage,
+  getUserUsageAndLimits,
 } from '@/lib/db/queries';
 import { convertToUIMessages, generateUUID } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
@@ -26,10 +27,7 @@ import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { isProductionEnvironment } from '@/lib/constants';
 import { getLanguageModel, modelSupports } from '@/lib/ai/providers';
-import {
-  entitlementsByUserType,
-  getAllowedModelIdsForUser,
-} from '@/lib/ai/entitlements';
+import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
 import { validateModelAccess } from '@/lib/security';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
@@ -98,12 +96,13 @@ export async function POST(request: Request) {
 
     const userType: UserType = session.user.type;
 
-    const messageCount = await getMessageCountByUserId({
-      id: session.user.id,
-      differenceInHours: 24,
+    // Check usage and rate limits
+    const usageInfo = await getUserUsageAndLimits({
+      userId: session.user.id,
+      userType,
     });
 
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
+    if (usageInfo.isOverLimit) {
       return new ChatSDKError('rate_limit:chat').toResponse();
     }
 
@@ -163,8 +162,12 @@ export async function POST(request: Request) {
     const streamId = generateUUID();
     await createStreamId({ streamId, chatId: id });
 
+    let dataStreamRef: any = null;
+
     const stream = createUIMessageStream({
       execute: ({ writer: dataStream }) => {
+        dataStreamRef = dataStream; // Store reference for onFinish callback
+
         const model = getLanguageModel(selectedChatModel);
         const supportsArtifacts = modelSupports(selectedChatModel, 'artifacts');
         const supportsReasoning = modelSupports(selectedChatModel, 'reasoning');
@@ -247,7 +250,7 @@ export async function POST(request: Request) {
           })),
         });
 
-        // Token usage upsert (best-effort)
+        // Usage tracking and real-time usage update
         try {
           const getText = (msg: any) =>
             Array.isArray(msg?.parts)
@@ -268,12 +271,36 @@ export async function POST(request: Request) {
           const outChars = lastAssistant ? getText(lastAssistant).length : 0;
           const toTokens = (n: number) => Math.ceil(n / 4);
 
+          // Track daily usage (for all users - includes tokens for legacy and messages for new system)
           await upsertDailyUsage({
             userId: session.user.id,
             modelId: selectedChatModel,
             tokensIn: toTokens(inChars),
             tokensOut: toTokens(outChars),
+            messages: 1, // Count this as 1 message interaction
           });
+
+          // Track monthly usage for pro users
+          if (userType === 'pro') {
+            await upsertMonthlyUsage({
+              userId: session.user.id,
+              messages: 1,
+            });
+          }
+
+          // Get updated usage info after tracking
+          const updatedUsageInfo = await getUserUsageAndLimits({
+            userId: session.user.id,
+            userType,
+          });
+
+          // Send usage update to client via data stream (if available)
+          if (dataStreamRef) {
+            dataStreamRef.write({
+              type: 'usage-update',
+              content: updatedUsageInfo,
+            });
+          }
         } catch (err) {
           console.error('usage upsert failed', err);
         }

@@ -6,7 +6,7 @@ import type { ChatModel } from '@/lib/ai/models';
 
 interface ModelsResponse {
   models: ChatModel[];
-  userType: 'guest' | 'regular';
+  userType: 'free' | 'pro';
 }
 
 export function useModels() {
@@ -22,7 +22,7 @@ export function useModels() {
 
   return {
     models: data?.models ?? [],
-    userType: data?.userType ?? 'guest',
+    userType: data?.userType ?? 'free',
     isLoading,
     error,
     mutate,

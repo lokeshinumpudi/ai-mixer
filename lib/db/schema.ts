@@ -223,6 +223,7 @@ export const usageDaily = pgTable(
     modelId: varchar('modelId', { length: 64 }).notNull(),
     tokensIn: integer('tokensIn').notNull().default(0),
     tokensOut: integer('tokensOut').notNull().default(0),
+    messages: integer('messages').notNull().default(0), // New: track message count
     updatedAt: timestamp('updatedAt').notNull().defaultNow(),
   },
   (table) => ({
@@ -230,4 +231,21 @@ export const usageDaily = pgTable(
   }),
 );
 
+// New table for tracking monthly usage for pro users
+export const usageMonthly = pgTable(
+  'UsageMonthly',
+  {
+    userId: uuid('userId')
+      .notNull()
+      .references(() => user.id),
+    month: date('month').notNull(), // YYYY-MM-01 format
+    messages: integer('messages').notNull().default(0),
+    updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.month] }),
+  }),
+);
+
 export type UsageDaily = InferSelectModel<typeof usageDaily>;
+export type UsageMonthly = InferSelectModel<typeof usageMonthly>;

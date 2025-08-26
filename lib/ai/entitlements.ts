@@ -1,44 +1,35 @@
 import type { UserType } from '@/app/(auth)/auth';
 import type { ChatModel } from './models';
-import { SUPPORTED_MODEL_IDS } from '@/lib/constants';
+import { FREE_MODELS, PRO_MODELS, PRICING } from '@/lib/constants';
 
 interface Entitlements {
-  maxMessagesPerDay: number;
+  maxMessagesPerDay?: number; // For free tier
+  maxMessagesPerMonth?: number; // For paid tier
   getAllowedModelIds: () => Array<string>;
+  planName: string;
+  planDescription: string;
 }
 
 export const entitlementsByUserType: Record<UserType, Entitlements> = {
   /*
-   * For users without an account
+   * For logged-in users without a paid subscription - Free tier with daily limits
    */
-  guest: {
-    maxMessagesPerDay: 20,
-    getAllowedModelIds: () => {
-      // Guest users get access to basic models only
-      return SUPPORTED_MODEL_IDS.filter(
-        (modelId) =>
-          modelId.includes('grok-3-mini') ||
-          modelId.includes('gpt-3.5') ||
-          modelId.includes('gemma2-9b') ||
-          modelId.includes('ministral-3b'),
-      );
-    },
+  free: {
+    maxMessagesPerDay: PRICING.FREE_TIER.dailyMessages,
+    getAllowedModelIds: () => [...FREE_MODELS],
+    planName: PRICING.FREE_TIER.name,
+    planDescription: PRICING.FREE_TIER.description,
   },
 
   /*
-   * For users with an account
+   * For users with an active paid subscription - Pro tier with monthly limits
    */
-  regular: {
-    maxMessagesPerDay: 100,
-    getAllowedModelIds: () => {
-      // Regular users get access to all supported models
-      return SUPPORTED_MODEL_IDS;
-    },
+  pro: {
+    maxMessagesPerMonth: PRICING.PAID_TIER.monthlyMessages,
+    getAllowedModelIds: () => [...FREE_MODELS, ...PRO_MODELS],
+    planName: PRICING.PAID_TIER.name,
+    planDescription: PRICING.PAID_TIER.description,
   },
-
-  /*
-   * TODO: For users with an account and a paid membership
-   */
 };
 
 // Helper function to get allowed model IDs for a user type

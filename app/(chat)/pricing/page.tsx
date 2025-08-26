@@ -9,268 +9,249 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Check } from 'lucide-react';
-import { toast } from '@/components/toast';
+import { Check, ArrowLeft } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
-
-interface Plan {
-  name: string;
-  price: number;
-  amountPaise: number;
-  features: string[];
-  type: 'subscription' | 'credits';
-  popular?: boolean;
-}
-
-const plans: Plan[] = [
-  {
-    name: 'Free',
-    price: 0,
-    amountPaise: 0,
-    features: ['3,000 tokens/month', 'Basic support', 'Standard models'],
-    type: 'subscription',
-  },
-  {
-    name: 'Pro',
-    price: 499,
-    amountPaise: 49900,
-    features: [
-      '50,000 tokens/month',
-      'Priority support',
-      'All models',
-      'Advanced features',
-    ],
-    type: 'subscription',
-    popular: true,
-  },
-  {
-    name: '10K Credits',
-    price: 199,
-    amountPaise: 19900,
-    features: ['10,000 additional tokens', 'Never expires', 'Use anytime'],
-    type: 'credits',
-  },
-  {
-    name: '25K Credits',
-    price: 499,
-    amountPaise: 49900,
-    features: ['25,000 additional tokens', 'Never expires', 'Use anytime'],
-    type: 'credits',
-  },
-  {
-    name: '50K Credits',
-    price: 999,
-    amountPaise: 99900,
-    features: ['50,000 additional tokens', 'Never expires', 'Use anytime'],
-    type: 'credits',
-  },
-];
+import { PRICING, FREE_MODELS, PRO_MODELS } from '@/lib/constants';
+import Link from 'next/link';
 
 export default function PricingPage() {
   const { data: session } = useSession();
-
-  const handlePurchase = async (plan: Plan) => {
-    if (!session?.user?.id) {
-      toast({ type: 'error', description: 'Please sign in to purchase' });
-      return;
-    }
-
-    try {
-      // Create order
-      const response = await fetch('/api/billing/razorpay/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amountPaise: plan.amountPaise,
-          currency: 'INR',
-          planName: plan.name,
-          planType: plan.type,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create order');
-      }
-
-      const orderData = await response.json();
-
-      // Load Razorpay script if not already loaded
-      if (!window.Razorpay) {
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.async = true;
-        document.body.appendChild(script);
-
-        await new Promise((resolve) => {
-          script.onload = resolve;
-        });
-      }
-
-      // Open Razorpay Checkout
-      const options = {
-        key: orderData.keyId,
-        amount: plan.amountPaise,
-        currency: 'INR',
-        name: 'AI Chatbot',
-        description: `${plan.name} Plan`,
-        order_id: orderData.orderId,
-        prefill: {
-          email: session.user.email,
-        },
-        theme: {
-          color: '#3B82F6',
-        },
-        handler: (response: any) => {
-          toast({
-            type: 'success',
-            description: `Payment successful! Payment ID: ${response.razorpay_payment_id}`,
-          });
-          // Refresh the page or redirect to settings
-          window.location.href = '/settings';
-        },
-        modal: {
-          ondismiss: () => {
-            console.log('Payment cancelled');
-          },
-        },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-    } catch (error: any) {
-      toast({
-        type: 'error',
-        description: error.message || 'Failed to create order',
-      });
-    }
-  };
+  const isLoggedIn = !!session?.user;
 
   return (
-    <main className="max-w-6xl mx-auto p-6 space-y-8">
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold">Choose Your Plan</h1>
-        <p className="text-lg text-muted-foreground">
-          Select the perfect plan for your AI chatbot needs
-        </p>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft size={16} />
+              Back to Chat
+            </Link>
+          </div>
+        </div>
       </div>
 
-      {/* Subscription Plans */}
-      <div className="space-y-6">
-        <h2 className="text-2xl font-semibold">Subscription Plans</h2>
-        <div className="grid md:grid-cols-2 gap-6">
-          {plans
-            .filter((plan) => plan.type === 'subscription')
-            .map((plan) => (
-              <Card
-                key={plan.name}
-                className={`relative ${plan.popular ? 'border-primary shadow-lg' : ''}`}
+      <div className="max-w-6xl mx-auto px-6 py-16">
+        <div className="text-center mb-16">
+          <h1 className="text-4xl font-bold mb-4">
+            Simple, Transparent Pricing
+          </h1>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Choose between our free tier with basic models or pro tier with all
+            models and higher limits
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          {/* Free Plan */}
+          <Card className="relative">
+            <CardHeader>
+              <CardTitle className="text-2xl">
+                {PRICING.FREE_TIER.name}
+              </CardTitle>
+              <CardDescription>{PRICING.FREE_TIER.description}</CardDescription>
+              <div className="text-3xl font-bold">₹0</div>
+              <div className="text-sm text-muted-foreground">Forever free</div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>
+                    {PRICING.FREE_TIER.dailyMessages} messages per day
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>{FREE_MODELS.length} free models</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>Basic support</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>Export chat history</span>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="font-medium mb-2">Free Models Include:</h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Grok 3 Mini (Fast & Reasoning)</li>
+                  <li>• GPT-3.5 Turbo</li>
+                  <li>• Llama 3.1 8B</li>
+                  <li>• Gemma2 9B</li>
+                  <li>• Nova Micro</li>
+                </ul>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={!isLoggedIn}
               >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="bg-primary text-primary-foreground px-3 py-1 text-sm font-medium rounded-full">
-                      Most Popular
-                    </span>
-                  </div>
-                )}
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {plan.name}
-                    {plan.price > 0 && (
-                      <span className="text-2xl font-bold">₹{plan.price}</span>
-                    )}
-                  </CardTitle>
-                  <CardDescription>
-                    {plan.price === 0 ? 'Free forever' : 'per month'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <ul className="space-y-2">
-                    {plan.features.map((feature, index) => (
-                      <li
-                        key={`${plan.name}-feature-${index}`}
-                        className="flex items-center gap-2"
-                      >
-                        <Check className="size-4 text-primary" />
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className="w-full"
-                    variant={plan.price === 0 ? 'outline' : 'default'}
-                    disabled={plan.price === 0}
-                    onClick={() => handlePurchase(plan)}
-                  >
-                    {plan.price === 0
-                      ? 'Current Plan'
-                      : `Subscribe for ₹${plan.price}`}
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
+                {isLoggedIn ? 'Current Plan' : 'Sign Up to Start'}
+              </Button>
+            </CardFooter>
+          </Card>
+
+          {/* Pro Plan */}
+          <Card className="relative border-primary/50 shadow-lg">
+            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+              <div className="bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-medium">
+                Most Popular
+              </div>
+            </div>
+            <CardHeader>
+              <CardTitle className="text-2xl">
+                {PRICING.PAID_TIER.name}
+              </CardTitle>
+              <CardDescription>{PRICING.PAID_TIER.description}</CardDescription>
+              <div className="text-3xl font-bold">
+                ₹{PRICING.PAID_TIER.priceInRupees}
+              </div>
+              <div className="text-sm text-muted-foreground">per month</div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>
+                    {PRICING.PAID_TIER.monthlyMessages} messages per month
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>
+                    All {FREE_MODELS.length + PRO_MODELS.length} models
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>Priority support</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>Advanced features</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-green-500" />
+                  <span>Everything in Free</span>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="font-medium mb-2">Pro Models Include:</h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Grok 3 (Advanced Reasoning)</li>
+                  <li>• GPT-4o Mini</li>
+                  <li>• Claude 3.5 Haiku</li>
+                  <li>• Gemini 2.0 Flash</li>
+                  <li>• Nova Lite</li>
+                </ul>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button className="w-full">
+                {isLoggedIn ? 'Upgrade to Pro' : 'Sign Up for Pro'}
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+
+        {/* FAQ Section */}
+        <div className="mt-24 max-w-3xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-8">
+            Frequently Asked Questions
+          </h2>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  What counts as a message?
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Each question you send to the AI counts as one message. The
+                  AI's response doesn't count against your limit. Tool calls
+                  (like search) may consume additional credits.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  Can I change plans anytime?
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Yes! You can upgrade or downgrade your plan at any time.
+                  Changes take effect immediately, and you'll be charged or
+                  credited on a pro-rated basis.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  What happens if I exceed my message limit?
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Free users will need to wait until their daily limit resets.
+                  Pro users who exceed their monthly limit can continue using
+                  free models or upgrade to a higher tier.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Do you offer refunds?</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  We offer a 7-day money-back guarantee for all paid plans. If
+                  you're not satisfied, contact our support team for a full
+                  refund.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* CTA Section */}
+        <div className="mt-24 text-center">
+          <div className="bg-muted/50 rounded-2xl p-12">
+            <h2 className="text-3xl font-bold mb-4">Ready to get started?</h2>
+            <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+              Join thousands of users who are already using AI to boost their
+              productivity
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Button size="lg" asChild>
+                <Link href={isLoggedIn ? '/settings' : '/register'}>
+                  {isLoggedIn ? 'Manage Subscription' : 'Start Free Trial'}
+                </Link>
+              </Button>
+              <Button variant="outline" size="lg" asChild>
+                <Link href="/">Try Free Models</Link>
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
-
-      {/* Credit Packs */}
-      <div className="space-y-6">
-        <h2 className="text-2xl font-semibold">Credit Packs</h2>
-        <p className="text-muted-foreground">
-          Need extra tokens? Purchase credit packs that never expire.
-        </p>
-        <div className="grid md:grid-cols-3 gap-6">
-          {plans
-            .filter((plan) => plan.type === 'credits')
-            .map((plan) => (
-              <Card key={plan.name}>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {plan.name}
-                    <span className="text-xl font-bold">₹{plan.price}</span>
-                  </CardTitle>
-                  <CardDescription>One-time purchase</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <ul className="space-y-2">
-                    {plan.features.map((feature, index) => (
-                      <li
-                        key={`${plan.name}-feature-${index}`}
-                        className="flex items-center gap-2"
-                      >
-                        <Check className="size-4 text-primary" />
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    onClick={() => handlePurchase(plan)}
-                  >
-                    Buy ₹{plan.price}
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-        </div>
-      </div>
-
-      {/* Test Mode Notice */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <p className="text-sm text-amber-800">
-          <strong>Test Mode:</strong> This is running in Razorpay test mode. Use
-          test card numbers for payments. No real charges will be made.
-        </p>
-      </div>
-    </main>
+    </div>
   );
 }
