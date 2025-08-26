@@ -41,16 +41,19 @@ This is a Next.js 15 AI chatbot application built with the AI SDK, featuring rea
 ### Backend Stack
 
 - **Drizzle ORM + PostgreSQL** for data persistence
-- **Auth.js v5** for authentication (regular + guest users)
-- **Vercel Blob** for file storage
+- **Auth.js v5** for authentication (free + pro users)
+- **Razorpay** for payments and subscription management
 - **Server Actions** for database operations
+- **Usage tracking** for message limits and billing
 
 ### AI Integration
 
-- **AI SDK** with multiple provider support (xAI, OpenAI, etc.)
+- **AI SDK v5 with Gateway** - Unified provider access
+- **Dynamic model management** - Capability-based features
 - **Tool calling** with structured schemas using Zod
 - **Streaming responses** with real-time data updates
 - **Multi-modal inputs** supporting text, images, and files
+- **Usage-aware rate limiting** - Message count enforcement
 
 ## Core Patterns
 
@@ -71,9 +74,10 @@ This is a Next.js 15 AI chatbot application built with the AI SDK, featuring rea
 ### Data Flow
 
 - **Server Actions** for mutations and database operations
-- **API routes** for external integrations and complex operations
-- **Real-time streaming** with data stream handlers
+- **API routes** with security middleware and rate limiting
+- **Real-time streaming** with usage tracking updates
 - **Optimistic updates** with SWR mutations
+- **Message-based billing** with real-time limit enforcement
 
 ### Error Handling
 

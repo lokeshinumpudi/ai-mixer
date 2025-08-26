@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
+import { useAnimeOnMount } from '@/hooks/use-anime';
 
 import {
   Tooltip,
@@ -96,17 +97,22 @@ function ModelCard({
         <Card
           data-testid={`model-selector-item-${model.id}`}
           className={cn(
-            'relative cursor-pointer transition-all duration-200 hover:shadow-md',
-            'border-2 hover:border-primary/20',
-            isSelected && 'border-primary bg-primary/5',
-            !enabled && 'opacity-60 cursor-not-allowed',
+            'relative transition-all duration-200',
+            enabled && 'cursor-pointer hover:shadow-md hover:border-primary/20',
+            'border-2',
+            isSelected && enabled && 'border-primary bg-primary/5',
+            !enabled &&
+              'cursor-not-allowed border-dashed border-muted-foreground/20 bg-muted/50 grayscale opacity-60',
+            enabled && !isSelected && 'hover:border-primary/20',
           )}
           onClick={enabled ? onSelect : undefined}
         >
           <CardContent className="p-4 h-28 flex flex-col">
             {/* Header with provider icon and favorite */}
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xl">{providerIcon}</span>
+              <span className={cn('text-xl', !enabled && 'opacity-50')}>
+                {providerIcon}
+              </span>
               <div className="flex items-center gap-2">
                 {!enabled && (
                   <div className="text-amber-500">
@@ -117,13 +123,17 @@ function ModelCard({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onToggleFavorite();
+                    if (enabled) onToggleFavorite();
                   }}
+                  disabled={!enabled}
                   className={cn(
-                    'p-1 hover:bg-accent rounded transition-colors',
-                    isFavorite
+                    'p-1 rounded transition-colors',
+                    enabled && 'hover:bg-accent',
+                    isFavorite && enabled
                       ? 'text-amber-500'
-                      : 'text-muted-foreground hover:text-amber-500',
+                      : enabled
+                        ? 'text-muted-foreground hover:text-amber-500'
+                        : 'text-muted-foreground/50 cursor-not-allowed',
                   )}
                 >
                   <StarIcon size={12} />
@@ -133,7 +143,12 @@ function ModelCard({
 
             {/* Model name - takes remaining space */}
             <div className="flex-1 flex items-start">
-              <h3 className="font-medium text-sm line-clamp-2 leading-tight flex-1">
+              <h3
+                className={cn(
+                  'font-medium text-sm line-clamp-2 leading-tight flex-1',
+                  !enabled && 'text-muted-foreground/70',
+                )}
+              >
                 {model.name}
               </h3>
               {isSelected && enabled && (
@@ -146,17 +161,17 @@ function ModelCard({
             {/* Bottom capabilities and badges row */}
             <div className="flex items-center justify-between mt-auto pt-2">
               <div className="flex items-center gap-2">
-                {supportsImageAnalysis && (
+                {supportsImageAnalysis && enabled && (
                   <div className="text-purple-500 bg-purple-500/10 rounded-md p-1.5">
                     <ImageIcon size={12} />
                   </div>
                 )}
-                {model.supportsReasoning && (
+                {model.supportsReasoning && enabled && (
                   <div className="text-blue-500 bg-blue-500/10 rounded-md p-1.5">
                     <BrainIcon size={12} />
                   </div>
                 )}
-                {model.supportsArtifacts && (
+                {model.supportsArtifacts && enabled && (
                   <div className="text-green-500 bg-green-500/10 rounded-md p-1.5">
                     <CodeIcon size={12} />
                   </div>
@@ -164,12 +179,18 @@ function ModelCard({
               </div>
 
               <div className="flex gap-1.5">
-                {model.id.includes('mini') && (
+                {!enabled && (
+                  <div className="text-xs bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2 py-1 rounded-full flex items-center gap-1.5">
+                    <DiamondIcon size={10} />
+                    <span>Pro</span>
+                  </div>
+                )}
+                {model.id.includes('mini') && enabled && (
                   <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                     Fast
                   </div>
                 )}
-                {model.id.includes('pro') && (
+                {model.id.includes('pro') && enabled && (
                   <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded flex items-center gap-1">
                     <SparklesIcon size={8} />
                     Pro
@@ -177,15 +198,6 @@ function ModelCard({
                 )}
               </div>
             </div>
-
-            {/* Premium overlay */}
-            {!enabled && (
-              <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-background/20 rounded-lg flex items-end justify-center pb-3">
-                <Button size="sm" variant="default" className="text-xs h-7">
-                  Upgrade
-                </Button>
-              </div>
-            )}
           </CardContent>
         </Card>
       </TooltipTrigger>
@@ -195,6 +207,12 @@ function ModelCard({
           <div className="text-xs text-muted-foreground">
             {model.description}
           </div>
+          {!enabled && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-1 rounded">
+              <DiamondIcon size={10} />
+              <span>Requires Pro subscription</span>
+            </div>
+          )}
           <div className="flex gap-2 text-xs">
             {model.supportsReasoning && (
               <div className="flex items-center gap-1 text-blue-500">
@@ -352,6 +370,13 @@ export function ModelPicker({
             'overflow-hidden flex flex-col transition-all duration-300',
             isExpanded ? 'max-w-6xl max-h-[85vh]' : 'max-w-2xl max-h-[70vh]',
           )}
+          ref={useAnimeOnMount({
+            opacity: [0, 1],
+            translateY: [12, 0],
+            scale: [0.98, 1],
+            duration: 220,
+            ease: 'outQuad',
+          })}
         >
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">

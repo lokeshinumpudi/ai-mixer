@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { useSidebar } from '@/components/ui/sidebar';
 
 const tabs = [
   { id: 'account', label: 'Account' },
@@ -25,6 +26,7 @@ export default function SettingsPage() {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState('history');
   const { data } = useSWR('/api/usage/summary', fetcher);
+  const { setOpen, setOpenMobile } = useSidebar();
 
   const usage = data?.usage ?? [];
   const plan = data?.plan ?? {
@@ -42,11 +44,21 @@ export default function SettingsPage() {
     Math.round(((plan.used ?? 0) / plan.quota) * 100),
   );
 
+  // Close sidebar whenever we land on settings (mobile or desktop)
+  useEffect(() => {
+    try {
+      setOpen(false);
+      setOpenMobile(false);
+    } catch (_) {
+      // no-op: sidebar context always exists under (chat) layout
+    }
+  }, [setOpen, setOpenMobile]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 overflow-hidden">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
@@ -54,15 +66,102 @@ export default function SettingsPage() {
                 className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft size={16} />
-                Back to Chat
+                <span className="hidden sm:inline">Back to Chat</span>
+                <span className="sm:hidden">Back</span>
               </Link>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-12 gap-8">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8 overflow-hidden">
+        {/* Mobile Layout - Stack vertically */}
+        <div className="lg:hidden space-y-4 w-full">
+          {/* Mobile User Profile Header */}
+          <Card className="w-full">
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="size-12 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center text-white text-base font-bold flex-shrink-0">
+                {session?.user?.name?.[0] || 'G'}
+              </div>
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <h2 className="text-base font-semibold truncate">
+                  {session?.user?.name || 'Guest User'}
+                </h2>
+                <p className="text-xs text-muted-foreground truncate">
+                  {session?.user?.email || 'guest@example.com'}
+                </p>
+                <Badge
+                  variant={isProUser ? 'default' : 'secondary'}
+                  className="mt-1 text-xs"
+                >
+                  {isProUser ? 'Pro Plan' : 'Free Plan'}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Mobile Usage Summary */}
+          <Card className="w-full">
+            <CardContent className="p-3">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium">Message Usage</span>
+                <span className="text-sm text-muted-foreground">
+                  {plan.used}/{plan.quota}
+                </span>
+              </div>
+              <Progress value={usedPct} className="h-2 mb-2" />
+              <div className="flex justify-between items-center text-xs text-muted-foreground mb-3">
+                <span>{plan.quota - plan.used} remaining</span>
+                <span className="truncate ml-2 max-w-[120px]">
+                  Resets {plan.resetInfo}
+                </span>
+              </div>
+              {!isProUser && (
+                <Link href="/pricing" className="block">
+                  <Button className="w-full" size="sm">
+                    Upgrade to Pro
+                  </Button>
+                </Link>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Mobile Tab Navigation - Horizontal Scroll */}
+          <div className="w-full -mx-4 px-4">
+            <div className="bg-muted p-1 rounded-lg">
+              <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap flex-shrink-0 min-w-fit ${
+                      activeTab === tab.id
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Tab Content */}
+          <div className="w-full overflow-hidden">
+            {activeTab === 'history' && <HistoryTab usage={usage} />}
+            {activeTab === 'models' && <ModelsTab userType={userType} />}
+            {activeTab === 'account' && <AccountTab />}
+            {activeTab === 'customization' && <CustomizationTab />}
+            {activeTab === 'api' && <APIKeysTab />}
+            {activeTab === 'attachments' && <AttachmentsTab />}
+            {activeTab === 'contact' && <ContactTab />}
+          </div>
+        </div>
+
+        {/* Desktop Layout - Original Grid */}
+        <div className="hidden lg:grid grid-cols-12 gap-8">
           {/* Left Sidebar - User Info & Usage */}
           <div className="col-span-3 space-y-6">
             {/* User Profile */}
@@ -127,12 +226,6 @@ export default function SettingsPage() {
                     </Link>
                   </div>
                 )}
-
-                {/* <div className="text-xs text-muted-foreground">
-                  ℹ️ Each tool call (e.g. search grounding) used in a reply
-                  consumes an additional standard credit. Models may not always
-                  utilize enabled tools.
-                </div> */}
               </CardContent>
             </Card>
 

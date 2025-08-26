@@ -17,8 +17,8 @@ description: Database schema, query patterns, and Drizzle ORM conventions
 ### Configuration
 
 - **[drizzle.config.ts](mdc:drizzle.config.ts)** - Drizzle configuration and connection setup
-- **[lib/db/schema.ts](mdc:lib/db/schema.ts)** - Complete database schema definitions
-- **[lib/db/queries.ts](mdc:lib/db/queries.ts)** - Reusable query functions
+- **[lib/db/schema.ts](mdc:lib/db/schema.ts)** - Complete database schema with billing tables
+- **[lib/db/queries.ts](mdc:lib/db/queries.ts)** - ALL database queries (enforced rule)
 - **[lib/db/migrations/](mdc:lib/db/migrations/)** - Database migration files
 
 ## Schema Design Patterns
@@ -168,23 +168,43 @@ export const vote = pgTable(
 ### Basic Queries
 
 ```typescript
-// Reference: lib/db/queries.ts
+// Reference: lib/db/queries.ts - CENTRALIZED QUERIES ONLY
 import { db } from "./utils";
-import { user, chat, message } from "./schema";
-import { eq, desc, and } from "drizzle-orm";
+import {
+  user,
+  chat,
+  message,
+  usageDaily,
+  usageMonthly,
+  subscription,
+} from "./schema";
+import { eq, desc, and, sum } from "drizzle-orm";
 
-// Get user by email
-export async function getUser(email: string) {
-  return await db.select().from(user).where(eq(user.email, email));
+// User management
+export async function getUserById(id: string): Promise<User | null> {
+  try {
+    const users = await db.select().from(user).where(eq(user.id, id)).limit(1);
+    return users[0] || null;
+  } catch (error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get user by ID");
+  }
 }
 
-// Get chat history for user
-export async function getChatsByUserId({ id }: { id: string }) {
-  return await db
-    .select()
-    .from(chat)
-    .where(eq(chat.userId, id))
-    .orderBy(desc(chat.createdAt));
+// Usage tracking with message counts
+export async function getUserUsageAndLimits({
+  userId,
+  userType,
+}: {
+  userId: string;
+  userType: UserType;
+}) {
+  try {
+    const entitlements = entitlementsByUserType[userType];
+    // Complex usage calculation logic here
+    return { used, quota, remaining, isOverLimit, type, resetInfo };
+  } catch (error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get user usage");
+  }
 }
 ```
 

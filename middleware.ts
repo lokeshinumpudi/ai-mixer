@@ -23,13 +23,19 @@ export async function middleware(request: NextRequest) {
     secureCookie: !isDevelopmentEnvironment,
   });
 
-  if (!token) {
-    // Redirect to login if no token
-    return NextResponse.redirect(new URL('/login', request.url));
+  // Handle login and register pages based on authentication status
+  if (['/login', '/register'].includes(pathname)) {
+    if (token) {
+      // Authenticated users trying to access login/register should go to home
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+    // Unauthenticated users can access login/register
+    return NextResponse.next();
   }
 
-  if (token && ['/login', '/register'].includes(pathname)) {
-    return NextResponse.redirect(new URL('/', request.url));
+  if (!token) {
+    // Redirect to login if no token for protected routes
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   return NextResponse.next();

@@ -12,9 +12,9 @@ This is a **Next.js 15 AI chatbot application** with real-time streaming, artifa
 ### Tech Stack
 
 - **Frontend**: Next.js 15, React Server Components, shadcn/ui, Tailwind CSS
-- **AI**: AI SDK v5, xAI Grok, tool calling, streaming
-- **Backend**: Drizzle ORM, PostgreSQL, Auth.js v5
-- **Artifacts**: Text, Code, Image, Sheet generation with live editing
+- **AI**: AI SDK v5 with Gateway, multi-provider support, tool calling, streaming
+- **Backend**: Drizzle ORM, PostgreSQL, Auth.js v5, Razorpay payments
+- **Artifacts**: Text, Code, Image, Sheet generation with chat-scoped state management
 
 ### Key Directories
 
@@ -76,26 +76,38 @@ export const myTool = ({ session, dataStream }: ToolProps) =>
 ### Database Query Pattern
 
 ```typescript
-// lib/db/queries.ts
-export async function getDataByUserId({ userId }: { userId: string }) {
-  return await db
-    .select()
-    .from(table)
-    .where(eq(table.userId, userId))
-    .orderBy(desc(table.createdAt));
+// lib/db/queries.ts - ALL queries must be here
+export async function getUserUsageAndLimits({
+  userId,
+  userType,
+}: {
+  userId: string;
+  userType: UserType;
+}) {
+  try {
+    const entitlements = entitlementsByUserType[userType];
+    // Query logic with proper error handling
+    return { used, quota, remaining, isOverLimit, type, resetInfo };
+  } catch (error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get usage");
+  }
 }
 ```
 
 ### Custom Hook Pattern
 
 ```typescript
-// hooks/use-my-hook.ts
-export function useMyHook() {
-  const [state, setState] = useState(initialState);
+// hooks/use-usage.ts - Real-time usage tracking
+export function useUsage() {
+  const { data, mutate } = useSWR("/api/usage/summary", fetcher, {
+    refreshInterval: 30000, // 30 seconds
+  });
 
-  // Logic here
+  const updateUsage = useCallback((newUsage: UsageInfo) => {
+    setCurrentUsage(newUsage);
+  }, []);
 
-  return { state, setState /* derived values */ };
+  return { usage: data?.plan, updateUsage };
 }
 ```
 
@@ -120,9 +132,10 @@ export function useMyHook() {
 ### Security
 
 - ✅ **Input validation** - Zod schemas for all inputs
-- ✅ **Authentication** - Protected routes and API endpoints
-- ✅ **SQL injection prevention** - Parameterized queries
-- ✅ **XSS protection** - Proper content sanitization
+- ✅ **Authentication** - Protected routes with database verification
+- ✅ **Rate limiting** - Message limits based on user tier (free/pro)
+- ✅ **Model access control** - Server-side entitlement validation
+- ✅ **SQL injection prevention** - Parameterized queries with Drizzle
 
 ### UX/UI
 
@@ -181,9 +194,10 @@ pnpm test             # Playwright e2e tests
 
 - [app/layout.tsx](mdc:app/layout.tsx) - Root layout with providers
 - [components/chat.tsx](mdc:components/chat.tsx) - Main chat interface
-- [lib/ai/models.ts](mdc:lib/ai/models.ts) - AI model configuration
-- [lib/db/schema.ts](mdc:lib/db/schema.ts) - Database schema
-- [components/artifact.tsx](mdc:components/artifact.tsx) - Artifacts system
+- [lib/constants.ts](mdc:lib/constants.ts) - Unified model configuration and pricing
+- [lib/db/schema.ts](mdc:lib/db/schema.ts) - Database schema with usage tracking
+- [components/model-picker.tsx](mdc:components/model-picker.tsx) - Enhanced model selection
+- [hooks/use-usage.ts](mdc:hooks/use-usage.ts) - Real-time usage tracking
 
 ## 🎨 UI Standards
 
@@ -204,9 +218,10 @@ pnpm test             # Playwright e2e tests
 ### State Management
 
 - **Local state** - useState for component state
-- **Server state** - SWR for API data
-- **Global state** - Context providers (DataStream, Theme)
-- **Form state** - Controlled components with validation
+- **Server state** - SWR for API data with real-time updates
+- **Chat-scoped state** - Artifacts isolated per chat session
+- **Usage tracking** - Real-time message limits and billing
+- **Global state** - Context providers (DataStream, Theme, Usage)
 
 ---
 

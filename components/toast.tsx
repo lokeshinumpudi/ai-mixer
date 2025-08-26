@@ -21,6 +21,7 @@ function Toast(props: ToastProps) {
 
   const descriptionRef = useRef<HTMLDivElement>(null);
   const [multiLine, setMultiLine] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = descriptionRef.current;
@@ -39,9 +40,37 @@ function Toast(props: ToastProps) {
     return () => ro.disconnect();
   }, [description]);
 
+  useEffect(() => {
+    const prefersReduced = matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+    const el = containerRef.current;
+    if (!el) return;
+    if (prefersReduced) return;
+
+    // Mount animation
+    let raf = 0;
+    const start = () => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(12px)';
+      raf = requestAnimationFrame(() => {
+        el.style.transition =
+          'opacity 220ms ease-out, transform 220ms ease-out';
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0)';
+      });
+    };
+
+    start();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   return (
     <div className="flex w-full toast-mobile:w-[356px] justify-center">
       <div
+        ref={containerRef}
         data-testid="toast"
         key={id}
         className={cn(

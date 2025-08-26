@@ -17,18 +17,16 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { useRouter } from 'next/navigation';
 import { toast } from './toast';
 import { LoaderIcon } from './icons';
-import { guestRegex } from '@/lib/constants';
-
 export function SidebarUserNav({ user }: { user: User }) {
   const router = useRouter();
-  const { data, status } = useSession();
+  const { status } = useSession();
   const { setTheme, resolvedTheme } = useTheme();
-
-  const isGuest = guestRegex.test(data?.user?.email ?? '');
+  const { setOpenMobile, setOpen } = useSidebar();
 
   return (
     <SidebarMenu>
@@ -60,7 +58,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   className="rounded-full"
                 />
                 <span data-testid="user-email" className="truncate">
-                  {isGuest ? 'Guest' : user?.email}
+                  {user?.email}
                 </span>
                 <ChevronUp className="ml-auto" />
               </SidebarMenuButton>
@@ -80,15 +78,18 @@ export function SidebarUserNav({ user }: { user: User }) {
             >
               {`Toggle ${resolvedTheme === 'light' ? 'dark' : 'light'} mode`}
             </DropdownMenuItem>
-            {!isGuest && (
-              <DropdownMenuItem
-                data-testid="user-nav-item-settings"
-                className="cursor-pointer"
-                onSelect={() => router.push('/settings')}
-              >
-                Settings
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem
+              data-testid="user-nav-item-settings"
+              className="cursor-pointer"
+              onSelect={() => {
+                // Close the left panel on both mobile and desktop before navigating
+                setOpen(false);
+                setOpenMobile(false);
+                router.push('/settings');
+              }}
+            >
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild data-testid="user-nav-item-auth">
               <button
@@ -105,16 +106,10 @@ export function SidebarUserNav({ user }: { user: User }) {
                     return;
                   }
 
-                  if (isGuest) {
-                    router.push('/login');
-                  } else {
-                    signOut({
-                      redirectTo: '/',
-                    });
-                  }
+                  signOut();
                 }}
               >
-                {isGuest ? 'Login to your account' : 'Sign out'}
+                Sign out
               </button>
             </DropdownMenuItem>
           </DropdownMenuContent>
