@@ -16,9 +16,7 @@ The application uses **AI SDK v5 with Gateway architecture** for a unified, scal
 // Reference: lib/gateway.ts - Simple gateway provider
 import { createGatewayProvider } from "@ai-sdk/gateway";
 
-export const gateway = createGatewayProvider({
-  baseURL: process.env.AI_GATEWAY_BASE_URL,
-});
+export const gateway = createGatewayProvider({});
 ```
 
 ### 2. Unified Model Configuration
