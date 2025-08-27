@@ -11,7 +11,9 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const lookbackSeconds = Number(url.searchParams.get('lookbackSeconds') ?? '120');
+  const lookbackSeconds = Number(
+    url.searchParams.get('lookbackSeconds') ?? '120',
+  );
   const since = new Date(Date.now() - Math.max(10, lookbackSeconds) * 1000);
 
   try {
@@ -25,5 +27,3 @@ export async function GET(request: Request) {
     return new ChatSDKError('bad_request:api').toResponse();
   }
 }
-
-

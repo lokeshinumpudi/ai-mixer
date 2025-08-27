@@ -12,7 +12,9 @@ export default function BillingSuccessPage() {
   const orderId =
     params.get('order_id') || params.get('razorpay_order_id') || '';
   const referenceId = params.get('reference_id') || '';
-  const [verified, setVerified] = useState<'pending' | 'confirmed' | 'timeout'>('pending');
+  const [verified, setVerified] = useState<'pending' | 'confirmed' | 'timeout'>(
+    'pending',
+  );
   const [count, setCount] = useState<number>(0);
 
   const pollUrl = useMemo(() => '/api/billing/status?lookbackSeconds=300', []);
@@ -81,10 +83,16 @@ export default function BillingSuccessPage() {
           <div>Verifying payment… (this can take a few seconds)</div>
         ) : null}
         {verified === 'confirmed' ? (
-          <div className="text-green-600">Payment verified. {count > 0 ? `${count} credit entry found.` : null}</div>
+          <div className="text-green-600">
+            Payment verified.{' '}
+            {count > 0 ? `${count} credit entry found.` : null}
+          </div>
         ) : null}
         {verified === 'timeout' ? (
-          <div className="text-amber-600">We could not verify yet. You can refresh this page in a moment or check Settings.</div>
+          <div className="text-amber-600">
+            We could not verify yet. You can refresh this page in a moment or
+            check Settings.
+          </div>
         ) : null}
       </div>
       <div className="flex gap-4 mt-4">

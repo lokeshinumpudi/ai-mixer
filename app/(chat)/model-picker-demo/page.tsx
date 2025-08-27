@@ -82,16 +82,16 @@ export default async function ModelPickerDemo() {
                 Hover tooltips with detailed model information
               </li>
               <li className="flex items-center gap-2">
-                <span className="size-2 bg-blue-500 rounded-full" />🧠
-                Reasoning capability indicator (blue brain icon)
+                <span className="size-2 bg-blue-500 rounded-full" />🧠 Reasoning
+                capability indicator (blue brain icon)
               </li>
               <li className="flex items-center gap-2">
                 <span className="size-2 bg-purple-500 rounded-full" />
                 🖼️ Image analysis support indicator (purple image icon)
               </li>
               <li className="flex items-center gap-2">
-                <span className="size-2 bg-green-500 rounded-full" />💻
-                Artifact generation support (green code icon)
+                <span className="size-2 bg-green-500 rounded-full" />💻 Artifact
+                generation support (green code icon)
               </li>
               <li className="flex items-center gap-2">
                 <span className="size-2 bg-purple-500 rounded-full" />
