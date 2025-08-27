@@ -24,7 +24,7 @@ This project uses **Husky pre-commit hooks** to enforce code quality. All commit
 ### Auto-Formatting (AUTOMATIC)
 
 - Biome automatically formats all staged files during commit
-- Files are formatted and re-staged automatically 
+- Files are formatted and re-staged automatically
 - No manual formatting required - happens seamlessly
 
 ## Development Scripts
