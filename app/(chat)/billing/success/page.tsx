@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
@@ -11,6 +12,43 @@ export default function BillingSuccessPage() {
   const orderId =
     params.get('order_id') || params.get('razorpay_order_id') || '';
   const referenceId = params.get('reference_id') || '';
+  const [verified, setVerified] = useState<'pending' | 'confirmed' | 'timeout'>('pending');
+  const [count, setCount] = useState<number>(0);
+
+  const pollUrl = useMemo(() => '/api/billing/status?lookbackSeconds=300', []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 12; // ~60s at 5s interval
+
+    async function poll() {
+      try {
+        const res = await fetch(pollUrl, { cache: 'no-store' });
+        if (!res.ok) throw new Error('status failed');
+        const json = await res.json();
+        if (cancelled) return;
+        setCount(json.count || 0);
+        if (json.hasRecentPurchaseCredit) {
+          setVerified('confirmed');
+          return;
+        }
+      } catch (_) {
+        // ignore and retry
+      }
+      attempts += 1;
+      if (attempts >= maxAttempts) {
+        setVerified('timeout');
+      } else {
+        setTimeout(poll, 5000);
+      }
+    }
+
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [pollUrl]);
 
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center gap-6 text-center px-6">
@@ -38,7 +76,18 @@ export default function BillingSuccessPage() {
           </div>
         ) : null}
       </div>
-      <div className="flex gap-4">
+      <div className="text-sm">
+        {verified === 'pending' ? (
+          <div>Verifying payment… (this can take a few seconds)</div>
+        ) : null}
+        {verified === 'confirmed' ? (
+          <div className="text-green-600">Payment verified. {count > 0 ? `${count} credit entry found.` : null}</div>
+        ) : null}
+        {verified === 'timeout' ? (
+          <div className="text-amber-600">We could not verify yet. You can refresh this page in a moment or check Settings.</div>
+        ) : null}
+      </div>
+      <div className="flex gap-4 mt-4">
         <Button asChild>
           <Link href="/settings">Go to Settings</Link>
         </Button>

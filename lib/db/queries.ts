@@ -608,6 +608,34 @@ export async function addCredit({
   }
 }
 
+export async function getRecentPurchaseCreditsCount({
+  userId,
+  since,
+}: {
+  userId: string;
+  since: Date;
+}): Promise<number> {
+  try {
+    const rows = await db
+      .select({ id: creditLedger.id })
+      .from(creditLedger)
+      .where(
+        and(
+          eq(creditLedger.userId, userId),
+          eq(creditLedger.reason, 'purchase'),
+          gte(creditLedger.createdAt, since),
+        ),
+      );
+
+    return rows.length;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get recent purchase credits',
+    );
+  }
+}
+
 export async function setSubscriptionPlan({
   userId,
   plan,

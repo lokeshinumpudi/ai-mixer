@@ -36,10 +36,21 @@ export default function PricingPage() {
       }
 
       const url = new URL(hostedPageUrl);
-      if (session?.user?.name)
+      if (session?.user?.name) {
+        // Razorpay Payment Pages: common param name for name
+        url.searchParams.set('name', session.user.name);
+        // Some templates use a custom field like "Full Name" → full_name
+        url.searchParams.set('full_name', session.user.name);
+        // Some templates also support prefill[name]
         url.searchParams.set('prefill[name]', session.user.name);
+      }
       const email = (session?.user as any)?.email as string | undefined;
-      if (email) url.searchParams.set('prefill[email]', email);
+      if (email) {
+        // Razorpay Payment Pages: common param name for email
+        url.searchParams.set('email', email);
+        // Some templates also support prefill[email]
+        url.searchParams.set('prefill[email]', email);
+      }
       if (session?.user?.id) {
         url.searchParams.set('notes[userId]', session.user.id);
       }
