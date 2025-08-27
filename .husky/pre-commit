@@ -1,26 +1,25 @@
 #!/bin/sh
+set -e
 
 echo "🔍 Running pre-commit checks..."
 
 # Type check entire project (since TypeScript cross-file dependencies)
 echo "→ Type checking..."
-pnpm type-check
-if [ $? -ne 0 ]; then
+pnpm type-check || {
   echo "❌ Type check failed. Fix type errors before committing."
   exit 1
-fi
+}
 
-# Get staged files for linting and formatting
-staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx)$')
+# Get staged files for linting
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx)$' || true)
 
 # Lint check on staged files (errors only, warnings allowed)
 echo "→ Linting staged files..."
 if [ -n "$staged_files" ]; then
-  echo "$staged_files" | xargs pnpm exec next lint --file
-  if [ $? -ne 0 ]; then
+  echo "$staged_files" | xargs pnpm exec next lint --file || {
     echo "❌ Lint check failed. Fix linting errors before committing."
     exit 1
-  fi
+  }
 fi
 
 echo "✅ All pre-commit checks passed!"
