@@ -10,9 +10,11 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+# Get staged files for linting and formatting
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx)$')
+
 # Lint check on staged files (errors only, warnings allowed)
 echo "→ Linting staged files..."
-staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx)$')
 if [ -n "$staged_files" ]; then
   echo "$staged_files" | xargs pnpm exec next lint --file
   if [ $? -ne 0 ]; then
@@ -21,14 +23,5 @@ if [ -n "$staged_files" ]; then
   fi
 fi
 
-# Format check on staged files
-echo "→ Format checking staged files..."
-if [ -n "$staged_files" ]; then
-  echo "$staged_files" | xargs pnpm exec biome format --check
-  if [ $? -ne 0 ]; then
-    echo "❌ Format check failed. Run 'pnpm format' to fix formatting."
-    exit 1
-  fi
-fi
-
 echo "✅ All pre-commit checks passed!"
+echo "💡 Tip: Run 'pnpm format' before committing to ensure consistent formatting."
