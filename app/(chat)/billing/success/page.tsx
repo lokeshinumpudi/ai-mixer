@@ -23,6 +23,7 @@ export default function BillingSuccessPage() {
     let cancelled = false;
     let attempts = 0;
     const maxAttempts = 12; // ~60s at 5s interval
+    let hasTriedManualVerification = false;
 
     async function poll() {
       try {
@@ -38,6 +39,40 @@ export default function BillingSuccessPage() {
       } catch (_) {
         // ignore and retry
       }
+
+      // If we've tried multiple times and still no webhook verification,
+      // try manual verification as fallback
+      if (
+        attempts >= 6 &&
+        !hasTriedManualVerification &&
+        paymentId &&
+        orderId
+      ) {
+        hasTriedManualVerification = true;
+        try {
+          const verifyRes = await fetch('/api/billing/verify-payment', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              paymentId,
+              orderId,
+            }),
+          });
+
+          if (verifyRes.ok) {
+            const verifyJson = await verifyRes.json();
+            if (verifyJson.success) {
+              setVerified('confirmed');
+              return;
+            }
+          }
+        } catch (error) {
+          console.log('Manual verification failed:', error);
+        }
+      }
+
       attempts += 1;
       if (attempts >= maxAttempts) {
         setVerified('timeout');
@@ -50,7 +85,7 @@ export default function BillingSuccessPage() {
     return () => {
       cancelled = true;
     };
-  }, [pollUrl]);
+  }, [pollUrl, paymentId, orderId]);
 
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center gap-6 text-center px-6">
