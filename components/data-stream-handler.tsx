@@ -6,7 +6,7 @@ import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
 import { useDataStream } from './data-stream-provider';
 import { usePathname, useRouter } from 'next/navigation';
 import { toast } from './toast';
-import { Button } from './ui/button';
+
 import { useUsage } from '@/hooks/use-usage';
 
 export function DataStreamHandler() {
@@ -30,8 +30,8 @@ export function DataStreamHandler() {
 
     newDeltas.forEach((delta) => {
       // Handle usage updates
-      if (delta.type === 'usage-update' && delta.content) {
-        const usageInfo = delta.content;
+      if (delta.type === 'data-usageUpdate' && delta.data) {
+        const usageInfo = delta.data;
 
         // Update the usage hook with new data
         updateUsage(usageInfo);
@@ -42,25 +42,15 @@ export function DataStreamHandler() {
           if (!hasShownRateLimitToast.current) {
             hasShownRateLimitToast.current = true;
             toast({
-              title: `${usageInfo.remaining} messages remaining`,
-              description: `You're approaching your ${usageInfo.type} limit. Upgrade for unlimited access.`,
-              action: (
-                <Button size="sm" onClick={() => router.push('/pricing')}>
-                  Upgrade
-                </Button>
-              ),
+              type: 'error',
+              description: `${usageInfo.remaining} messages remaining. You're approaching your ${usageInfo.type} limit. Upgrade for unlimited access.`,
             });
           }
         } else if (usageInfo.isOverLimit) {
           // Over limit
           toast({
-            title: 'Message limit reached',
+            type: 'error',
             description: `You've reached your ${usageInfo.type} message limit. Upgrade to continue chatting.`,
-            action: (
-              <Button size="sm" onClick={() => router.push('/pricing')}>
-                Upgrade Now
-              </Button>
-            ),
           });
         }
 
