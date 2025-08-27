@@ -1,49 +1,46 @@
-'use client';
-<<<<<<< Updated upstream
+"use client";
 
-=======
->>>>>>> Stashed changes
-import { useRouter } from 'next/navigation';
-import { useActionState, useEffect, useState } from 'react';
-import { toast } from '@/components/toast';
+import { toast } from "@/components/toast";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState } from "react";
 
-import { AuthForm } from '@/components/auth-form';
-import { SubmitButton } from '@/components/submit-button';
+import { AuthForm } from "@/components/auth-form";
+import { SubmitButton } from "@/components/submit-button";
 
-import { authenticate, type AuthenticateActionState } from '../actions';
-import { useSession } from 'next-auth/react';
+import { useSession } from "next-auth/react";
+import { authenticate, type AuthenticateActionState } from "../actions";
 
 export default function Page() {
   const router = useRouter();
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [isSuccessful, setIsSuccessful] = useState(false);
 
   const [state, formAction] = useActionState<AuthenticateActionState, FormData>(
     authenticate,
     {
-      status: 'idle',
-    },
+      status: "idle",
+    }
   );
 
   const { update: updateSession } = useSession();
 
   useEffect(() => {
-    if (state.status === 'failed') {
+    if (state.status === "failed") {
       toast({
-        type: 'error',
-        description: 'Invalid credentials!',
+        type: "error",
+        description: "Invalid credentials!",
       });
-    } else if (state.status === 'invalid_data') {
+    } else if (state.status === "invalid_data") {
       toast({
-        type: 'error',
-        description: 'Failed validating your submission!',
+        type: "error",
+        description: "Failed validating your submission!",
       });
-    } else if (state.status === 'success') {
+    } else if (state.status === "success") {
       if (state.isNewUser) {
         toast({
-          type: 'success',
-          description: 'Welcome! Your account has been created.',
+          type: "success",
+          description: "Welcome! Your account has been created.",
         });
       }
       setIsSuccessful(true);
@@ -53,7 +50,7 @@ export default function Page() {
   }, [state.status, state.isNewUser]);
 
   const handleSubmit = (formData: FormData) => {
-    setEmail(formData.get('email') as string);
+    setEmail(formData.get("email") as string);
     formAction(formData);
   };
 

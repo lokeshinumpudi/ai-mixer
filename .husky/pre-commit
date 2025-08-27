@@ -1,0 +1,34 @@
+#!/bin/sh
+
+echo "🔍 Running pre-commit checks..."
+
+# Type check entire project (since TypeScript cross-file dependencies)
+echo "→ Type checking..."
+pnpm type-check
+if [ $? -ne 0 ]; then
+  echo "❌ Type check failed. Fix type errors before committing."
+  exit 1
+fi
+
+# Lint check on staged files (errors only, warnings allowed)
+echo "→ Linting staged files..."
+staged_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx)$')
+if [ -n "$staged_files" ]; then
+  echo "$staged_files" | xargs pnpm exec next lint --file
+  if [ $? -ne 0 ]; then
+    echo "❌ Lint check failed. Fix linting errors before committing."
+    exit 1
+  fi
+fi
+
+# Format check on staged files
+echo "→ Format checking staged files..."
+if [ -n "$staged_files" ]; then
+  echo "$staged_files" | xargs pnpm exec biome format --check
+  if [ $? -ne 0 ]; then
+    echo "❌ Format check failed. Run 'pnpm format' to fix formatting."
+    exit 1
+  fi
+fi
+
+echo "✅ All pre-commit checks passed!"

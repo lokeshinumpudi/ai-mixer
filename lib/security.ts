@@ -1,13 +1,13 @@
-import { auth } from '@/app/(auth)/auth';
-import { getUserById } from '@/lib/db/queries';
-import { ChatSDKError } from '@/lib/errors';
-import type { UserType } from '@/app/(auth)/auth';
+import type { UserType } from "@/app/(auth)/auth";
+import { auth } from "@/app/(auth)/auth";
+import { getUserById } from "@/lib/db/queries";
+import { ChatSDKError } from "@/lib/errors";
 
 export interface SecurityContext {
   user: {
     id: string;
     type: UserType;
-    email?: string | null;
+    email: string | null;
   };
   isAuthenticated: true;
 }
@@ -20,20 +20,20 @@ export async function requireAuth(): Promise<SecurityContext> {
   const session = await auth();
 
   if (!session?.user?.id) {
-    throw new ChatSDKError('unauthorized:chat');
+    throw new ChatSDKError("unauthorized:chat");
   }
 
   // Verify user still exists in database (for real-time deactivation)
   const dbUser = await getUserById(session.user.id);
   if (!dbUser) {
-    throw new ChatSDKError('unauthorized:chat');
+    throw new ChatSDKError("unauthorized:chat");
   }
 
   return {
     user: {
       id: session.user.id,
       type: session.user.type,
-      email: session.user.email,
+      email: session.user.email ?? null,
     },
     isAuthenticated: true,
   };
@@ -75,11 +75,11 @@ export function checkRateLimit(userId: string): boolean {
  */
 export function validateRequestSize(
   request: Request,
-  maxSizeBytes = 1024 * 1024,
+  maxSizeBytes = 1024 * 1024
 ): void {
-  const contentLength = request.headers.get('content-length');
+  const contentLength = request.headers.get("content-length");
   if (contentLength && Number.parseInt(contentLength) > maxSizeBytes) {
-    throw new ChatSDKError('bad_request:api', 'Request too large');
+    throw new ChatSDKError("bad_request:api", "Request too large");
   }
 }
 
@@ -88,10 +88,10 @@ export function validateRequestSize(
  */
 export function logSecurityEvent(
   event:
-    | 'unauthorized_access'
-    | 'forbidden_model'
-    | 'rate_limit_exceeded'
-    | 'invalid_input',
+    | "unauthorized_access"
+    | "forbidden_model"
+    | "rate_limit_exceeded"
+    | "invalid_input",
   details: {
     userId?: string;
     userType?: UserType;
@@ -100,7 +100,7 @@ export function logSecurityEvent(
     allowedValues?: string[];
     ip?: string;
     userAgent?: string;
-  },
+  }
 ): void {
   const timestamp = new Date().toISOString();
   const logEntry = {
@@ -110,7 +110,7 @@ export function logSecurityEvent(
   };
 
   // In production, send to security monitoring service
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === "production") {
     console.warn(`[SECURITY] ${JSON.stringify(logEntry)}`);
     // TODO: Send to security monitoring service (e.g., Sentry, DataDog)
   } else {
@@ -127,7 +127,7 @@ export function withSecurity<T extends any[]>(
     requireAuth?: boolean;
     rateLimit?: boolean;
     maxRequestSize?: number;
-  },
+  }
 ) {
   const {
     requireAuth: needsAuth = true,
@@ -148,11 +148,11 @@ export function withSecurity<T extends any[]>(
 
         // Rate limiting
         if (rateLimit && !checkRateLimit(securityContext.user.id)) {
-          logSecurityEvent('rate_limit_exceeded', {
+          logSecurityEvent("rate_limit_exceeded", {
             userId: securityContext.user.id,
             userType: securityContext.user.type,
           });
-          return new ChatSDKError('rate_limit:api').toResponse();
+          return new ChatSDKError("rate_limit:api").toResponse();
         }
       }
 
@@ -163,8 +163,8 @@ export function withSecurity<T extends any[]>(
         return error.toResponse();
       }
 
-      console.error('API Error:', error);
-      return new ChatSDKError('bad_request:api').toResponse();
+      console.error("API Error:", error);
+      return new ChatSDKError("bad_request:api").toResponse();
     }
   };
 }
@@ -176,16 +176,16 @@ export function validateModelAccess(
   modelId: string,
   userType: UserType,
   userId: string,
-  allowedModelIds: string[],
+  allowedModelIds: string[]
 ): void {
   if (!allowedModelIds.includes(modelId)) {
-    logSecurityEvent('forbidden_model', {
+    logSecurityEvent("forbidden_model", {
       userId,
       userType,
-      resource: 'model_access',
+      resource: "model_access",
       attemptedValue: modelId,
       allowedValues: allowedModelIds,
     });
-    throw new ChatSDKError('forbidden:chat');
+    throw new ChatSDKError("forbidden:chat");
   }
 }
