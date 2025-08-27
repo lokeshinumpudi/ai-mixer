@@ -18,9 +18,7 @@ All AI models (text and image) are accessed through a single gateway configurati
 // Reference: lib/gateway.ts - Unified access point
 import { createGatewayProvider } from "@ai-sdk/gateway";
 
-export const gateway = createGatewayProvider({
-  baseURL: process.env.AI_GATEWAY_BASE_URL,
-});
+export const gateway = createGatewayProvider({});
 ```
 
 ### 2. Unified Model Configuration
