@@ -37,16 +37,23 @@ export async function POST(request: Request) {
       const orderId: string = paymentEntity.order_id;
       const paymentId: string = paymentEntity.id;
 
-      await updatePaymentFromWebhook({
-        orderId,
-        paymentId,
-        status: 'captured',
-      });
+      if (orderId) {
+        await updatePaymentFromWebhook({
+          orderId,
+          paymentId,
+          status: 'captured',
+        });
+      }
 
       // For MVP: treat captured payments as credit top-ups of full amount * 100 tokens per INR
-      const userId = event.payload.order.entity.notes?.userId as
+      // Support both Orders flow (order.notes) and Payment Pages (payment.notes)
+      const notesUserIdFromOrder = event.payload.order?.entity?.notes?.userId as
         | string
         | undefined;
+      const notesUserIdFromPayment = paymentEntity?.notes?.userId as
+        | string
+        | undefined;
+      const userId = notesUserIdFromOrder || notesUserIdFromPayment;
       const amountPaise = Number(paymentEntity.amount);
 
       if (userId && Number.isFinite(amountPaise)) {

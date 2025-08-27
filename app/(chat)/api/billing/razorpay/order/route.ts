@@ -28,14 +28,24 @@ export async function POST(request: Request) {
   const planType = body.planType || 'credits';
 
   try {
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!keyId || !keySecret) {
+      return new ChatSDKError(
+        'bad_request:api',
+        'Missing Razorpay credentials. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.',
+      ).toResponse();
+    }
+
     // Create Razorpay order via REST API (server-side).
     const res = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${Buffer.from(
-          `${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`,
-        ).toString('base64')}`,
+        Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString(
+          'base64',
+        )}`,
       },
       body: JSON.stringify({
         amount: amountPaise,
@@ -50,12 +60,23 @@ export async function POST(request: Request) {
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      console.error('Razorpay order error', err);
-      return new ChatSDKError(
-        'bad_request:api',
-        'Failed to create order',
-      ).toResponse();
+      const errText = await res.text();
+      let cause = 'Failed to create order';
+      try {
+        const parsed = JSON.parse(errText);
+        const description =
+          parsed?.error?.description || parsed?.message || parsed?.error;
+        if (description) {
+          cause = `${cause}: ${description}`;
+        }
+      } catch (_) {
+        // Fallback to plain text from Razorpay
+        if (errText) {
+          cause = `${cause}: ${errText}`;
+        }
+      }
+      console.error('Razorpay order error', errText);
+      return new ChatSDKError('bad_request:api', cause).toResponse();
     }
 
     const order = await res.json();
@@ -71,7 +92,7 @@ export async function POST(request: Request) {
       orderId: order.id,
       amountPaise,
       currency,
-      keyId: process.env.RAZORPAY_KEY_ID,
+      keyId,
     });
   } catch (error) {
     console.error(error);
