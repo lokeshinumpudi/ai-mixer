@@ -13,10 +13,72 @@ import { Check, ArrowLeft } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { PRICING, FREE_MODELS, PRO_MODELS } from '@/lib/constants';
 import Link from 'next/link';
+import { useMemo, useState } from 'react';
 
 export default function PricingPage() {
   const { data: session } = useSession();
   const isLoggedIn = !!session?.user;
+  const [isLoading, setIsLoading] = useState(false);
+  const hostedPageUrl = useMemo(() => {
+    return process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+  }, []);
+
+  async function handleUpgrade() {
+    if (!isLoggedIn) return;
+
+    try {
+      setIsLoading(true);
+      if (!hostedPageUrl) {
+        alert(
+          'Payment page not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+        );
+        return;
+      }
+
+      const url = new URL(hostedPageUrl);
+      if (session?.user?.name) {
+        // Razorpay Payment Pages: common param name for name
+        url.searchParams.set('name', session.user.name);
+        // Some templates use a custom field like "Full Name" → full_name
+        url.searchParams.set('full_name', session.user.name);
+        // Some templates also support prefill[name]
+        url.searchParams.set('prefill[name]', session.user.name);
+      }
+      const email = (session?.user as any)?.email as string | undefined;
+      if (email) {
+        // Razorpay Payment Pages: common param name for email
+        url.searchParams.set('email', email);
+        // Some templates also support prefill[email]
+        url.searchParams.set('prefill[email]', email);
+      }
+      if (session?.user?.id) {
+        url.searchParams.set('notes[userId]', session.user.id);
+      }
+      url.searchParams.set('notes[plan]', PRICING.PAID_TIER.name);
+      if (session?.user?.id) {
+        url.searchParams.set(
+          'reference_id',
+          `${session.user.id}-${Date.now()}`,
+        );
+      }
+
+      // Optional: add return_url so HPP redirects back after payment; also configure in Dashboard
+      url.searchParams.set(
+        'redirect_url',
+        `${window.location.origin}/billing/success`,
+      );
+      url.searchParams.set(
+        'cancel_url',
+        `${window.location.origin}/billing/failure`,
+      );
+      window.location.href = url.toString();
+    } catch (error) {
+      console.error(error);
+      alert('Payment initiation failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -158,9 +220,19 @@ export default function PricingPage() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button className="w-full">
-                {isLoggedIn ? 'Upgrade to Pro' : 'Sign Up for Pro'}
-              </Button>
+              {isLoggedIn ? (
+                <Button
+                  className="w-full"
+                  onClick={handleUpgrade}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Processing…' : 'Upgrade to Pro'}
+                </Button>
+              ) : (
+                <Button className="w-full" asChild>
+                  <Link href="/login">Sign Up for Pro</Link>
+                </Button>
+              )}
             </CardFooter>
           </Card>
         </div>
@@ -241,7 +313,7 @@ export default function PricingPage() {
             </p>
             <div className="flex gap-4 justify-center">
               <Button size="lg" asChild>
-                <Link href={isLoggedIn ? '/settings' : '/register'}>
+                <Link href={isLoggedIn ? '/settings' : '/login'}>
                   {isLoggedIn ? 'Manage Subscription' : 'Start Free Trial'}
                 </Link>
               </Button>
