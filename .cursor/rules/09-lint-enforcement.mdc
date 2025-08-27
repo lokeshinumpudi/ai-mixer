@@ -21,11 +21,11 @@ This project uses **Husky pre-commit hooks** to enforce code quality. All commit
 - **Linting errors block commits**, warnings are allowed
 - Use `pnpm lint:fix` to auto-fix issues before committing
 
-### Format Checking (SUGGESTED, not blocking)
+### Auto-Formatting (AUTOMATIC)
 
-- Biome format checking provides suggestions
-- Run `pnpm format` before committing for consistency
-- CI enforces strict formatting standards
+- Biome automatically formats all staged files during commit
+- Files are formatted and re-staged automatically 
+- No manual formatting required - happens seamlessly
 
 ## Development Scripts
 

@@ -22,18 +22,20 @@ Every commit is automatically validated through [.husky/pre-commit](mdc:.husky/p
    - Blocks commits on linting errors
    - Allows warnings for development flexibility
 
-3. **Format Suggestions** (NON-BLOCKING)
-   - Provides helpful formatting tips
-   - Run `pnpm format` for consistency
+3. **Auto-Formatting** (AUTOMATIC)
+   - Automatically formats all staged files during commit
+   - Files are formatted and re-staged automatically
 
 ### Pre-commit Hook Execution Flow
 
 ```bash
 🔍 Running pre-commit checks...
+→ Formatting staged files... # Auto-format all code files
+✅ Code formatted and re-staged
 → Type checking...           # Full project TypeScript validation
 → Linting staged files...    # ESLint + Biome on changed files only
 ✅ All pre-commit checks passed!
-💡 Tip: Run 'pnpm format' before committing to ensure consistent formatting.
+🎨 Files have been automatically formatted and committed.
 ```
 
 ## Development Commands
