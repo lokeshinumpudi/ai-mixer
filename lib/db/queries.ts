@@ -16,32 +16,37 @@ import {
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
+import type { UserType } from '@/app/(auth)/auth';
+import type { ArtifactKind } from '@/components/artifact';
+import type { VisibilityType } from '@/components/visibility-selector';
+import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import { SESSION_CONFIG } from '@/lib/auth/session-config';
+import { PRICING } from '@/lib/constants';
+import { sql } from 'drizzle-orm';
+import { ChatSDKError } from '../errors';
 import {
-  user,
   chat,
-  type User,
+  creditLedger,
   document,
-  type Suggestion,
-  suggestion,
   message,
-  vote,
-  type DBMessage,
-  type Chat,
+  payment,
+  paymentEvent,
+  refund,
+  serviceDowntime,
   stream,
   subscription,
-  payment,
-  creditLedger,
+  suggestion,
   usageDaily,
   usageMonthly,
+  user,
+  userNotification,
+  vote,
+  type Chat,
+  type DBMessage,
+  type Suggestion,
+  type User,
 } from './schema';
-import type { ArtifactKind } from '@/components/artifact';
 import { generateHashedPassword } from './utils';
-import type { VisibilityType } from '@/components/visibility-selector';
-import { ChatSDKError } from '../errors';
-import { sql } from 'drizzle-orm';
-import type { UserType } from '@/app/(auth)/auth';
-import { entitlementsByUserType } from '@/lib/ai/entitlements';
-import { PRICING } from '@/lib/constants';
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -473,7 +478,10 @@ export async function updateChatVisiblityById({
 export async function getMessageCountByUserId({
   id,
   differenceInHours,
-}: { id: string; differenceInHours: number }) {
+}: {
+  id: string;
+  differenceInHours: number;
+}) {
   try {
     const twentyFourHoursAgo = new Date(
       Date.now() - differenceInHours * 60 * 60 * 1000,
@@ -636,6 +644,264 @@ export async function getRecentPurchaseCreditsCount({
   }
 }
 
+// Enhanced payment event tracking
+export async function createPaymentEvent({
+  paymentId,
+  orderId,
+  userId,
+  eventType,
+  status,
+  amountPaise,
+  currency = 'INR',
+  method,
+  errorCode,
+  errorDescription,
+  metadata,
+}: {
+  paymentId: string;
+  orderId?: string;
+  userId: string;
+  eventType: string;
+  status: string;
+  amountPaise: number;
+  currency?: string;
+  method?: string;
+  errorCode?: string;
+  errorDescription?: string;
+  metadata?: any;
+}) {
+  try {
+    await db.insert(paymentEvent).values({
+      paymentId,
+      orderId,
+      userId,
+      eventType,
+      status,
+      amountPaise,
+      currency,
+      method,
+      errorCode,
+      errorDescription,
+      metadata,
+    });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create payment event',
+    );
+  }
+}
+
+// Refund management
+export async function createRefund({
+  refundId,
+  paymentId,
+  userId,
+  amountPaise,
+  currency = 'INR',
+  status,
+  reason,
+  errorCode,
+  razorpayCreatedAt,
+}: {
+  refundId: string;
+  paymentId: string;
+  userId: string;
+  amountPaise: number;
+  currency?: string;
+  status: string;
+  reason?: string;
+  errorCode?: string;
+  razorpayCreatedAt?: Date;
+}) {
+  try {
+    await db.insert(refund).values({
+      refundId,
+      paymentId,
+      userId,
+      amountPaise,
+      currency,
+      status,
+      reason,
+      errorCode,
+      razorpayCreatedAt,
+      processedAt: status === 'processed' ? new Date() : null,
+    });
+
+    // If refund processed, reverse credits
+    if (status === 'processed') {
+      await addCredit({
+        userId,
+        tokensDelta: -(amountPaise / 100) * 100, // Negative tokens
+        reason: 'refund',
+      });
+    }
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to create refund');
+  }
+}
+
+export async function updateRefundStatus({
+  refundId,
+  status,
+  errorCode,
+}: {
+  refundId: string;
+  status: string;
+  errorCode?: string;
+}) {
+  try {
+    await db
+      .update(refund)
+      .set({
+        status,
+        errorCode,
+        processedAt: status === 'processed' ? new Date() : null,
+      })
+      .where(eq(refund.refundId, refundId));
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to update refund');
+  }
+}
+
+// Service downtime tracking
+export async function upsertServiceDowntime({
+  downtimeId,
+  method,
+  status,
+  severity,
+  instrument,
+  startedAt,
+  resolvedAt,
+  scheduled = false,
+}: {
+  downtimeId: string;
+  method: string;
+  status: string;
+  severity: string;
+  instrument: any;
+  startedAt?: Date;
+  resolvedAt?: Date;
+  scheduled?: boolean;
+}) {
+  try {
+    await db
+      .insert(serviceDowntime)
+      .values({
+        downtimeId,
+        method,
+        status,
+        severity,
+        instrument,
+        startedAt,
+        resolvedAt,
+        scheduled,
+      })
+      .onConflictDoUpdate({
+        target: serviceDowntime.downtimeId,
+        set: {
+          status,
+          severity,
+          resolvedAt,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to upsert service downtime',
+    );
+  }
+}
+
+export async function getActiveDowntimes() {
+  try {
+    return await db
+      .select()
+      .from(serviceDowntime)
+      .where(eq(serviceDowntime.status, 'started'))
+      .orderBy(desc(serviceDowntime.createdAt));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get active downtimes',
+    );
+  }
+}
+
+// User notifications
+export async function createUserNotification({
+  userId,
+  type,
+  title,
+  message,
+  metadata,
+}: {
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  metadata?: any;
+}) {
+  try {
+    await db.insert(userNotification).values({
+      userId,
+      type,
+      title,
+      message,
+      metadata,
+    });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create notification',
+    );
+  }
+}
+
+export async function getUserNotifications({
+  userId,
+  unreadOnly = false,
+  limit = 50,
+}: {
+  userId: string;
+  unreadOnly?: boolean;
+  limit?: number;
+}) {
+  try {
+    const conditions = [eq(userNotification.userId, userId)];
+    if (unreadOnly) {
+      conditions.push(eq(userNotification.read, false));
+    }
+
+    return await db
+      .select()
+      .from(userNotification)
+      .where(and(...conditions))
+      .orderBy(desc(userNotification.createdAt))
+      .limit(limit);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get notifications',
+    );
+  }
+}
+
+export async function markNotificationAsRead(notificationId: string) {
+  try {
+    await db
+      .update(userNotification)
+      .set({ read: true })
+      .where(eq(userNotification.id, notificationId));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to mark notification as read',
+    );
+  }
+}
+
 export async function setSubscriptionPlan({
   userId,
   plan,
@@ -685,7 +951,10 @@ export async function upsertDailyUsage({
   day?: Date;
 }) {
   const d = day ? new Date(day) : new Date();
-  const dayOnly = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  const dayOnly = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
+    2,
+    '0',
+  )}-${String(d.getUTCDate()).padStart(2, '0')}`;
 
   try {
     await db
@@ -723,7 +992,9 @@ export async function upsertMonthlyUsage({
   month?: Date;
 }) {
   const d = month ? new Date(month) : new Date();
-  const monthOnly = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
+  const monthOnly = `${d.getUTCFullYear()}-${String(
+    d.getUTCMonth() + 1,
+  ).padStart(2, '0')}-01`;
 
   try {
     await db
@@ -763,7 +1034,9 @@ export async function getUserUsageAndLimits({
     if (userType === 'free') {
       // Free users: daily limits
       const today = new Date();
-      const todayString = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+      const todayString = `${today.getUTCFullYear()}-${String(
+        today.getUTCMonth() + 1,
+      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
 
       const [dailyUsage] = await db
         .select({ totalMessages: sum(usageDaily.messages) })
@@ -786,7 +1059,9 @@ export async function getUserUsageAndLimits({
     } else {
       // Pro users: monthly limits
       const now = new Date();
-      const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+      const monthStart = `${now.getUTCFullYear()}-${String(
+        now.getUTCMonth() + 1,
+      ).padStart(2, '0')}-01`;
 
       const [monthlyUsage] = await db
         .select({ totalMessages: sum(usageMonthly.messages) })
@@ -864,8 +1139,12 @@ export async function getUserSubscription(userId: string) {
 export async function getUsageHistory(userId: string) {
   try {
     const now = new Date();
-    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const startDateString = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`;
+    const start = new Date(
+      now.getTime() - SESSION_CONFIG.ANALYTICS.USAGE_HISTORY,
+    );
+    const startDateString = `${start.getUTCFullYear()}-${String(
+      start.getUTCMonth() + 1,
+    ).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`;
 
     return await db
       .select()
@@ -909,7 +1188,9 @@ export async function getUserUsageSummary(userId: string) {
 
       // Get current month usage
       const now = new Date();
-      const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+      const monthStart = `${now.getUTCFullYear()}-${String(
+        now.getUTCMonth() + 1,
+      ).padStart(2, '0')}-01`;
 
       const [monthlyUsage] = await db
         .select({ totalMessages: sum(usageMonthly.messages) })
@@ -930,7 +1211,9 @@ export async function getUserUsageSummary(userId: string) {
 
       // Get today's usage
       const today = new Date();
-      const todayString = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+      const todayString = `${today.getUTCFullYear()}-${String(
+        today.getUTCMonth() + 1,
+      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
 
       const [dailyUsage] = await db
         .select({ totalMessages: sum(usageDaily.messages) })

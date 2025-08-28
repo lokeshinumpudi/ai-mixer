@@ -1,0 +1,280 @@
+# Webhook Event Organization Rules
+
+## Core Principle: Centralized Event Type Management
+
+All webhook event types and constants MUST be organized in dedicated type files separate from business logic implementation. This ensures type safety, reusability, and maintainability across webhook handlers.
+
+## ✅ Correct Pattern
+
+### Event Types in lib/types/
+
+```typescript
+// lib/types/razorpay-events.ts
+export enum RazorpayEvent {
+  PAYMENT_CAPTURED = "payment.captured",
+  PAYMENT_FAILED = "payment.failed",
+  // ... all other events
+}
+
+export const PAYMENT_SUCCESS_EVENTS = [
+  RazorpayEvent.PAYMENT_CAPTURED,
+  RazorpayEvent.ORDER_PAID,
+] as const;
+
+export function isPaymentSuccessEvent(
+  event: string
+): event is (typeof PAYMENT_SUCCESS_EVENTS)[number] {
+  return PAYMENT_SUCCESS_EVENTS.includes(event as any);
+}
+```
+
+### Webhook Handlers Import Types
+
+```typescript
+// app/(chat)/api/billing/razorpay/webhook/route.ts
+import {
+  RazorpayEvent,
+  PAYMENT_SUCCESS_EVENTS,
+  isPaymentSuccessEvent,
+} from "@/lib/types/razorpay-events";
+
+export async function POST(request: Request) {
+  // Use imported types and type guards
+  if (isPaymentSuccessEvent(eventType)) {
+    // Handle success events
+  }
+
+  switch (eventType) {
+    case RazorpayEvent.PAYMENT_FAILED:
+      // Handle failure
+      break;
+  }
+}
+```
+
+## ❌ Incorrect Pattern - DO NOT DO THIS
+
+### Never define event types in webhook handlers
+
+```typescript
+// ❌ BAD - Event types mixed with business logic
+export async function POST(request: Request) {
+  enum RazorpayEvent {
+    PAYMENT_CAPTURED = "payment.captured",
+    // ... event definitions in handler
+  }
+
+  const PAYMENT_SUCCESS_EVENTS = ["payment.captured"]; // ❌ Hard-coded strings
+}
+```
+
+## Event Type Organization Guidelines
+
+### File Structure
+
+```
+lib/types/
+├── razorpay-events.ts      # Razorpay webhook events
+├── stripe-events.ts        # Stripe webhook events (if used)
+├── github-events.ts        # GitHub webhook events (if used)
+└── webhook-common.ts       # Shared webhook utilities
+```
+
+### Naming Conventions
+
+- **Enum Names**: Use PascalCase with descriptive provider prefix
+  - `RazorpayEvent`, `StripeEvent`, `GitHubEvent`
+- **Event Constants**: Use UPPER_SNAKE_CASE
+  - `PAYMENT_SUCCESS_EVENTS`, `SUBSCRIPTION_EVENTS`
+- **Type Guards**: Use descriptive function names with `is` prefix
+  - `isPaymentSuccessEvent()`, `isSubscriptionEvent()`
+
+### Event Categorization
+
+Group related events into logical categories:
+
+```typescript
+// Success events that trigger credits
+export const PAYMENT_SUCCESS_EVENTS = [
+  RazorpayEvent.PAYMENT_CAPTURED,
+  RazorpayEvent.ORDER_PAID,
+] as const;
+
+// Failure events that trigger notifications
+export const PAYMENT_FAILURE_EVENTS = [
+  RazorpayEvent.PAYMENT_FAILED,
+  RazorpayEvent.REFUND_FAILED,
+] as const;
+
+// Subscription lifecycle events
+export const SUBSCRIPTION_EVENTS = [
+  RazorpayEvent.SUBSCRIPTION_ACTIVATED,
+  RazorpayEvent.SUBSCRIPTION_CANCELLED,
+  // ...
+] as const;
+```
+
+### Type Safety with Type Guards
+
+Always provide type guards for event categorization:
+
+```typescript
+export function isPaymentSuccessEvent(
+  event: string
+): event is (typeof PAYMENT_SUCCESS_EVENTS)[number] {
+  return PAYMENT_SUCCESS_EVENTS.includes(event as any);
+}
+
+export function isProcessedEvent(
+  event: string
+): event is (typeof PROCESSED_EVENTS)[number] {
+  return PROCESSED_EVENTS.includes(event as any);
+}
+```
+
+## Documentation Requirements
+
+### Event Type Files Must Include:
+
+1. **JSDoc comments** explaining the purpose
+2. **Reference links** to official webhook documentation
+3. **Event categorization** with clear groupings
+4. **Type guards** for runtime type checking
+5. **Usage examples** in comments
+
+### Example Documentation:
+
+```typescript
+/**
+ * Razorpay Webhook Event Types
+ *
+ * This file contains all the event types that Razorpay sends via webhooks.
+ * These enums ensure type safety and consistency across the application.
+ *
+ * @see https://razorpay.com/docs/webhooks/payloads/payments/
+ */
+
+/**
+ * Events that indicate successful payment completion and should trigger credit addition
+ */
+export const PAYMENT_SUCCESS_EVENTS = [
+  RazorpayEvent.PAYMENT_CAPTURED,
+  RazorpayEvent.ORDER_PAID,
+] as const;
+```
+
+## Webhook Handler Organization
+
+### Import Organization
+
+```typescript
+// External libraries first
+import crypto from "node:crypto";
+
+// Internal database/business logic
+import { addCredit, createPaymentEvent } from "@/lib/db/queries";
+
+// Event types and utilities (grouped together)
+import {
+  RazorpayEvent,
+  PAYMENT_SUCCESS_EVENTS,
+  isPaymentSuccessEvent,
+} from "@/lib/types/razorpay-events";
+
+// Framework-specific imports last
+import { headers as nextHeaders } from "next/headers";
+```
+
+### Handler Logic Separation
+
+```typescript
+// Signature verification utilities
+function verifySignature(payload: string, signature: string) {
+  // Crypto logic
+}
+
+// Main handler with clean event processing
+export async function POST(request: Request) {
+  // 1. Signature verification
+  // 2. Event type checking with type guards
+  // 3. Business logic delegation
+}
+```
+
+## Benefits of This Pattern
+
+1. **Type Safety**: Enum usage prevents typos and ensures valid event names
+2. **Reusability**: Event types can be shared across multiple webhook handlers
+3. **Maintainability**: Changes to event types happen in one place
+4. **Documentation**: Centralized event documentation with official references
+5. **Testing**: Easy to mock and test event type logic independently
+6. **Scalability**: Easy to add new webhook providers with same pattern
+
+## Integration with Other Systems
+
+### Database Schema Alignment
+
+Event types should align with database schema enums:
+
+```typescript
+// lib/db/schema.ts
+export const paymentEvent = pgTable("PaymentEvent", {
+  eventType: varchar("eventType", { length: 32 }).notNull(), // Must match RazorpayEvent values
+});
+
+// lib/types/razorpay-events.ts
+export enum RazorpayEvent {
+  PAYMENT_CAPTURED = "payment.captured", // ✅ Fits in varchar(32)
+}
+```
+
+### Frontend Integration
+
+Event types can be shared with frontend for webhook status displays:
+
+```typescript
+// components/payment-status.tsx
+import { RazorpayEvent } from "@/lib/types/razorpay-events";
+
+function PaymentStatus({ eventType }: { eventType: string }) {
+  switch (eventType) {
+    case RazorpayEvent.PAYMENT_CAPTURED:
+      return <SuccessBadge />;
+    case RazorpayEvent.PAYMENT_FAILED:
+      return <FailureBadge />;
+  }
+}
+```
+
+## Review Checklist
+
+Before implementing webhook handlers, ensure:
+
+- [ ] **Event types defined** in separate `lib/types/` file
+- [ ] **Type guards provided** for event categorization
+- [ ] **Documentation included** with official API references
+- [ ] **Event constants grouped** logically (success, failure, etc.)
+- [ ] **Proper imports** in webhook handlers
+- [ ] **No duplicate definitions** across files
+- [ ] **Database schema alignment** with event type values
+
+## Exception Cases
+
+The only acceptable event type definitions outside of `lib/types/` are:
+
+1. **Test files** - Mock event types for testing
+2. **Development utilities** - Debug event type listings
+3. **Migration scripts** - Temporary event type mappings
+
+## Enforcement
+
+This pattern is enforced through:
+
+1. **Linting rules** - ESLint rules against enum definitions in handlers
+2. **Code reviews** - Manual review for proper type organization
+3. **Type checking** - TypeScript strict mode catches type mismatches
+4. **Documentation** - Required JSDoc comments for all event type files
+
+---
+
+> 💡 **Remember**: Clean event type organization is the foundation of maintainable webhook systems. Invest time in proper organization early to avoid technical debt later.

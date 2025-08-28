@@ -1,16 +1,16 @@
 import type { InferSelectModel } from 'drizzle-orm';
 import {
-  pgTable,
-  varchar,
-  timestamp,
-  integer,
-  date,
-  json,
-  uuid,
-  text,
-  primaryKey,
-  foreignKey,
   boolean,
+  date,
+  foreignKey,
+  integer,
+  json,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+  varchar,
 } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('User', {
@@ -249,3 +249,77 @@ export const usageMonthly = pgTable(
 
 export type UsageDaily = InferSelectModel<typeof usageDaily>;
 export type UsageMonthly = InferSelectModel<typeof usageMonthly>;
+
+// Enhanced payment tracking with full lifecycle
+export const paymentEvent = pgTable('PaymentEvent', {
+  id: uuid('id').notNull().defaultRandom().primaryKey(),
+  paymentId: varchar('paymentId', { length: 64 }).notNull(),
+  orderId: varchar('orderId', { length: 64 }),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  eventType: varchar('eventType', { length: 32 }).notNull(), // authorized, captured, failed
+  status: varchar('status', { length: 32 }).notNull(),
+  amountPaise: integer('amountPaise').notNull(),
+  currency: varchar('currency', { length: 8 }).notNull().default('INR'),
+  method: varchar('method', { length: 32 }), // card, upi, netbanking, etc
+  errorCode: varchar('errorCode', { length: 64 }),
+  errorDescription: text('errorDescription'),
+  metadata: json('metadata'), // Store full webhook payload
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type PaymentEvent = InferSelectModel<typeof paymentEvent>;
+
+// Refund tracking
+export const refund = pgTable('Refund', {
+  id: uuid('id').notNull().defaultRandom().primaryKey(),
+  refundId: varchar('refundId', { length: 64 }).notNull().unique(),
+  paymentId: varchar('paymentId', { length: 64 }).notNull(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  amountPaise: integer('amountPaise').notNull(),
+  currency: varchar('currency', { length: 8 }).notNull().default('INR'),
+  status: varchar('status', { length: 32 }).notNull(), // processed, failed, pending
+  reason: varchar('reason', { length: 128 }),
+  errorCode: varchar('errorCode', { length: 64 }),
+  razorpayCreatedAt: timestamp('razorpayCreatedAt'),
+  processedAt: timestamp('processedAt'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type Refund = InferSelectModel<typeof refund>;
+
+// Service downtime tracking
+export const serviceDowntime = pgTable('ServiceDowntime', {
+  id: uuid('id').notNull().defaultRandom().primaryKey(),
+  downtimeId: varchar('downtimeId', { length: 64 }).notNull().unique(),
+  method: varchar('method', { length: 32 }).notNull(), // card, upi, netbanking
+  status: varchar('status', { length: 32 }).notNull(), // started, resolved, updated
+  severity: varchar('severity', { length: 16 }).notNull(), // low, medium, high
+  instrument: json('instrument'), // issuer, network, type details
+  startedAt: timestamp('startedAt'),
+  resolvedAt: timestamp('resolvedAt'),
+  scheduled: boolean('scheduled').notNull().default(false),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type ServiceDowntime = InferSelectModel<typeof serviceDowntime>;
+
+// User notifications for important events
+export const userNotification = pgTable('UserNotification', {
+  id: uuid('id').notNull().defaultRandom().primaryKey(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  type: varchar('type', { length: 32 }).notNull(), // payment_failed, refund_processed, downtime_alert
+  title: varchar('title', { length: 128 }).notNull(),
+  message: text('message').notNull(),
+  metadata: json('metadata'), // Additional context
+  read: boolean('read').notNull().default(false),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type UserNotification = InferSelectModel<typeof userNotification>;

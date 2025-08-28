@@ -1,3 +1,32 @@
+import { type UserType } from '@/app/(auth)/auth';
+import type { VisibilityType } from '@/components/visibility-selector';
+import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
+import type { ChatModel } from '@/lib/ai/models';
+import { systemPrompt, type RequestHints } from '@/lib/ai/prompts';
+import { getLanguageModel, modelSupports } from '@/lib/ai/providers';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { getWeather } from '@/lib/ai/tools/get-weather';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { protectedRoute } from '@/lib/auth-decorators';
+import { SessionUtils } from '@/lib/auth/session-config';
+import { isProductionEnvironment } from '@/lib/constants';
+import {
+  createStreamId,
+  deleteChatById,
+  getChatById,
+  getMessagesByChatId,
+  getUserUsageAndLimits,
+  saveChat,
+  saveMessages,
+  upsertDailyUsage,
+  upsertMonthlyUsage,
+} from '@/lib/db/queries';
+import { ChatSDKError } from '@/lib/errors';
+import { validateModelAccess } from '@/lib/security';
+import type { ChatMessage } from '@/lib/types';
+import { convertToUIMessages, generateUUID } from '@/lib/utils';
+import { geolocation } from '@vercel/functions';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -6,40 +35,13 @@ import {
   stepCountIs,
   streamText,
 } from 'ai';
-import { auth, type UserType } from '@/app/(auth)/auth';
-import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
-import {
-  createStreamId,
-  deleteChatById,
-  getChatById,
-  getMessagesByChatId,
-  saveChat,
-  saveMessages,
-  upsertDailyUsage,
-  upsertMonthlyUsage,
-  getUserUsageAndLimits,
-} from '@/lib/db/queries';
-import { convertToUIMessages, generateUUID } from '@/lib/utils';
-import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
-import { isProductionEnvironment } from '@/lib/constants';
-import { getLanguageModel, modelSupports } from '@/lib/ai/providers';
-import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
-import { validateModelAccess } from '@/lib/security';
-import { postRequestBodySchema, type PostRequestBody } from './schema';
-import { geolocation } from '@vercel/functions';
+import { after } from 'next/server';
 import {
   createResumableStreamContext,
   type ResumableStreamContext,
 } from 'resumable-stream';
-import { after } from 'next/server';
-import { ChatSDKError } from '@/lib/errors';
-import type { ChatMessage } from '@/lib/types';
-import type { ChatModel } from '@/lib/ai/models';
-import type { VisibilityType } from '@/components/visibility-selector';
+import { generateTitleFromUserMessage } from '../../actions';
+import { postRequestBodySchema, type PostRequestBody } from './schema';
 
 export const maxDuration = 60;
 
@@ -65,7 +67,7 @@ export function getStreamContext() {
   return globalStreamContext;
 }
 
-export async function POST(request: Request) {
+export const POST = protectedRoute(async (request, _context, user) => {
   let requestBody: PostRequestBody;
 
   try {
@@ -88,17 +90,11 @@ export async function POST(request: Request) {
       selectedVisibilityType: VisibilityType;
     } = requestBody;
 
-    const session = await auth();
-
-    if (!session?.user) {
-      return new ChatSDKError('unauthorized:chat').toResponse();
-    }
-
-    const userType: UserType = session.user.type;
+    const userType: UserType = user.type;
 
     // Check usage and rate limits
     const usageInfo = await getUserUsageAndLimits({
-      userId: session.user.id,
+      userId: user.id,
       userType,
     });
 
@@ -108,12 +104,7 @@ export async function POST(request: Request) {
 
     // Validate that the user has access to the selected model
     const allowedModelIds = getAllowedModelIdsForUser(userType);
-    validateModelAccess(
-      selectedChatModel,
-      userType,
-      session.user.id,
-      allowedModelIds,
-    );
+    validateModelAccess(selectedChatModel, userType, user.id, allowedModelIds);
 
     const chat = await getChatById({ id });
 
@@ -124,12 +115,12 @@ export async function POST(request: Request) {
 
       await saveChat({
         id,
-        userId: session.user.id,
+        userId: user.id,
         title,
         visibility: selectedVisibilityType,
       });
     } else {
-      if (chat.userId !== session.user.id) {
+      if (chat.userId !== user.id) {
         return new ChatSDKError('forbidden:chat').toResponse();
       }
     }
@@ -196,7 +187,7 @@ export async function POST(request: Request) {
           tools: {
             getWeather,
             createDocument: createDocument({
-              session,
+              session: SessionUtils.createSession(user, 'DEFAULT'),
               dataStream,
               selectedModel: {
                 id: selectedChatModel,
@@ -205,7 +196,7 @@ export async function POST(request: Request) {
               },
             }),
             updateDocument: updateDocument({
-              session,
+              session: SessionUtils.createSession(user, 'DEFAULT'),
               dataStream,
               selectedModel: {
                 id: selectedChatModel,
@@ -214,7 +205,7 @@ export async function POST(request: Request) {
               },
             }),
             requestSuggestions: requestSuggestions({
-              session,
+              session: SessionUtils.createSession(user, 'DEFAULT'),
               dataStream,
               selectedModel: {
                 id: selectedChatModel,
@@ -273,7 +264,7 @@ export async function POST(request: Request) {
 
           // Track daily usage (for all users - includes tokens for legacy and messages for new system)
           await upsertDailyUsage({
-            userId: session.user.id,
+            userId: user.id,
             modelId: selectedChatModel,
             tokensIn: toTokens(inChars),
             tokensOut: toTokens(outChars),
@@ -283,14 +274,14 @@ export async function POST(request: Request) {
           // Track monthly usage for pro users
           if (userType === 'pro') {
             await upsertMonthlyUsage({
-              userId: session.user.id,
+              userId: user.id,
               messages: 1,
             });
           }
 
           // Get updated usage info after tracking
           const updatedUsageInfo = await getUserUsageAndLimits({
-            userId: session.user.id,
+            userId: user.id,
             userType,
           });
 
@@ -325,10 +316,14 @@ export async function POST(request: Request) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
     }
+    return new ChatSDKError(
+      'bad_request:api',
+      'Internal server error',
+    ).toResponse();
   }
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = protectedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
@@ -336,19 +331,13 @@ export async function DELETE(request: Request) {
     return new ChatSDKError('bad_request:api').toResponse();
   }
 
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
-  }
-
   const chat = await getChatById({ id });
 
-  if (chat.userId !== session.user.id) {
+  if (chat.userId !== user.id) {
     return new ChatSDKError('forbidden:chat').toResponse();
   }
 
   const deletedChat = await deleteChatById({ id });
 
   return Response.json(deletedChat, { status: 200 });
-}
+});

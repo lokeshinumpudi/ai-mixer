@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { NextResponse, type NextRequest } from 'next/server';
 import { isDevelopmentEnvironment } from './lib/constants';
+import { getRouteAccessLevel } from './lib/route-config';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -13,10 +14,15 @@ export async function middleware(request: NextRequest) {
     return new Response('pong', { status: 200 });
   }
 
-  if (pathname.startsWith('/api/auth')) {
+  // Determine route access level using centralized configuration
+  const accessLevel = getRouteAccessLevel(pathname);
+
+  // Public routes bypass all authentication
+  if (accessLevel === 'public') {
     return NextResponse.next();
   }
 
+  // Get authentication token for protected and conditional routes
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET ?? '',
@@ -38,8 +44,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (!token) {
-    // Redirect to login if no token for protected routes
+  // Conditional routes handle their own auth logic
+  if (accessLevel === 'conditional') {
+    return NextResponse.next();
+  }
+
+  // Protected routes require authentication
+  if (accessLevel === 'protected' && !token) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

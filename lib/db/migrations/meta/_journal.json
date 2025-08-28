@@ -64,6 +64,13 @@
       "when": 1756203395596,
       "tag": "0008_furry_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1756366046445,
+      "tag": "0009_redundant_famine",
+      "breakpoints": true
     }
   ]
 }
