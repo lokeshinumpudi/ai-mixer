@@ -74,10 +74,17 @@ This is a Next.js 15 AI chatbot application built with the AI SDK, featuring rea
 ### Data Flow
 
 - **Server Actions** for mutations and database operations
-- **API routes** with security middleware and rate limiting
+- **API routes** with centralized authentication decorators
 - **Real-time streaming** with usage tracking updates
 - **Optimistic updates** with SWR mutations
 - **Message-based billing** with real-time limit enforcement
+
+### Authentication Architecture
+
+- **Route Access Control** - Centralized configuration in [lib/route-config.ts](mdc:lib/route-config.ts)
+- **Auth Decorators** - Type-safe route handlers in [lib/auth-decorators.ts](mdc:lib/auth-decorators.ts)
+- **Session Management** - Centralized configuration in [lib/auth/session-config.ts](mdc:lib/auth/session-config.ts)
+- **Middleware Protection** - Edge-level auth enforcement in [middleware.ts](mdc:middleware.ts)
 
 ### Error Handling
 

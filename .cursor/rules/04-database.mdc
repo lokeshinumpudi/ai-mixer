@@ -179,6 +179,7 @@ import {
   subscription,
 } from "./schema";
 import { eq, desc, and, sum } from "drizzle-orm";
+import { SESSION_CONFIG } from "@/lib/auth/session-config";
 
 // User management
 export async function getUserById(id: string): Promise<User | null> {
@@ -204,6 +205,26 @@ export async function getUserUsageAndLimits({
     return { used, quota, remaining, isOverLimit, type, resetInfo };
   } catch (error) {
     throw new ChatSDKError("bad_request:database", "Failed to get user usage");
+  }
+}
+
+// Data retention with centralized periods
+export async function getUsageHistory(userId: string) {
+  try {
+    const now = new Date();
+    const start = new Date(
+      now.getTime() - SESSION_CONFIG.ANALYTICS.USAGE_HISTORY
+    );
+    // Query implementation using centralized retention period
+    return await db
+      .select()
+      .from(usageDaily)
+      .where(and(eq(usageDaily.userId, userId), gte(usageDaily.day, start)));
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to get usage history"
+    );
   }
 }
 ```
@@ -426,9 +447,29 @@ describe("Chat queries", () => {
 ### Data Access Control
 
 - **Row-level security** where appropriate
-- **User context** in all queries
+- **User context** in all queries via protectedRoute decorators
 - **Input sanitization** with Zod validation
 - **SQL injection prevention** with parameterized queries
+
+### Authentication Integration
+
+```typescript
+// Use protectedRoute decorator for automatic user context
+export const GET = protectedRoute(async (request, context, user) => {
+  // user.id is guaranteed to exist - no null checks needed
+  const data = await getUserSpecificData(user.id);
+  return Response.json(data);
+});
+
+// Query functions receive authenticated user ID
+export async function getUserChats(userId: string) {
+  return await db
+    .select()
+    .from(chat)
+    .where(eq(chat.userId, userId)) // Type-safe user filtering
+    .orderBy(desc(chat.createdAt));
+}
+```
 
 ### Sensitive Data Handling
 

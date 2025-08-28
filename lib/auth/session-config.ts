@@ -61,6 +61,20 @@ export const SESSION_CONFIG = {
     /** Audit trail retention - 1 year */
     AUDIT_TRAIL: 365 * 24 * 60 * 60 * 1000,
   },
+
+  /**
+   * Payment and billing timeouts
+   */
+  PAYMENTS: {
+    /** Payment verification window - 1 hour (accounts for processing delays and testing) */
+    VERIFICATION_WINDOW: 60 * 60 * 1000,
+
+    /** Webhook processing timeout - 30 seconds */
+    WEBHOOK_TIMEOUT: 30 * 1000,
+
+    /** Payment completion grace period - 5 minutes */
+    COMPLETION_GRACE: 5 * 60 * 1000,
+  },
 } as const;
 
 /**
