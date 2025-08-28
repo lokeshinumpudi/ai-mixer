@@ -1,6 +1,6 @@
+import { protectedRoute } from '@/lib/auth-decorators';
 import { getSuggestionsByDocumentId } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
-import { protectedRoute } from '@/lib/auth-decorators';
 
 export const GET = protectedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);

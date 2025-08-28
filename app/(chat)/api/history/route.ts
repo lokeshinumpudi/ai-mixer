@@ -1,7 +1,7 @@
-import type { NextRequest } from 'next/server';
+import { protectedRoute } from '@/lib/auth-decorators';
 import { getChatsByUserId } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
-import { protectedRoute } from '@/lib/auth-decorators';
+import type { NextRequest } from 'next/server';
 
 export const GET = protectedRoute(
   async (request: NextRequest, context, user) => {

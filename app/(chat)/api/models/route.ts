@@ -1,9 +1,9 @@
+import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
+import { enrichModelWithCapabilities } from '@/lib/ai/models';
+import { protectedRoute } from '@/lib/auth-decorators';
+import { SUPPORTED_MODEL_IDS } from '@/lib/constants';
 import { gateway } from '@/lib/gateway';
 import { NextResponse } from 'next/server';
-import { SUPPORTED_MODEL_IDS } from '@/lib/constants';
-import { enrichModelWithCapabilities } from '@/lib/ai/models';
-import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
-import { protectedRoute } from '@/lib/auth-decorators';
 
 export const dynamic = 'force-dynamic';
 

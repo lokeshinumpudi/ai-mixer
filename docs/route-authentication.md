@@ -13,16 +13,19 @@ The authentication system consists of three main components:
 ## 🚦 Route Access Levels
 
 ### 1. Public Routes
+
 - **No authentication required**
 - Accessible by anyone, including external services
 - Examples: webhooks, health checks, public APIs
 
-### 2. Protected Routes  
+### 2. Protected Routes
+
 - **Authentication required**
 - Must have valid session token
 - Examples: user data, chat functionality, file uploads
 
 ### 3. Conditional Routes
+
 - **Custom authentication logic**
 - Route handles its own auth requirements
 - Examples: guest access with limitations, public data with user context
@@ -36,20 +39,20 @@ Add your route pattern to `lib/route-config.ts`:
 ```typescript
 export const ROUTE_CONFIG: RouteConfig = {
   public: [
-    '/api/webhooks/**',        // All webhook routes
-    '/api/health',             // Health check
-    '/api/public/**',          // Public API namespace
+    "/api/webhooks/**", // All webhook routes
+    "/api/health", // Health check
+    "/api/public/**", // Public API namespace
   ],
-  
+
   protected: [
-    '/api/user/**',            // User-specific data
-    '/api/billing/orders',     // Protected billing operations
-    '/api/files/upload',       // File uploads
+    "/api/user/**", // User-specific data
+    "/api/billing/orders", // Protected billing operations
+    "/api/files/upload", // File uploads
   ],
-  
+
   conditional: [
-    '/api/chat/guest',         // Guest chat with limits
-    '/api/search/public',      // Public search with user context
+    "/api/chat/guest", // Guest chat with limits
+    "/api/search/public", // Public search with user context
   ],
 };
 ```
@@ -59,22 +62,24 @@ export const ROUTE_CONFIG: RouteConfig = {
 Choose the appropriate decorator based on your route type:
 
 #### Public Route Example
+
 ```typescript
 // app/api/webhooks/stripe/route.ts
-import { publicRoute } from '@/lib/auth-decorators';
+import { publicRoute } from "@/lib/auth-decorators";
 
 export const POST = publicRoute(async (request) => {
   // No authentication required
-  const signature = request.headers.get('stripe-signature');
+  const signature = request.headers.get("stripe-signature");
   // Process webhook...
   return Response.json({ received: true });
 });
 ```
 
 #### Protected Route Example
+
 ```typescript
 // app/api/user/profile/route.ts
-import { protectedRoute } from '@/lib/auth-decorators';
+import { protectedRoute } from "@/lib/auth-decorators";
 
 export const GET = protectedRoute(async (request, context, user) => {
   // user is guaranteed to exist and be authenticated
@@ -90,21 +95,25 @@ export const PUT = protectedRoute(async (request, context, user) => {
 ```
 
 #### Conditional Route Example
+
 ```typescript
 // app/api/chat/guest/route.ts
-import { conditionalRoute, handleGuestAccess } from '@/lib/auth-decorators';
+import { conditionalRoute, handleGuestAccess } from "@/lib/auth-decorators";
 
 export const POST = conditionalRoute(async (request) => {
   const { user, isGuest } = await handleGuestAccess(request);
-  
+
   if (isGuest) {
     // Check guest message limits
     const messageCount = await getGuestMessageCount(request.ip);
     if (messageCount >= 5) {
-      return new ChatSDKError('rate_limited', 'Guest limit exceeded').toResponse();
+      return new ChatSDKError(
+        "rate_limited",
+        "Guest limit exceeded"
+      ).toResponse();
     }
   }
-  
+
   // Process chat message...
   return streamChatResponse(user, message);
 });
@@ -117,14 +126,14 @@ export const POST = conditionalRoute(async (request) => {
 For complex auth requirements, use the base `withAuth` wrapper:
 
 ```typescript
-import { withAuth } from '@/lib/auth-decorators';
+import { withAuth } from "@/lib/auth-decorators";
 
 export const POST = withAuth(async (user, request) => {
   // Check user permissions
-  if (!hasPermission(user, 'admin')) {
-    return new ChatSDKError('forbidden', 'Admin access required').toResponse();
+  if (!hasPermission(user, "admin")) {
+    return new ChatSDKError("forbidden", "Admin access required").toResponse();
   }
-  
+
   // Admin-only logic...
   return Response.json({ success: true });
 });
@@ -135,16 +144,19 @@ export const POST = withAuth(async (user, request) => {
 For routes that need additional validation:
 
 ```typescript
-import { protectedRoute } from '@/lib/auth-decorators';
-import { validateSubscription } from '@/lib/billing';
+import { protectedRoute } from "@/lib/auth-decorators";
+import { validateSubscription } from "@/lib/billing";
 
 export const POST = protectedRoute(async (request, context, user) => {
   // Additional validation
   const subscription = await validateSubscription(user.id);
   if (!subscription.isActive) {
-    return new ChatSDKError('subscription_required', 'Active subscription required').toResponse();
+    return new ChatSDKError(
+      "subscription_required",
+      "Active subscription required"
+    ).toResponse();
   }
-  
+
   // Protected logic with subscription check...
   return Response.json({ data });
 });
@@ -153,12 +165,14 @@ export const POST = protectedRoute(async (request, context, user) => {
 ## 🧪 Testing Routes
 
 ### Test Public Routes
+
 ```bash
 curl -X GET "http://localhost:3000/api/health"
 # Expected: 200 OK (no auth required)
 ```
 
 ### Test Protected Routes
+
 ```bash
 # Without auth
 curl -X GET "http://localhost:3000/api/user/profile"
@@ -171,6 +185,7 @@ curl -X GET "http://localhost:3000/api/user/profile" \
 ```
 
 ### Test Conditional Routes
+
 ```bash
 # Guest access
 curl -X POST "http://localhost:3000/api/chat/guest" \
@@ -184,40 +199,41 @@ curl -X POST "http://localhost:3000/api/chat/guest" \
 ### From Old Middleware Pattern
 
 **Before:**
+
 ```typescript
 // middleware.ts - Hard-coded paths
-if (pathname.startsWith('/api/webhooks')) {
+if (pathname.startsWith("/api/webhooks")) {
   return NextResponse.next();
 }
-if (pathname.startsWith('/api/billing/webhook')) {
+if (pathname.startsWith("/api/billing/webhook")) {
   return NextResponse.next();
 }
 // ... more hardcoded checks
 ```
 
 **After:**
+
 ```typescript
 // lib/route-config.ts - Centralized configuration
-public: [
-  '/api/webhooks/**',
-  '/api/billing/**/webhook',
-]
+public: ["/api/webhooks/**", "/api/billing/**/webhook"];
 ```
 
 ### From Manual Auth Checks
 
 **Before:**
+
 ```typescript
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response("Unauthorized", { status: 401 });
   }
   // Route logic...
 }
 ```
 
 **After:**
+
 ```typescript
 export const GET = protectedRoute(async (request, context, user) => {
   // user is guaranteed to exist
@@ -245,14 +261,16 @@ export const GET = protectedRoute(async (request, context, user) => {
 ## 🔍 Debugging
 
 Check route access level:
-```typescript
-import { getRouteAccessLevel } from '@/lib/route-config';
 
-console.log(getRouteAccessLevel('/api/user/profile')); // 'protected'
-console.log(getRouteAccessLevel('/api/webhooks/stripe')); // 'public'
+```typescript
+import { getRouteAccessLevel } from "@/lib/route-config";
+
+console.log(getRouteAccessLevel("/api/user/profile")); // 'protected'
+console.log(getRouteAccessLevel("/api/webhooks/stripe")); // 'public'
 ```
 
 Enable debug logging in middleware:
+
 ```typescript
 console.log(`Route: ${pathname}, Access: ${accessLevel}, User: ${!!token}`);
 ```

@@ -5,8 +5,8 @@
  * and provide consistent auth handling.
  */
 
-import type { NextRequest } from 'next/server';
 import { auth } from '@/app/(auth)/auth';
+import type { NextRequest } from 'next/server';
 import { ChatSDKError } from './errors';
 
 export type RouteHandler = (
