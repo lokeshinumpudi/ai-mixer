@@ -1,17 +1,12 @@
-import { auth } from '@/app/(auth)/auth';
 import { ChatSDKError } from '@/lib/errors';
 import { getUserUsageSummary } from '@/lib/db/queries';
+import { protectedRoute } from '@/lib/auth-decorators';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
-  }
-
+export const GET = protectedRoute(async (request, context, user) => {
   try {
-    const usageSummary = await getUserUsageSummary(session.user.id);
+    const usageSummary = await getUserUsageSummary(user.id);
     return Response.json(usageSummary);
   } catch (error) {
     if (error instanceof ChatSDKError) {
@@ -23,4 +18,4 @@ export async function GET() {
       'Failed to get usage summary',
     ).toResponse();
   }
-}
+});
