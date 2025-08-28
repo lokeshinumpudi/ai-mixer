@@ -9,6 +9,7 @@ import { getWeather } from '@/lib/ai/tools/get-weather';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { updateDocument } from '@/lib/ai/tools/update-document';
 import { protectedRoute } from '@/lib/auth-decorators';
+import { SessionUtils } from '@/lib/auth/session-config';
 import { isProductionEnvironment } from '@/lib/constants';
 import {
   createStreamId,
@@ -186,12 +187,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
           tools: {
             getWeather,
             createDocument: createDocument({
-              session: {
-                user,
-                expires: new Date(
-                  Date.now() + 24 * 60 * 60 * 1000,
-                ).toISOString(),
-              },
+              session: SessionUtils.createSession(user, 'DEFAULT'),
               dataStream,
               selectedModel: {
                 id: selectedChatModel,
@@ -200,12 +196,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
               },
             }),
             updateDocument: updateDocument({
-              session: {
-                user,
-                expires: new Date(
-                  Date.now() + 24 * 60 * 60 * 1000,
-                ).toISOString(),
-              },
+              session: SessionUtils.createSession(user, 'DEFAULT'),
               dataStream,
               selectedModel: {
                 id: selectedChatModel,
@@ -214,12 +205,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
               },
             }),
             requestSuggestions: requestSuggestions({
-              session: {
-                user,
-                expires: new Date(
-                  Date.now() + 24 * 60 * 60 * 1000,
-                ).toISOString(),
-              },
+              session: SessionUtils.createSession(user, 'DEFAULT'),
               dataStream,
               selectedModel: {
                 id: selectedChatModel,

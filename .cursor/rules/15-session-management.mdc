@@ -1,0 +1,344 @@
+---
+alwaysApply: true
+description: Centralized session configuration and management patterns for security-critical operations
+---
+
+# Session Management Configuration
+
+Centralized session management system replacing hardcoded expiry values with type-safe, configurable duration constants.
+
+## Session Configuration - [lib/auth/session-config.ts](mdc:lib/auth/session-config.ts)
+
+### Session Duration Types
+
+```typescript
+export const SESSION_CONFIG = {
+  EXPIRY: {
+    DEFAULT: 24 * 60 * 60 * 1000, // 24 hours - Standard session
+    SHORT: 60 * 60 * 1000, // 1 hour - Sensitive operations
+    EXTENDED: 7 * 24 * 60 * 60 * 1000, // 7 days - Trusted environments
+    REMEMBER_ME: 30 * 24 * 60 * 60 * 1000, // 30 days - User preference
+    GUEST: 2 * 60 * 60 * 1000, // 2 hours - Guest users
+  },
+
+  ANALYTICS: {
+    USAGE_HISTORY: 30 * 24 * 60 * 60 * 1000, // 30 days - Usage tracking
+    ACTIVITY_LOG: 90 * 24 * 60 * 60 * 1000, // 90 days - Activity logs
+    AUDIT_TRAIL: 365 * 24 * 60 * 60 * 1000, // 1 year - Audit trails
+  },
+
+  REFRESH: {
+    THRESHOLD: 2 * 60 * 60 * 1000, // Refresh when < 2 hours remain
+    GRACE_PERIOD: 5 * 60 * 1000, // 5 minutes grace period
+  },
+} as const;
+```
+
+### Session Utility Functions
+
+```typescript
+export const SessionUtils = {
+  // Generate session expiry date
+  getExpiryDate(durationType: SessionDurationType = "DEFAULT"): string {
+    const duration = SESSION_CONFIG.EXPIRY[durationType];
+    return new Date(Date.now() + duration).toISOString();
+  },
+
+  // Check if session is near expiry
+  isNearExpiry(expires: string): boolean {
+    const expiryTime = new Date(expires).getTime();
+    const timeRemaining = expiryTime - Date.now();
+    return timeRemaining <= SESSION_CONFIG.REFRESH.THRESHOLD;
+  },
+
+  // Check if session is expired
+  isExpired(expires: string): boolean {
+    return Date.now() >= new Date(expires).getTime();
+  },
+
+  // Create session object with proper expiry
+  createSession(user: any, durationType: SessionDurationType = "DEFAULT") {
+    return {
+      user,
+      expires: this.getExpiryDate(durationType),
+    };
+  },
+};
+```
+
+## Usage Patterns
+
+### Creating Sessions in API Routes
+
+```typescript
+// Before: Hardcoded values ❌
+const session = {
+  user,
+  expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+};
+
+// After: Centralized configuration ✅
+import { SessionUtils } from "@/lib/auth/session-config";
+
+const session = SessionUtils.createSession(user, "DEFAULT");
+const shortSession = SessionUtils.createSession(user, "SHORT");
+const guestSession = SessionUtils.createSession(guestUser, "GUEST");
+```
+
+### Session Validation
+
+```typescript
+import { SessionUtils } from "@/lib/auth/session-config";
+
+// Check session expiry before sensitive operations
+if (SessionUtils.isExpired(session.expires)) {
+  return new ChatSDKError(
+    "session_expired",
+    "Please log in again"
+  ).toResponse();
+}
+
+// Warn users about upcoming expiry
+if (SessionUtils.isNearExpiry(session.expires)) {
+  // Trigger refresh warning in UI
+  dataStream.write({
+    type: "session-warning",
+    data: { message: "Session will expire soon" },
+  });
+}
+```
+
+### Usage in Tool Functions
+
+```typescript
+// app/(chat)/api/chat/route.ts
+import { SessionUtils } from "@/lib/auth/session-config";
+
+export const POST = protectedRoute(async (request, context, user) => {
+  const result = streamText({
+    tools: {
+      createDocument: createDocument({
+        session: SessionUtils.createSession(user, "DEFAULT"),
+        dataStream,
+        selectedModel: {
+          /* ... */
+        },
+      }),
+      updateDocument: updateDocument({
+        session: SessionUtils.createSession(user, "DEFAULT"),
+        dataStream,
+        selectedModel: {
+          /* ... */
+        },
+      }),
+    },
+  });
+});
+```
+
+## Security Duration Guidelines
+
+### Session Type Recommendations
+
+| Session Type  | Duration | Use Case                          | Security Level |
+| ------------- | -------- | --------------------------------- | -------------- |
+| `SHORT`       | 1 hour   | Payment processing, admin actions | High           |
+| `DEFAULT`     | 24 hours | Normal user sessions              | Standard       |
+| `EXTENDED`    | 7 days   | Trusted devices, development      | Low            |
+| `REMEMBER_ME` | 30 days  | User convenience                  | Varies         |
+| `GUEST`       | 2 hours  | Unauthenticated users             | Limited        |
+
+### Security Best Practices
+
+```typescript
+// Use SHORT sessions for sensitive operations
+export const POST = protectedRoute(async (request, context, user) => {
+  // Payment processing requires short session
+  if (isPaymentOperation(request)) {
+    const shortSession = SessionUtils.createSession(user, "SHORT");
+    // Validate session age for sensitive operations
+    if (SessionUtils.isNearExpiry(shortSession.expires)) {
+      return new ChatSDKError("reauthentication_required").toResponse();
+    }
+  }
+
+  // Continue with operation
+});
+```
+
+## Data Retention Patterns
+
+### Database Queries with Retention Periods
+
+```typescript
+// lib/db/queries.ts
+import { SESSION_CONFIG } from "@/lib/auth/session-config";
+
+// Before: Hardcoded retention ❌
+export async function getUsageHistory(userId: string) {
+  const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  // ...
+}
+
+// After: Centralized configuration ✅
+export async function getUsageHistory(userId: string) {
+  const start = new Date(
+    now.getTime() - SESSION_CONFIG.ANALYTICS.USAGE_HISTORY
+  );
+  // ...
+}
+```
+
+### Activity Log Cleanup
+
+```typescript
+// Automated cleanup with proper retention periods
+export async function cleanupOldData() {
+  const cutoffDate = new Date(
+    Date.now() - SESSION_CONFIG.ANALYTICS.ACTIVITY_LOG
+  );
+
+  await db.delete(activityLog).where(lt(activityLog.createdAt, cutoffDate));
+}
+```
+
+## Environment-Based Configuration
+
+### Production Environment Customization
+
+```typescript
+// Optional: Environment-based duration override
+const getSessionDuration = (type: SessionDurationType) => {
+  const base = SESSION_CONFIG.EXPIRY[type];
+
+  // Shorter sessions in production for security
+  if (process.env.NODE_ENV === "production") {
+    return Math.min(base, 12 * 60 * 60 * 1000); // Max 12 hours
+  }
+
+  return base;
+};
+```
+
+### Development vs Production
+
+```typescript
+const SESSION_OVERRIDES = {
+  development: {
+    DEFAULT: 7 * 24 * 60 * 60 * 1000, // 7 days for dev convenience
+    SHORT: 4 * 60 * 60 * 1000, // 4 hours for dev testing
+  },
+  production: {
+    DEFAULT: 8 * 60 * 60 * 1000, // 8 hours for security
+    SHORT: 30 * 60 * 1000, // 30 minutes for security
+  },
+};
+```
+
+## Type Safety and Validation
+
+### Session Duration Types
+
+```typescript
+export type SessionDurationType = keyof typeof SESSION_CONFIG.EXPIRY;
+export type SessionExpiryConfig = typeof SESSION_CONFIG.EXPIRY;
+export type SessionConfig = typeof SESSION_CONFIG;
+
+// Type-safe session creation
+const createTypedSession = <T extends SessionDurationType>(
+  user: User,
+  type: T
+): SessionWithExpiry => {
+  return SessionUtils.createSession(user, type);
+};
+```
+
+### Runtime Validation
+
+```typescript
+import { z } from "zod";
+
+const SessionSchema = z.object({
+  user: z.object({
+    id: z.string(),
+    email: z.string().email(),
+    type: z.enum(["free", "pro", "guest"]),
+  }),
+  expires: z.string().datetime(),
+});
+
+// Validate session objects
+export function validateSession(session: unknown): Session {
+  return SessionSchema.parse(session);
+}
+```
+
+## Migration from Hardcoded Values
+
+### Common Anti-Patterns to Fix
+
+```typescript
+// ❌ DON'T: Hardcoded expiry everywhere
+const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+const historyPeriod = 30 * 24 * 60 * 60 * 1000;
+const refreshThreshold = 2 * 60 * 60 * 1000;
+
+// ✅ DO: Use centralized configuration
+const expires = SessionUtils.getExpiryDate("DEFAULT");
+const historyPeriod = SESSION_CONFIG.ANALYTICS.USAGE_HISTORY;
+const refreshThreshold = SESSION_CONFIG.REFRESH.THRESHOLD;
+```
+
+### Audit Checklist
+
+- [ ] Replace all hardcoded `24 * 60 * 60 * 1000` patterns
+- [ ] Use `SessionUtils.createSession()` for session objects
+- [ ] Apply appropriate duration types for use cases
+- [ ] Implement session validation in sensitive operations
+- [ ] Add session refresh warnings in UI
+- [ ] Update data retention queries
+
+## Security Monitoring
+
+### Session Analytics
+
+```typescript
+export function logSessionEvent(event: {
+  userId: string;
+  sessionType: SessionDurationType;
+  action: "created" | "expired" | "refreshed";
+  userAgent?: string;
+  ip?: string;
+}) {
+  // Log session events for security monitoring
+  console.log(`[SESSION] ${event.action} for user ${event.userId}`);
+
+  // In production: send to monitoring service
+  if (process.env.NODE_ENV === "production") {
+    // sendToMonitoringService(event);
+  }
+}
+```
+
+### Suspicious Activity Detection
+
+```typescript
+export function detectSuspiciousSession(sessions: Session[]): boolean {
+  // Multiple concurrent sessions from different IPs
+  const uniqueIPs = new Set(sessions.map((s) => s.ip));
+  if (uniqueIPs.size > 3) {
+    return true;
+  }
+
+  // Session created too frequently
+  const recentSessions = sessions.filter(
+    (s) =>
+      Date.now() - new Date(s.createdAt).getTime() <
+      SESSION_CONFIG.REFRESH.GRACE_PERIOD
+  );
+
+  return recentSessions.length > 5;
+}
+```
+
+This centralized session management ensures consistent security policies, eliminates hardcoded values, and provides type-safe session handling across the entire application.

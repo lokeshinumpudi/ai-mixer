@@ -20,6 +20,7 @@ import type { UserType } from '@/app/(auth)/auth';
 import type { ArtifactKind } from '@/components/artifact';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import { SESSION_CONFIG } from '@/lib/auth/session-config';
 import { PRICING } from '@/lib/constants';
 import { sql } from 'drizzle-orm';
 import { ChatSDKError } from '../errors';
@@ -1138,7 +1139,9 @@ export async function getUserSubscription(userId: string) {
 export async function getUsageHistory(userId: string) {
   try {
     const now = new Date();
-    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const start = new Date(
+      now.getTime() - SESSION_CONFIG.ANALYTICS.USAGE_HISTORY,
+    );
     const startDateString = `${start.getUTCFullYear()}-${String(
       start.getUTCMonth() + 1,
     ).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`;
