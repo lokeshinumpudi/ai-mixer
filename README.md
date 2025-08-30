@@ -1,5 +1,4 @@
 <a href="#">
-  <img alt="AI Comparo - Multi-Provider AI Chat Platform" src="app/(chat)/opengraph-image.png">
   <h1 align="center">AI Comparo</h1>
 </a>
 
@@ -139,20 +138,23 @@ Create a `.env.local` file with the following variables:
 
 ```bash
 # Database
-DATABASE_URL="postgresql://..."
+POSTGRES_URL="postgresql://..."
+
+#Storage
+BLOB_READ_WRITE_TOKEN=""
 
 # Authentication
 AUTH_SECRET="your-auth-secret"
 NEXTAUTH_URL="http://localhost:3000"
 
-# AI Providers
-XAI_API_KEY="your-xai-api-key"
-GOOGLE_GENERATIVE_AI_API_KEY="your-google-api-key"
+#AI providers
+AI_GATEWAY_API_KEY=""
 
 # Payments (optional for development)
 RAZORPAY_KEY_ID="your-razorpay-key"
 RAZORPAY_KEY_SECRET="your-razorpay-secret"
 NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL="your-payment-page-url"
+RAZORPAY_WEBHOOK_SECRET="razorpay-webhook-secret-from-dashboard"
 ```
 
 ### Installation & Development
@@ -207,4 +209,4 @@ hooks/               # Custom React hooks
 
 ---
 
-Built by [Lokesh Inumpudi](https://github.com/lokesh-inumpudi1) with ❤️ using Next.js 15 and the AI SDK.
+Built by [Lokesh Inumpudi](https://github.com/lokeshinumpudi) with ❤️ using Next.js 15 and the AI SDK.

@@ -5,7 +5,8 @@ echo "🔍 Running pre-commit checks..."
 
 # Get all staged files for processing
 staged_files=$(git diff --cached --name-only --diff-filter=ACM || true)
-staged_code_files=$(echo "$staged_files" | grep -E '\.(ts|tsx|js|jsx|json|md|css)$' || true)
+# Only format files that Biome supports (JS, TS, JSON - not MD or CSS)
+staged_code_files=$(echo "$staged_files" | grep -E '\.(ts|tsx|js|jsx|json)$' || true)
 
 # Auto-format staged files
 echo "→ Formatting staged files..."
