@@ -702,6 +702,22 @@ export async function createPaymentEvent({
   metadata?: any;
 }) {
   try {
+    console.log('💾 Creating payment event record...');
+    console.log('📝 Inserting payment event with data:', {
+      paymentId,
+      orderId,
+      userId,
+      eventType,
+      status,
+      amountPaise,
+      currency,
+      method,
+      errorCode,
+      errorDescription,
+      metadataType: typeof metadata,
+      metadataKeys: metadata ? Object.keys(metadata) : [],
+    });
+
     await db.insert(paymentEvent).values({
       paymentId,
       orderId,
@@ -714,11 +730,23 @@ export async function createPaymentEvent({
       errorCode,
       errorDescription,
       metadata,
+      createdAt: new Date(), // ✅ Fix: Explicitly set createdAt
     });
+
+    console.log('✅ Payment event created successfully');
   } catch (error) {
+    console.error('❌ Database error in createPaymentEvent:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      paymentId,
+      userId,
+    });
+
     throw new ChatSDKError(
       'bad_request:database',
-      'Failed to create payment event',
+      `Failed to create payment event: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 }
@@ -945,23 +973,55 @@ export async function setSubscriptionPlan({
   currentPeriodEnd?: Date | null;
 }) {
   try {
-    await db
-      .insert(subscription)
-      .values({
+    console.log('💎 Setting subscription plan:', {
+      userId,
+      plan,
+      status,
+      currentPeriodEnd: currentPeriodEnd?.toISOString(),
+    });
+
+    // Check if a subscription already exists for this user
+    const existing = await db
+      .select({ id: subscription.id })
+      .from(subscription)
+      .where(eq(subscription.userId, userId))
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing row
+      await db
+        .update(subscription)
+        .set({
+          plan,
+          status,
+          currentPeriodEnd: currentPeriodEnd ?? null,
+        })
+        .where(eq(subscription.userId, userId));
+    } else {
+      // Insert new subscription row
+      await db.insert(subscription).values({
         userId,
         plan,
         status,
         currentPeriodEnd: currentPeriodEnd ?? null,
         createdAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: subscription.userId,
-        set: { plan, status, currentPeriodEnd: currentPeriodEnd ?? null },
       });
+    }
+
+    console.log('✅ Subscription plan set successfully');
   } catch (error) {
+    console.error('❌ Database error in setSubscriptionPlan:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId,
+      plan,
+    });
+
     throw new ChatSDKError(
       'bad_request:database',
-      'Failed to set subscription plan',
+      `Failed to set subscription plan: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 }

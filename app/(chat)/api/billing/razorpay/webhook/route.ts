@@ -60,21 +60,23 @@ const PROCESSED_EVENTS = [
 ] as const;
 
 function verifySignature(payload: string, signature: string | null) {
-  if (!signature) return false;
+  if (!signature) {
+    console.log('❌ No signature provided');
+    return false;
+  }
+
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
+
   const expected = crypto
     .createHmac('sha256', secret)
     .update(payload)
     .digest('hex');
 
-  console.log('signature at verification>>', signature);
-  console.log('expected>>', expected);
   return expected === signature;
 }
 
 export async function POST(request: Request) {
   const startTime = Date.now();
-  console.log('🔥 Webhook START - processing payment webhook');
 
   let raw: string;
   let hdrs: any;
@@ -82,11 +84,9 @@ export async function POST(request: Request) {
 
   try {
     raw = await request.text();
-    console.log('📦 Raw payload received, length:', raw.length);
 
     hdrs = await nextHeaders();
     sig = hdrs.get('x-razorpay-signature');
-    console.log(`🔐 Signature received: ${sig?.substring(0, 20)}...`);
   } catch (error) {
     console.error('❌ Failed to read request:', error);
     return new ChatSDKError(
@@ -98,7 +98,6 @@ export async function POST(request: Request) {
   let parsedEvent: any;
   try {
     parsedEvent = JSON.parse(raw);
-    console.log('✅ JSON parsed successfully, event type:', parsedEvent?.event);
   } catch (parseError) {
     console.error('❌ Failed to parse webhook payload:', parseError);
     return new ChatSDKError(
@@ -114,16 +113,6 @@ export async function POST(request: Request) {
     parsedEvent.payload?.order?.entity?.id ||
     'unknown';
 
-  console.log('🔔 Webhook received:', {
-    event: eventType,
-    eventId,
-    webhookId,
-    timestamp: new Date().toISOString(),
-    isProcessedEvent: PROCESSED_EVENTS.includes(eventType as any),
-  });
-
-  console.log('🔐 Starting signature verification...');
-
   if (!verifySignature(raw, sig)) {
     console.error('❌ Webhook signature verification failed:', {
       event: eventType,
@@ -136,13 +125,9 @@ export async function POST(request: Request) {
     ).toResponse();
   }
 
-  console.log('✅ Webhook signature verified - proceeding with processing');
-
   try {
     // Handle payment success events
     if (PAYMENT_SUCCESS_EVENTS.includes(eventType as any)) {
-      console.log('💰 Processing payment success event:', eventType);
-
       const paymentEntity = parsedEvent.payload.payment.entity;
       const orderId: string = paymentEntity.order_id;
       const paymentId: string = paymentEntity.id;
@@ -151,20 +136,8 @@ export async function POST(request: Request) {
       const paymentMethod = paymentEntity.method;
       const paymentStatus = paymentEntity.status;
 
-      console.log('💳 Payment details:', {
-        event: eventType,
-        paymentId,
-        orderId,
-        email,
-        amount: amountPaise,
-        method: paymentMethod,
-        status: paymentStatus,
-        currency: paymentEntity.currency,
-      });
-
       // Update payment record if we have an order
       if (orderId) {
-        console.log('📝 Updating payment record:', { orderId, paymentId });
         await updatePaymentFromWebhook({
           orderId,
           paymentId,
@@ -183,16 +156,9 @@ export async function POST(request: Request) {
         | undefined;
       userId = notesUserIdFromOrder || notesUserIdFromPayment;
 
-      console.log('🔍 User identification:', {
-        userIdFromOrderNotes: notesUserIdFromOrder,
-        userIdFromPaymentNotes: notesUserIdFromPayment,
-        finalUserId: userId,
-        email,
-      });
-
       // Fallback: find user by email if userId not in notes
       if (!userId && email) {
-        console.log('📧 Looking up user by email:', email);
+        console.log('🔍 Looking up user by email:', email);
         try {
           const users = await getUser(email);
           if (users.length > 0) {
