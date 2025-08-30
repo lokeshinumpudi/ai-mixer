@@ -24,6 +24,7 @@ const tabs = [
 ];
 
 export default function SettingsPage() {
+  // All hooks must be called at the top level, before any conditional logic
   const { data: session, update: updateSession } = useSession();
   const [activeTab, setActiveTab] = useState('history');
   const { plan, usageHistory, mutate: mutateUsage } = useUsage();
@@ -31,34 +32,6 @@ export default function SettingsPage() {
     refreshInterval: 5000, // Check every 5 seconds for recent payments
   });
   const { setOpen, setOpenMobile } = useSidebar();
-
-  const usage = usageHistory;
-  const currentPlan = plan ?? {
-    quota: 20,
-    used: 1,
-    resetInfo: 'tomorrow at 5:29 AM',
-    type: 'daily' as const,
-    remaining: 19,
-    isOverLimit: false,
-  };
-  const userType = session?.user?.type || 'free';
-  const isProUser = userType === 'pro';
-
-  // Override plan display for Pro users with correct quota and messaging
-  const displayPlan = isProUser
-    ? {
-        ...currentPlan,
-        quota: 1000,
-        type: 'monthly' as const,
-        resetInfo: 'monthly at 5:29 AM',
-        remaining: 1000 - currentPlan.used,
-      }
-    : currentPlan;
-
-  const usedPct = Math.min(
-    100,
-    Math.round(((displayPlan.used ?? 0) / displayPlan.quota) * 100),
-  );
 
   // Close sidebar whenever we land on settings (mobile or desktop)
   useEffect(() => {
@@ -80,6 +53,31 @@ export default function SettingsPage() {
       mutateUsage();
     }
   }, [billingStatus?.hasRecentPurchaseCredit, updateSession, mutateUsage]);
+
+  const usage = usageHistory;
+
+  // Rely solely on API plan data; avoid default flash
+  if (!plan) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 overflow-hidden" />
+        </div>
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+          <p className="text-sm text-muted-foreground">Loading plan…</p>
+        </div>
+      </div>
+    );
+  }
+
+  const displayPlan = plan;
+  const isProUser = displayPlan.type === 'monthly';
+  const userType = isProUser ? 'pro' : 'free';
+
+  const usedPct = Math.min(
+    100,
+    Math.round(((displayPlan.used ?? 0) / displayPlan.quota) * 100),
+  );
 
   return (
     <div className="min-h-screen bg-background">

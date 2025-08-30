@@ -125,6 +125,7 @@ export const authenticate = async (
       return { status: 'success', isNewUser: true };
     }
   } catch (error) {
+    console.error('🚀 AUTH: authenticate() error:', error);
     if (error instanceof z.ZodError) {
       return { status: 'invalid_data' };
     }
