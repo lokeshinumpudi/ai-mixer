@@ -154,6 +154,7 @@ AI_GATEWAY_API_KEY=""
 RAZORPAY_KEY_ID="your-razorpay-key"
 RAZORPAY_KEY_SECRET="your-razorpay-secret"
 NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL="your-payment-page-url"
+RAZORPAY_WEBHOOK_SECRET="razorpay-webhook-secret-from-dashboard"
 ```
 
 ### Installation & Development
