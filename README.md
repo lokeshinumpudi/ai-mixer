@@ -209,4 +209,4 @@ hooks/               # Custom React hooks
 
 ---
 
-Built by [Lokesh Inumpudi](https://github.com/lokesh-inumpudi1) with ❤️ using Next.js 15 and the AI SDK.
+Built by [Lokesh Inumpudi](https://github.com/lokeshinumpudi) with ❤️ using Next.js 15 and the AI SDK.
