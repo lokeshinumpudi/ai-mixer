@@ -1,5 +1,5 @@
+import { PRICING } from '@/lib/constants';
 import {
-  addCredit,
   createPaymentEvent,
   createRefund,
   createUserNotification,
@@ -10,17 +10,54 @@ import {
   upsertServiceDowntime,
 } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
-import {
-  PROCESSED_EVENTS,
-  RazorpayEvent,
-  isPaymentSuccessEvent,
-} from '@/lib/types/razorpay-events';
 import { headers as nextHeaders } from 'next/headers';
 import crypto from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 
-// Webhook processing utilities
+// Razorpay webhook event types from official docs
+// Reference: https://razorpay.com/docs/webhooks/payloads/payments/
+enum RazorpayEvent {
+  // Payment events
+  PAYMENT_AUTHORIZED = 'payment.authorized',
+  PAYMENT_CAPTURED = 'payment.captured',
+  PAYMENT_FAILED = 'payment.failed',
+
+  // Order events
+  ORDER_PAID = 'order.paid',
+
+  // Payment downtime events
+  PAYMENT_DOWNTIME_STARTED = 'payment.downtime.started',
+  PAYMENT_DOWNTIME_RESOLVED = 'payment.downtime.resolved',
+  PAYMENT_DOWNTIME_UPDATED = 'payment.downtime.updated',
+
+  // Subscription events (if using subscriptions)
+  SUBSCRIPTION_ACTIVATED = 'subscription.activated',
+  SUBSCRIPTION_CHARGED = 'subscription.charged',
+  SUBSCRIPTION_CANCELLED = 'subscription.cancelled',
+  SUBSCRIPTION_PAUSED = 'subscription.paused',
+  SUBSCRIPTION_RESUMED = 'subscription.resumed',
+  SUBSCRIPTION_PENDING = 'subscription.pending',
+  SUBSCRIPTION_HALTED = 'subscription.halted',
+  SUBSCRIPTION_COMPLETED = 'subscription.completed',
+
+  // Refund events (if handling refunds)
+  REFUND_PROCESSED = 'refund.processed',
+  REFUND_FAILED = 'refund.failed',
+  REFUND_SPEED_CHANGED = 'refund.speed.changed',
+}
+
+// Events that indicate successful payment completion
+const PAYMENT_SUCCESS_EVENTS = [
+  RazorpayEvent.PAYMENT_CAPTURED,
+  RazorpayEvent.ORDER_PAID,
+] as const;
+
+// Events we actively process vs just log
+const PROCESSED_EVENTS = [
+  ...PAYMENT_SUCCESS_EVENTS,
+  RazorpayEvent.SUBSCRIPTION_ACTIVATED,
+] as const;
 
 function verifySignature(payload: string, signature: string | null) {
   if (!signature) return false;
@@ -29,20 +66,41 @@ function verifySignature(payload: string, signature: string | null) {
     .createHmac('sha256', secret)
     .update(payload)
     .digest('hex');
+
+  console.log('signature at verification>>', signature);
+  console.log('expected>>', expected);
   return expected === signature;
 }
 
 export async function POST(request: Request) {
   const startTime = Date.now();
-  const raw = await request.text();
-  const hdrs = await nextHeaders();
-  const sig = hdrs.get('x-razorpay-signature');
+  console.log('🔥 Webhook START - processing payment webhook');
+
+  let raw: string;
+  let hdrs: any;
+  let sig: string | null;
+
+  try {
+    raw = await request.text();
+    console.log('📦 Raw payload received, length:', raw.length);
+
+    hdrs = await nextHeaders();
+    sig = hdrs.get('x-razorpay-signature');
+    console.log(`🔐 Signature received: ${sig?.substring(0, 20)}...`);
+  } catch (error) {
+    console.error('❌ Failed to read request:', error);
+    return new ChatSDKError(
+      'bad_request:api',
+      'Failed to read webhook payload',
+    ).toResponse();
+  }
 
   let parsedEvent: any;
   try {
     parsedEvent = JSON.parse(raw);
+    console.log('✅ JSON parsed successfully, event type:', parsedEvent?.event);
   } catch (parseError) {
-    console.error('Failed to parse webhook payload:', parseError);
+    console.error('❌ Failed to parse webhook payload:', parseError);
     return new ChatSDKError(
       'bad_request:api',
       'Invalid JSON payload',
@@ -64,6 +122,8 @@ export async function POST(request: Request) {
     isProcessedEvent: PROCESSED_EVENTS.includes(eventType as any),
   });
 
+  console.log('🔐 Starting signature verification...');
+
   if (!verifySignature(raw, sig)) {
     console.error('❌ Webhook signature verification failed:', {
       event: eventType,
@@ -76,11 +136,11 @@ export async function POST(request: Request) {
     ).toResponse();
   }
 
-  console.log('✅ Webhook signature verified');
+  console.log('✅ Webhook signature verified - proceeding with processing');
 
   try {
     // Handle payment success events
-    if (isPaymentSuccessEvent(eventType)) {
+    if (PAYMENT_SUCCESS_EVENTS.includes(eventType as any)) {
       console.log('💰 Processing payment success event:', eventType);
 
       const paymentEntity = parsedEvent.payload.payment.entity;
@@ -180,37 +240,68 @@ export async function POST(request: Request) {
         });
       }
 
-      // Credit user account
+      // Upgrade user plan based on payment amount
       if (userId && Number.isFinite(amountPaise)) {
-        const tokens = Math.floor(amountPaise / 100) * 100; // 100 tokens per INR
-        console.log('💎 Adding credits:', {
+        console.log('✅ Payment captured successfully:', {
           userId,
-          tokens,
-          amountPaise,
-          conversion: '100 tokens per INR',
-        });
-
-        await addCredit({ userId, tokensDelta: tokens, reason: 'purchase' });
-
-        // Create success notification
-        await createUserNotification({
-          userId,
-          type: 'payment_success',
-          title: 'Payment Successful',
-          message: `Your payment of ₹${
-            amountPaise / 100
-          } has been processed. ${tokens} tokens added to your account.`,
-          metadata: { paymentId, tokens, amount: amountPaise },
-        });
-
-        console.log('✅ Credits added successfully:', {
-          userId,
-          tokens,
           paymentId,
+          amountPaise,
+          currency: paymentEntity.currency,
           processingTime: `${Date.now() - startTime}ms`,
         });
+
+        // Check if payment amount matches pro plan price
+        const amountInRupees = amountPaise / 100;
+        if (amountInRupees === PRICING.PAID_TIER.priceInRupees) {
+          console.log('💎 Upgrading user to Pro plan:', {
+            userId,
+            paymentAmount: amountInRupees,
+            plan: 'pro',
+          });
+
+          // Set subscription to pro plan for 1 month
+          const currentPeriodEnd = new Date();
+          currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+
+          await setSubscriptionPlan({
+            userId,
+            plan: 'pro',
+            status: 'active',
+            currentPeriodEnd,
+          });
+
+          // Create upgrade notification
+          await createUserNotification({
+            userId,
+            type: 'plan_upgraded',
+            title: 'Welcome to Pro!',
+            message: `Your Pro plan is now active! You now have ${PRICING.PAID_TIER.monthlyMessages} messages per month and access to all premium models.`,
+            metadata: {
+              plan: 'pro',
+              paymentId,
+              amount: amountPaise,
+              monthlyMessages: PRICING.PAID_TIER.monthlyMessages,
+            },
+          });
+
+          console.log('🎉 User successfully upgraded to Pro plan:', {
+            userId,
+            plan: 'pro',
+            currentPeriodEnd: currentPeriodEnd.toISOString(),
+            paymentId,
+          });
+        } else {
+          console.warn("⚠️ Payment amount doesn't match any plan:", {
+            userId,
+            paymentAmount: amountInRupees,
+            expectedProPrice: PRICING.PAID_TIER.priceInRupees,
+          });
+        }
       } else {
-        console.error('❌ Invalid credit parameters:', { userId, amountPaise });
+        console.error('❌ Invalid payment parameters:', {
+          userId,
+          amountPaise,
+        });
       }
     }
 

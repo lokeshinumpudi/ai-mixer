@@ -1,6 +1,6 @@
 import type { UserType } from '@/app/(auth)/auth';
+import { FREE_MODELS, PRICING, PRO_MODELS } from '@/lib/constants';
 import type { ChatModel } from './models';
-import { FREE_MODELS, PRO_MODELS, PRICING } from '@/lib/constants';
 
 interface Entitlements {
   maxMessagesPerDay?: number; // For free tier

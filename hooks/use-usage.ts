@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -43,6 +43,8 @@ export function useUsage() {
 
   return {
     usage: currentUsage,
+    usageHistory: data?.usage ?? [],
+    plan: data?.plan,
     isLoading: !error && !data,
     isError: error,
     mutate,

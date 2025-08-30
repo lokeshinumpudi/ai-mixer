@@ -1,10 +1,15 @@
-import { protectedRoute } from '@/lib/auth-decorators';
+import { auth } from '@/app/(auth)/auth';
 import { createPaymentRecord } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
-export const POST = protectedRoute(async (request, context, user) => {
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user) {
+    return new ChatSDKError('unauthorized:chat').toResponse();
+  }
+
   let body: {
     amountPaise: number;
     currency?: string;
@@ -49,7 +54,7 @@ export const POST = protectedRoute(async (request, context, user) => {
         notes: {
           planName,
           planType,
-          userId: user.id,
+          userId: session.user.id,
         },
       }),
     });
@@ -77,7 +82,7 @@ export const POST = protectedRoute(async (request, context, user) => {
     const order = await res.json();
 
     await createPaymentRecord({
-      userId: user.id,
+      userId: session.user.id,
       orderId: order.id,
       amountPaise,
       currency,
@@ -93,4 +98,4 @@ export const POST = protectedRoute(async (request, context, user) => {
     console.error(error);
     return new ChatSDKError('bad_request:api').toResponse();
   }
-});
+}

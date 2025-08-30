@@ -1,16 +1,17 @@
 'use client';
 
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { useSidebar } from '@/components/ui/sidebar';
+import { useUsage } from '@/hooks/use-usage';
+import { fetcher } from '@/lib/utils';
+import { ArrowLeft } from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { fetcher } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { useSession } from 'next-auth/react';
-import { useSidebar } from '@/components/ui/sidebar';
 
 const tabs = [
   { id: 'account', label: 'Account' },
@@ -23,25 +24,40 @@ const tabs = [
 ];
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const [activeTab, setActiveTab] = useState('history');
-  const { data } = useSWR('/api/usage/summary', fetcher);
+  const { plan, usageHistory, mutate: mutateUsage } = useUsage();
+  const { data: billingStatus } = useSWR('/api/billing/status', fetcher, {
+    refreshInterval: 5000, // Check every 5 seconds for recent payments
+  });
   const { setOpen, setOpenMobile } = useSidebar();
 
-  const usage = data?.usage ?? [];
-  const plan = data?.plan ?? {
-    name: 'Free',
+  const usage = usageHistory;
+  const currentPlan = plan ?? {
     quota: 20,
     used: 1,
     resetInfo: 'tomorrow at 5:29 AM',
-    type: 'daily',
+    type: 'daily' as const,
+    remaining: 19,
+    isOverLimit: false,
   };
   const userType = session?.user?.type || 'free';
   const isProUser = userType === 'pro';
 
+  // Override plan display for Pro users with correct quota and messaging
+  const displayPlan = isProUser
+    ? {
+        ...currentPlan,
+        quota: 1000,
+        type: 'monthly' as const,
+        resetInfo: 'monthly at 5:29 AM',
+        remaining: 1000 - currentPlan.used,
+      }
+    : currentPlan;
+
   const usedPct = Math.min(
     100,
-    Math.round(((plan.used ?? 0) / plan.quota) * 100),
+    Math.round(((displayPlan.used ?? 0) / displayPlan.quota) * 100),
   );
 
   // Close sidebar whenever we land on settings (mobile or desktop)
@@ -53,6 +69,17 @@ export default function SettingsPage() {
       // no-op: sidebar context always exists under (chat) layout
     }
   }, [setOpen, setOpenMobile]);
+
+  // Refresh session and data when payment is detected
+  useEffect(() => {
+    if (billingStatus?.hasRecentPurchaseCredit) {
+      console.log('💳 Recent payment detected, refreshing session and data...');
+      // Refresh session to get updated user type
+      updateSession();
+      // Refresh usage data to get updated plan info
+      mutateUsage();
+    }
+  }, [billingStatus?.hasRecentPurchaseCredit, updateSession, mutateUsage]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -106,14 +133,14 @@ export default function SettingsPage() {
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium">Message Usage</span>
                 <span className="text-sm text-muted-foreground">
-                  {plan.used}/{plan.quota}
+                  {displayPlan.used}/{displayPlan.quota}
                 </span>
               </div>
               <Progress value={usedPct} className="h-2 mb-2" />
               <div className="flex justify-between items-center text-xs text-muted-foreground mb-3">
-                <span>{plan.quota - plan.used} remaining</span>
+                <span>{displayPlan.quota - displayPlan.used} remaining</span>
                 <span className="truncate ml-2 max-w-[120px]">
-                  Resets {plan.resetInfo}
+                  Resets {displayPlan.resetInfo}
                 </span>
               </div>
               {!isProUser && (
@@ -187,20 +214,20 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle className="text-base">Message Usage</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Resets {plan.resetInfo}
+                  Resets {displayPlan.resetInfo}
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <div className="flex justify-between text-sm mb-2">
-                    <span>{isProUser ? 'Pro' : 'Standard'}</span>
+                    <span>{isProUser ? 'Pro Plan' : 'Free Plan'}</span>
                     <span>
-                      {plan.used}/{plan.quota}
+                      {displayPlan.used}/{displayPlan.quota}
                     </span>
                   </div>
                   <Progress value={usedPct} className="h-2" />
                   <p className="text-xs text-muted-foreground mt-1">
-                    {plan.quota - plan.used} messages remaining
+                    {displayPlan.quota - displayPlan.used} messages remaining
                   </p>
                 </div>
 
@@ -219,11 +246,19 @@ export default function SettingsPage() {
 
                 {isProUser && (
                   <div className="pt-4 border-t">
-                    <Link href="/pricing">
-                      <Button variant="outline" className="w-full" size="sm">
-                        View Plans
-                      </Button>
-                    </Link>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-green-600 mb-2">
+                        ✅ Pro Plan Active
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        1000 messages/month + access to all AI models
+                      </p>
+                      <Link href="/pricing">
+                        <Button variant="outline" className="w-full" size="sm">
+                          Manage Subscription
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 )}
               </CardContent>

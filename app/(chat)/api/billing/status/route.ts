@@ -1,21 +1,24 @@
-import { protectedRoute } from '@/lib/auth-decorators';
-import { SESSION_CONFIG } from '@/lib/auth/session-config';
-import { getRecentPurchaseCreditsCount } from '@/lib/db/queries';
+import { auth } from '@/app/(auth)/auth';
+import { getRecentPaymentEventsCount } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = protectedRoute(async (request, context, user) => {
+export async function GET(request: Request) {
+  const session = await auth();
+  if (!session?.user) {
+    return new ChatSDKError('unauthorized:chat').toResponse();
+  }
+
   const url = new URL(request.url);
-  const defaultLookbackMs = SESSION_CONFIG.PAYMENTS.VERIFICATION_WINDOW;
   const lookbackSeconds = Number(
-    url.searchParams.get('lookbackSeconds') ?? String(defaultLookbackMs / 1000),
+    url.searchParams.get('lookbackSeconds') ?? '120',
   );
   const since = new Date(Date.now() - Math.max(10, lookbackSeconds) * 1000);
 
   try {
-    const count = await getRecentPurchaseCreditsCount({
-      userId: user.id,
+    const count = await getRecentPaymentEventsCount({
+      userId: session.user.id,
       since,
     });
 
@@ -23,4 +26,4 @@ export const GET = protectedRoute(async (request, context, user) => {
   } catch (error) {
     return new ChatSDKError('bad_request:api').toResponse();
   }
-});
+}
