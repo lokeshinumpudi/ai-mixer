@@ -2,10 +2,11 @@
 
 import { motion } from 'framer-motion';
 import { Button } from './ui/button';
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import type { VisibilityType } from './visibility-selector';
 import type { ChatMessage } from '@/lib/types';
+import { useAnimeControls } from '@/hooks/use-anime';
 
 interface SuggestedActionsProps {
   chatId: string;
@@ -18,6 +19,25 @@ function PureSuggestedActions({
   sendMessage,
   selectedVisibilityType,
 }: SuggestedActionsProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { staggerAnimation } = useAnimeControls();
+
+  useEffect(() => {
+    if (containerRef.current) {
+      staggerAnimation(
+        Array.from(containerRef.current.children),
+        {
+          opacity: [0, 1],
+          translateY: [20, 0],
+          scale: [0.95, 1],
+          duration: 600,
+          ease: 'outQuart',
+        },
+        100,
+      );
+    }
+  }, []);
+
   const suggestedActions = [
     {
       title: 'What are the advantages',
@@ -43,8 +63,9 @@ function PureSuggestedActions({
 
   return (
     <div
+      ref={containerRef}
       data-testid="suggested-actions"
-      className="grid sm:grid-cols-2 gap-2 w-full"
+      className="grid sm:grid-cols-2 gap-3 w-full"
     >
       {suggestedActions.map((suggestedAction, index) => (
         <motion.div
@@ -65,7 +86,7 @@ function PureSuggestedActions({
                 parts: [{ type: 'text', text: suggestedAction.action }],
               });
             }}
-            className="text-left border rounded-xl px-4 py-3.5 text-sm flex-1 gap-1 sm:flex-col w-full h-auto justify-start items-start"
+            className="luxury-button text-left border border-border/50 rounded-2xl px-5 py-4 text-sm flex-1 gap-2 sm:flex-col w-full h-auto justify-start items-start hover:border-border hover:shadow-sm"
           >
             <span className="font-medium">{suggestedAction.title}</span>
             <span className="text-muted-foreground">

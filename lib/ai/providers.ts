@@ -1,37 +1,40 @@
-import {
-  customProvider,
-  extractReasoningMiddleware,
-  wrapLanguageModel,
-} from 'ai';
-import { xai } from '@ai-sdk/xai';
-import {
-  artifactModel,
-  chatModel,
-  reasoningModel,
-  titleModel,
-} from './models.test';
-import { isTestEnvironment } from '../constants';
+import { gateway } from '@/lib/gateway';
+import { extractReasoningMiddleware, wrapLanguageModel } from 'ai';
+import { getModelCapabilities, isTestEnvironment } from '../constants';
+import { chatModel, titleModel } from './models.test';
 
-export const myProvider = isTestEnvironment
-  ? customProvider({
-      languageModels: {
-        'chat-model': chatModel,
-        'chat-model-reasoning': reasoningModel,
-        'title-model': titleModel,
-        'artifact-model': artifactModel,
-      },
-    })
-  : customProvider({
-      languageModels: {
-        'chat-model': xai('grok-2-vision-1212'),
-        'chat-model-reasoning': wrapLanguageModel({
-          model: xai('grok-3-mini-beta'),
-          middleware: extractReasoningMiddleware({ tagName: 'think' }),
-        }),
-        'title-model': xai('grok-2-1212'),
-        'artifact-model': xai('grok-2-1212'),
-      },
-      imageModels: {
-        'small-model': xai.imageModel('grok-2-image'),
-      },
+// Helper function to get a model with reasoning if supported
+export const getLanguageModel = (modelId: string) => {
+  if (isTestEnvironment) {
+    // Return test models for testing
+    if (modelId === 'title-model') return titleModel;
+    return chatModel;
+  }
+
+  const capabilities = getModelCapabilities(modelId);
+
+  const baseModel = gateway.languageModel(modelId);
+
+  // Wrap with reasoning middleware if the model supports it
+  if (capabilities?.supportsReasoning) {
+    return wrapLanguageModel({
+      model: baseModel,
+      middleware: extractReasoningMiddleware({ tagName: 'thinking' }),
     });
+  }
+
+  return baseModel;
+};
+
+// Utility function to check if a model supports specific features
+export const modelSupports = (
+  modelId: string,
+  feature: 'reasoning' | 'artifacts',
+): boolean => {
+  const capabilities = getModelCapabilities(modelId);
+  if (!capabilities) return false;
+
+  return feature === 'reasoning'
+    ? capabilities.supportsReasoning
+    : capabilities.supportsArtifacts;
+};

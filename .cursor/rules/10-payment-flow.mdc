@@ -1,0 +1,331 @@
+---
+globs: app/(chat)/api/billing/**,app/(chat)/billing/**,lib/db/queries.ts
+description: Payment and billing system patterns including Razorpay integration, subscription management, and usage tracking
+---
+
+# Payment Flow and Billing System Rules
+
+## Razorpay Integration Architecture
+
+### Payment Processing Flow
+
+1. **Order Creation** → Razorpay order via API
+2. **Payment Collection** → Frontend Razorpay integration
+3. **Webhook Verification** → Server-side payment confirmation
+4. **Database Updates** → Credit ledger and subscription updates
+5. **Success Redirect** → User confirmation page
+
+## Database Schema Patterns
+
+### Credit Ledger in [lib/db/schema.ts](mdc:lib/db/schema.ts)
+
+```typescript
+export const creditLedger = pgTable("credit_ledger", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  amount: integer("amount").notNull(), // in paisa
+  type: varchar("type", { length: 50 }).notNull(), // 'purchase', 'usage', 'refund'
+  description: varchar("description", { length: 500 }),
+  razorpayOrderId: varchar("razorpay_order_id", { length: 255 }),
+  razorpayPaymentId: varchar("razorpay_payment_id", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+```
+
+### Subscription Management
+
+```typescript
+export const subscription = pgTable("subscription", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  plan: varchar("plan", { length: 50 }).notNull(), // 'free', 'pro', 'pro_plus'
+  status: varchar("status", { length: 50 }).notNull(), // 'active', 'cancelled', 'expired'
+  razorpaySubscriptionId: varchar("razorpay_subscription_id", { length: 255 }),
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+```
+
+## API Route Patterns
+
+### Billing Status Route in [app/(chat)/api/billing/status/route.ts](<mdc:app/(chat)/api/billing/status/route.ts>)
+
+```typescript
+export async function GET(request: Request) {
+  try {
+    const securityContext = await getSecurityContext();
+
+    const url = new URL(request.url);
+    const lookbackSeconds = Number(
+      url.searchParams.get("lookbackSeconds") ?? "120"
+    );
+
+    // Query recent credit entries with proper date filtering
+    const since = new Date(Date.now() - Math.max(10, lookbackSeconds) * 1000);
+
+    const credits = await getCreditsByUserSince(securityContext.user.id, since);
+
+    return NextResponse.json({
+      credits: credits.length,
+      verified: credits.length > 0,
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+```
+
+### Payment Success Route Pattern
+
+```typescript
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const orderId =
+    searchParams.get("order_id") || searchParams.get("razorpay_order_id");
+  const referenceId = searchParams.get("reference_id");
+
+  // Verify payment status
+  // Update database records
+  // Redirect with success status
+}
+```
+
+## Database Query Patterns in [lib/db/queries.ts](mdc:lib/db/queries.ts)
+
+### Credit Ledger Operations
+
+```typescript
+// Create credit entry
+export async function createCreditEntry({
+  userId,
+  amount,
+  type,
+  description,
+  razorpayOrderId,
+  razorpayPaymentId,
+}: CreditEntryParams) {
+  try {
+    const id = generateUUID();
+    return await db.insert(creditLedger).values({
+      id,
+      userId,
+      amount,
+      type,
+      description,
+      razorpayOrderId,
+      razorpayPaymentId,
+    });
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to create credit entry"
+    );
+  }
+}
+
+// Get credits by user and date range
+export async function getCreditsByUserSince(userId: string, since: Date) {
+  try {
+    return await db
+      .select()
+      .from(creditLedger)
+      .where(
+        and(eq(creditLedger.userId, userId), gte(creditLedger.createdAt, since))
+      )
+      .orderBy(desc(creditLedger.createdAt));
+  } catch (error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get credits");
+  }
+}
+```
+
+### Usage Tracking Patterns
+
+```typescript
+// Daily usage tracking for free users
+export async function upsertDailyUsage({
+  userId,
+  messages = 1,
+  day,
+}: DailyUsageParams) {
+  const today = day || getTodayString();
+
+  try {
+    return await db
+      .insert(usageDaily)
+      .values({ userId, day: today, messages })
+      .onConflictDoUpdate({
+        target: [usageDaily.userId, usageDaily.day],
+        set: { messages: sql`${usageDaily.messages} + ${messages}` },
+      });
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to update daily usage"
+    );
+  }
+}
+
+// Monthly usage tracking for pro users
+export async function upsertMonthlyUsage({
+  userId,
+  messages = 1,
+  month,
+}: MonthlyUsageParams) {
+  const currentMonth = month || getCurrentMonthString();
+
+  try {
+    return await db
+      .insert(usageMonthly)
+      .values({ userId, month: currentMonth, messages })
+      .onConflictDoUpdate({
+        target: [usageMonthly.userId, usageMonthly.month],
+        set: { messages: sql`${usageMonthly.messages} + ${messages}` },
+      });
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to update monthly usage"
+    );
+  }
+}
+```
+
+## Frontend Payment Integration
+
+### Success Page Pattern in [app/(chat)/billing/success/page.tsx](<mdc:app/(chat)/billing/success/page.tsx>)
+
+```typescript
+export default function PaymentSuccessPage() {
+  const [verified, setVerified] = useState<"pending" | "confirmed" | "timeout">(
+    "pending"
+  );
+  const [count, setCount] = useState<number>(0);
+
+  useEffect(() => {
+    const checkPaymentStatus = async () => {
+      try {
+        const response = await fetch("/api/billing/status?lookbackSeconds=120");
+        const data = await response.json();
+
+        if (data.verified) {
+          setVerified("confirmed");
+          setCount(data.credits);
+        } else if (attempts > maxAttempts) {
+          setVerified("timeout");
+        }
+      } catch (error) {
+        console.error("Payment verification failed:", error);
+      }
+    };
+
+    // Poll for payment confirmation
+    const interval = setInterval(checkPaymentStatus, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="container mx-auto py-8">
+      {verified === "pending" && <LoadingSpinner />}
+      {verified === "confirmed" && (
+        <div className="text-green-600">
+          Payment verified. {count > 0 ? `${count} credit entry found.` : null}
+        </div>
+      )}
+      {verified === "timeout" && (
+        <div className="text-amber-600">
+          We could not verify yet. You can refresh this page in a moment or
+          check Settings.
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Error Handling Patterns
+
+### Payment API Error Handling
+
+```typescript
+try {
+  // Payment processing logic
+} catch (error) {
+  if (error instanceof ChatSDKError) {
+    return error.toResponse();
+  }
+
+  console.error("Payment processing error:", error);
+  return new ChatSDKError(
+    "bad_request:payment",
+    "Payment processing failed"
+  ).toResponse();
+}
+```
+
+### Database Transaction Patterns
+
+```typescript
+// Use transactions for atomic payment operations
+export async function processPaymentSuccess({
+  orderId,
+  paymentId,
+  userId,
+  amount
+}: PaymentSuccessParams) {
+  return await db.transaction(async (tx) => {
+    // 1. Create credit entry
+    await tx.insert(creditLedger).values({...});
+
+    // 2. Update subscription if applicable
+    await tx.update(subscription).set({...}).where({...});
+
+    // 3. Reset usage counters if needed
+    await tx.delete(usageDaily).where({...});
+  });
+}
+```
+
+## Security Considerations
+
+### Webhook Signature Verification
+
+```typescript
+// Always verify Razorpay webhook signatures
+const expectedSignature = crypto
+  .createHmac("sha256", webhookSecret)
+  .update(JSON.stringify(body))
+  .digest("hex");
+
+if (signature !== expectedSignature) {
+  throw new ChatSDKError("unauthorized:webhook", "Invalid webhook signature");
+}
+```
+
+### Amount Validation
+
+```typescript
+// Always validate amounts in paisa (smallest currency unit)
+const amountInPaisa = Math.round(amountInRupees * 100);
+if (amountInPaisa < 100) {
+  // Minimum 1 rupee
+  throw new ChatSDKError("bad_request:payment", "Invalid payment amount");
+}
+```
+
+## Testing Patterns
+
+### Mock Payment Responses
+
+```typescript
+// Use consistent test data patterns
+const mockPaymentResponse = {
+  order_id: "order_test_123",
+  payment_id: "pay_test_456",
+  amount: 10000, // Always in paisa
+  status: "captured",
+};
+```
+
+This payment system ensures secure, reliable payment processing with proper error handling, transaction safety, and user experience optimization.

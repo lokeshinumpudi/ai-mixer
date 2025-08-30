@@ -1,62 +1,210 @@
-<a href="https://chat.vercel.ai/">
-  <img alt="Next.js 14 and App Router-ready AI chatbot." src="app/(chat)/opengraph-image.png">
-  <h1 align="center">Chat SDK</h1>
+<a href="#">
+  <img alt="AI Comparo - Multi-Provider AI Chat Platform" src="app/(chat)/opengraph-image.png">
+  <h1 align="center">AI Comparo</h1>
 </a>
 
 <p align="center">
-    Chat SDK is a free, open-source template built with Next.js and the AI SDK that helps you quickly build powerful chatbot applications.
+    AI Comparo is a comprehensive AI chat platform that lets you compare and interact with multiple AI models from different providers in one unified interface.
 </p>
 
 <p align="center">
-  <a href="https://chat-sdk.dev"><strong>Read Docs</strong></a> ·
   <a href="#features"><strong>Features</strong></a> ·
-  <a href="#model-providers"><strong>Model Providers</strong></a> ·
-  <a href="#deploy-your-own"><strong>Deploy Your Own</strong></a> ·
-  <a href="#running-locally"><strong>Running locally</strong></a>
+  <a href="#ai-models"><strong>AI Models</strong></a> ·
+  <a href="#artifacts-system"><strong>Artifacts</strong></a> ·
+  <a href="#pricing-tiers"><strong>Pricing</strong></a> ·
+  <a href="#running-locally"><strong>Running Locally</strong></a>
 </p>
 <br/>
 
 ## Features
 
-- [Next.js](https://nextjs.org) App Router
-  - Advanced routing for seamless navigation and performance
-  - React Server Components (RSCs) and Server Actions for server-side rendering and increased performance
-- [AI SDK](https://sdk.vercel.ai/docs)
-  - Unified API for generating text, structured objects, and tool calls with LLMs
-  - Hooks for building dynamic chat and generative user interfaces
-  - Supports xAI (default), OpenAI, Fireworks, and other model providers
-- [shadcn/ui](https://ui.shadcn.com)
-  - Styling with [Tailwind CSS](https://tailwindcss.com)
-  - Component primitives from [Radix UI](https://radix-ui.com) for accessibility and flexibility
-- Data Persistence
-  - [Neon Serverless Postgres](https://vercel.com/marketplace/neon) for saving chat history and user data
-  - [Vercel Blob](https://vercel.com/storage/blob) for efficient file storage
-- [Auth.js](https://authjs.dev)
-  - Simple and secure authentication
+### 🤖 Multi-Provider AI Integration
 
-## Model Providers
+- **AI SDK Gateway** - Unified access to multiple AI providers through a single interface
+- **Dynamic Model Management** - Capability-based features with real-time model switching
+- **Streaming Responses** - Real-time chat with tool calling and structured outputs
+- **Usage Tracking** - Message limits and billing integration with Razorpay
 
-This template ships with [xAI](https://x.ai) `grok-2-1212` as the default chat model. However, with the [AI SDK](https://sdk.vercel.ai/docs), you can switch LLM providers to [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), and [many more](https://sdk.vercel.ai/providers/ai-sdk-providers) with just a few lines of code.
+### 🎨 Artifacts System
 
-## Deploy Your Own
+- **Code Generation** - Interactive code editor with syntax highlighting and execution
+- **Document Creation** - Rich text editor with markdown support and collaborative editing
+- **Image Generation** - AI-powered image creation and editing capabilities
+- **Spreadsheet Tools** - Dynamic data grid with CSV import/export functionality
 
-You can deploy your own version of the Next.js AI Chatbot to Vercel with one click:
+### 🔐 Authentication & Authorization
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fai-chatbot&env=AUTH_SECRET&envDescription=Learn+more+about+how+to+get+the+API+Keys+for+the+application&envLink=https%3A%2F%2Fgithub.com%2Fvercel%2Fai-chatbot%2Fblob%2Fmain%2F.env.example&demo-title=AI+Chatbot&demo-description=An+Open-Source+AI+Chatbot+Template+Built+With+Next.js+and+the+AI+SDK+by+Vercel.&demo-url=https%3A%2F%2Fchat.vercel.ai&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22ai%22%2C%22productSlug%22%3A%22grok%22%2C%22integrationSlug%22%3A%22xai%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%2C%7B%22type%22%3A%22blob%22%7D%5D)
+- **Auth.js v5** - Secure authentication with session management
+- **Route Protection** - Centralized access control with decorator patterns
+- **User Tiers** - Free and Pro plans with model access restrictions
+- **Session Configuration** - Type-safe duration management
 
-## Running locally
+### 🏗️ Modern Architecture
 
-You will need to use the environment variables [defined in `.env.example`](.env.example) to run Next.js AI Chatbot. It's recommended you use [Vercel Environment Variables](https://vercel.com/docs/projects/environment-variables) for this, but a `.env` file is all that is necessary.
+- **Next.js 15** - App Router with React Server Components and Server Actions
+- **TypeScript Strict Mode** - Full type safety with enhanced error checking
+- **Drizzle ORM** - Type-safe database operations with PostgreSQL
+- **Real-time Updates** - SWR for data synchronization and optimistic updates
 
-> Note: You should not commit your `.env` file or it will expose secrets that will allow others to control access to your various AI and authentication provider accounts.
+### 🎯 Developer Experience
 
-1. Install Vercel CLI: `npm i -g vercel`
-2. Link local instance with Vercel and GitHub accounts (creates `.vercel` directory): `vercel link`
-3. Download your environment variables: `vercel env pull`
+- **Pre-commit Hooks** - Automated code quality enforcement with Husky
+- **Linting & Formatting** - ESLint + Biome with strict CI validation
+- **Database Migrations** - Automated schema management and version control
+- **E2E Testing** - Playwright test suite for comprehensive validation
+
+## AI Models
+
+AI Comparo provides access to cutting-edge AI models through a unified gateway system:
+
+### Currently Supported Models
+
+- **Google Gemini 2.5 Flash Lite** - Fast, efficient model for general conversations (Free tier)
+- **xAI Grok Code Fast** - Specialized coding model with enhanced reasoning (Pro tier)
+- **xAI Grok 3 Mini** - Default conversational model with balanced performance
+
+### Model Capabilities
+
+All models support:
+
+- ✅ **Reasoning** - Step-by-step problem solving and explanation
+- ✅ **Artifacts** - Code, document, image, and spreadsheet generation
+- ✅ **Tool Calling** - Weather data, document management, and more
+- ✅ **Streaming** - Real-time response generation
+
+### Adding New Models
+
+The platform uses the [AI SDK Gateway](https://sdk.vercel.ai/docs/ai-sdk-gateway) for easy provider integration. Add new models by updating the configuration in `lib/constants.ts` and `lib/ai/providers.ts`.
+
+## Artifacts System
+
+AI Comparo features a comprehensive artifacts system for generating and managing various content types:
+
+### 📝 Text Documents
+
+- Rich text editor with markdown support
+- Real-time collaborative editing
+- Version history and document management
+- Export to multiple formats
+
+### 💻 Code Generation
+
+- Interactive code editor with syntax highlighting
+- Support for multiple programming languages
+- Live code execution and debugging
+- Code sharing and collaboration
+
+### 🖼️ Image Creation
+
+- AI-powered image generation
+- Image editing and manipulation tools
+- Multiple format support (PNG, JPEG, SVG)
+- Gallery management and organization
+
+### 📊 Spreadsheet Tools
+
+- Dynamic data grid interface
+- CSV import/export functionality
+- Formula support and calculations
+- Data visualization capabilities
+
+## Pricing Tiers
+
+### 🆓 Free Plan
+
+- **20 messages per day** with basic models
+- Access to Google Gemini 2.5 Flash Lite
+- Full artifacts system access
+- Basic tool calling features
+
+### 💎 Pro Plan - ₹249/month
+
+- **1000 messages per month** with all models
+- Access to premium models (xAI Grok Code Fast)
+- Priority support and faster responses
+- Advanced features and integrations
+- Razorpay payment integration
+
+## Running Locally
+
+### Prerequisites
+
+- Node.js 18+ and pnpm
+- PostgreSQL database (local or hosted)
+- Environment variables configured
+
+### Environment Setup
+
+Create a `.env.local` file with the following variables:
 
 ```bash
-pnpm install
-pnpm dev
+# Database
+DATABASE_URL="postgresql://..."
+
+# Authentication
+AUTH_SECRET="your-auth-secret"
+NEXTAUTH_URL="http://localhost:3000"
+
+# AI Providers
+XAI_API_KEY="your-xai-api-key"
+GOOGLE_GENERATIVE_AI_API_KEY="your-google-api-key"
+
+# Payments (optional for development)
+RAZORPAY_KEY_ID="your-razorpay-key"
+RAZORPAY_KEY_SECRET="your-razorpay-secret"
+NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL="your-payment-page-url"
 ```
 
-Your app template should now be running on [localhost:3000](http://localhost:3000).
+### Installation & Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Set up database
+pnpm db:migrate
+
+# Start development server
+pnpm dev
+
+# Optional: Open database studio
+pnpm db:studio
+```
+
+### Development Commands
+
+```bash
+# Code quality
+pnpm lint              # Check linting and types
+pnpm format            # Format code with Biome
+pnpm type-check        # TypeScript validation
+
+# Database operations
+pnpm db:generate       # Generate new migration
+pnpm db:migrate        # Run migrations
+pnpm db:studio         # Open Drizzle Studio
+
+# Testing
+pnpm test              # Run Playwright e2e tests
+```
+
+Your AI Comparo instance will be running on [localhost:3000](http://localhost:3000).
+
+### Project Structure
+
+```
+app/                   # Next.js App Router
+├── (auth)/           # Authentication routes
+└── (chat)/           # Chat interface and API
+components/           # Reusable UI components
+lib/                  # Core application logic
+├── ai/              # AI SDK integration
+├── db/              # Database schema and queries
+└── auth/            # Authentication configuration
+artifacts/           # Artifact system implementations
+hooks/               # Custom React hooks
+```
+
+---
+
+Built by [Lokesh Inumpudi](https://github.com/lokesh-inumpudi1) with ❤️ using Next.js 15 and the AI SDK.

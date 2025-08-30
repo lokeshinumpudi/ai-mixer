@@ -1,0 +1,340 @@
+---
+globs: lib/types.ts,components/data-stream-handler.tsx,hooks/*.ts
+description: TypeScript patterns, stream data handling, and type safety best practices
+---
+
+# Type Safety and Stream Data Patterns
+
+## Stream Data Type System
+
+### Core Type Definitions in [lib/types.ts](mdc:lib/types.ts)
+
+All stream data types must be defined in the `CustomUIDataTypes` interface:
+
+```typescript
+export type CustomUIDataTypes = {
+  // Artifact data types
+  textDelta: string;
+  imageDelta: string;
+  sheetDelta: string;
+  codeDelta: string;
+
+  // System data types
+  suggestion: Suggestion;
+  appendMessage: string;
+  id: string;
+  title: string;
+  kind: ArtifactKind;
+  clear: null;
+  finish: null;
+
+  // Usage tracking (example of proper new type addition)
+  usageUpdate: {
+    used: number;
+    quota: number;
+    remaining: number;
+    isOverLimit: boolean;
+    type: "daily" | "monthly";
+    resetInfo: string;
+  };
+};
+```
+
+### Stream Message Type Pattern
+
+```typescript
+export type ChatMessage = UIMessage<
+  MessageMetadata,
+  CustomUIDataTypes, // ← Must include all stream data types
+  ChatTools
+>;
+```
+
+## Data Stream Handler Patterns in [components/data-stream-handler.tsx](mdc:components/data-stream-handler.tsx)
+
+### Correct Stream Data Access Pattern
+
+```typescript
+// ✅ CORRECT: Type-safe stream data handling
+newDeltas.forEach((delta) => {
+  // Handle usage updates with proper type checking
+  if (delta.type === "data-usageUpdate" && delta.data) {
+    const usageInfo = delta.data; // Type: UsageUpdate
+    updateUsage(usageInfo);
+    return; // Exit early for non-artifact data
+  }
+
+  // Handle artifact-specific data
+  const artifactDefinition = artifactDefinitions.find(
+    (def) => def.kind === artifact.kind
+  );
+
+  if (artifactDefinition?.onStreamPart) {
+    artifactDefinition.onStreamPart({
+      streamPart: delta,
+      setArtifact,
+      setMetadata,
+    });
+  }
+});
+```
+
+### Common Type Error Patterns to Avoid
+
+```typescript
+// ❌ WRONG: Type not in union
+if (delta.type === "usage-update") {
+  /* Error: Type mismatch */
+}
+
+// ❌ WRONG: Property doesn't exist
+const data = delta.content; /* Error: Property 'content' doesn't exist */
+
+// ❌ WRONG: Missing data prefix
+if (delta.type === "usageUpdate") {
+  /* Error: Must use 'data-' prefix */
+}
+
+// ✅ CORRECT: Proper type and property access
+if (delta.type === "data-usageUpdate" && delta.data) {
+  const usageInfo = delta.data; // Type-safe access
+}
+```
+
+## Adding New Stream Data Types
+
+### Step 1: Define Type in [lib/types.ts](mdc:lib/types.ts)
+
+```typescript
+export type CustomUIDataTypes = {
+  // existing types...
+
+  // New type with complete interface
+  newFeatureUpdate: {
+    featureId: string;
+    status: "enabled" | "disabled";
+    config?: Record<string, unknown>;
+  };
+};
+```
+
+### Step 2: Handle in [components/data-stream-handler.tsx](mdc:components/data-stream-handler.tsx)
+
+```typescript
+// Add handler for new data type
+if (delta.type === "data-newFeatureUpdate" && delta.data) {
+  const featureData = delta.data; // Fully typed
+
+  // Process the feature update
+  handleFeatureUpdate(featureData);
+
+  return; // Exit early for non-artifact data
+}
+```
+
+### Step 3: Server-Side Data Streaming
+
+```typescript
+// In server action or API route
+dataStream.write({
+  type: "data-newFeatureUpdate",
+  data: {
+    featureId: "ai-compare",
+    status: "enabled",
+    config: { maxModels: 3 },
+  },
+});
+```
+
+## Hook Type Safety Patterns
+
+### Usage Hook in [hooks/use-usage.ts](mdc:hooks/use-usage.ts)
+
+```typescript
+interface UsageInfo {
+  used: number;
+  quota: number;
+  remaining: number;
+  isOverLimit: boolean;
+  type: "daily" | "monthly";
+  resetInfo: string;
+}
+
+interface UsageResponse {
+  plan: UsageInfo;
+  usage: any[]; // Consider making this more specific
+}
+
+export function useUsage() {
+  const [currentUsage, setCurrentUsage] = useState<UsageInfo | null>(null);
+
+  const { data, error, mutate } = useSWR<UsageResponse>(
+    "/api/usage/summary",
+    fetcher,
+    {
+      refreshInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  );
+
+  // Type-safe update function
+  const updateUsage = useCallback((newUsageInfo: UsageInfo) => {
+    setCurrentUsage(newUsageInfo);
+  }, []);
+
+  return {
+    usage: currentUsage,
+    isLoading: !error && !data,
+    isError: error,
+    mutate,
+    updateUsage, // ← Type-safe updater
+  };
+}
+```
+
+### Artifact Hook Pattern in [hooks/use-artifact.ts](mdc:hooks/use-artifact.ts)
+
+```typescript
+// Chat-scoped artifact state management
+export function useArtifact(chatId?: string) {
+  const artifactKey = chatId ? `artifact-${chatId}` : "artifact";
+
+  const { data: localArtifact, mutate: setLocalArtifact } = useSWR<UIArtifact>(
+    artifactKey,
+    null,
+    { fallbackData: initialArtifactData }
+  );
+
+  // Type-safe setters with proper scoping
+  const setArtifact = useCallback(
+    (updater: (prev: UIArtifact) => UIArtifact) => {
+      setLocalArtifact(updater);
+    },
+    [setLocalArtifact]
+  );
+
+  return { artifact: localArtifact, setArtifact, setMetadata };
+}
+```
+
+## TypeScript Configuration Best Practices
+
+### Strict Mode in [tsconfig.json](mdc:tsconfig.json)
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx"]
+}
+```
+
+### Type Import Patterns
+
+```typescript
+// Use type-only imports when possible
+import type { UserType } from "@/app/(auth)/auth";
+import type { NextRequest } from "next/server";
+
+// Regular imports for runtime values
+import { auth } from "@/app/(auth)/auth";
+import { NextResponse } from "next/server";
+```
+
+## Error Type Patterns
+
+### Custom Error Types in [lib/errors.ts](mdc:lib/errors.ts)
+
+```typescript
+export class ChatSDKError extends Error {
+  constructor(public code: string, message?: string, public statusCode = 400) {
+    super(message);
+    this.name = "ChatSDKError";
+  }
+
+  toResponse(): Response {
+    return NextResponse.json(
+      { error: this.code, message: this.message },
+      { status: this.statusCode }
+    );
+  }
+}
+```
+
+### API Response Type Safety
+
+```typescript
+// Define response types for consistency
+interface ApiResponse<T> {
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+// Use in API routes
+export async function GET(): Promise<NextResponse<ApiResponse<UsageInfo>>> {
+  try {
+    const usage = await getUserUsage();
+    return NextResponse.json({ data: usage });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: { code: "usage_fetch_failed", message: error.message },
+      },
+      { status: 500 }
+    );
+  }
+}
+```
+
+## Type Guards and Validation
+
+### Runtime Type Checking with Zod
+
+```typescript
+import { z } from "zod";
+
+const UsageUpdateSchema = z.object({
+  used: z.number(),
+  quota: z.number(),
+  remaining: z.number(),
+  isOverLimit: z.boolean(),
+  type: z.enum(["daily", "monthly"]),
+  resetInfo: z.string(),
+});
+
+// Validate at runtime
+function validateUsageUpdate(data: unknown): UsageInfo {
+  return UsageUpdateSchema.parse(data);
+}
+```
+
+### Type Guards for Stream Data
+
+```typescript
+function isUsageUpdate(
+  delta: any
+): delta is { type: "data-usageUpdate"; data: UsageInfo } {
+  return (
+    delta.type === "data-usageUpdate" &&
+    delta.data &&
+    typeof delta.data === "object"
+  );
+}
+
+// Usage in handler
+if (isUsageUpdate(delta)) {
+  // delta.data is now properly typed as UsageInfo
+  updateUsage(delta.data);
+}
+```
+
+This type system ensures complete type safety across the stream data pipeline while maintaining flexibility for future additions.

@@ -1,6 +1,6 @@
 import { PreviewMessage, ThinkingMessage } from './message';
 import { Greeting } from './greeting';
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { useMessages } from '@/hooks/use-messages';
 import type { ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
+import { useAnimeControls } from '@/hooks/use-anime';
 
 interface MessagesProps {
   chatId: string;
@@ -42,10 +43,31 @@ function PureMessages({
 
   useDataStream();
 
+  const { staggerAnimation } = useAnimeControls();
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      const elements = Array.from(
+        container.querySelectorAll('[data-testid^="message-"]'),
+      ) as HTMLElement[];
+      staggerAnimation(
+        elements,
+        {
+          opacity: [0, 1],
+          translateY: [8, 0],
+          duration: 400,
+          ease: 'outQuart',
+        },
+        60,
+      );
+    }
+  }, [messages.length]);
+
   return (
     <div
       ref={messagesContainerRef}
-      className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4 relative"
+      className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-4 relative"
     >
       {messages.length === 0 && <Greeting />}
 

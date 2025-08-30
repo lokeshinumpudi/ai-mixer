@@ -1,29 +1,49 @@
 import type { UserType } from '@/app/(auth)/auth';
+import { FREE_MODELS, PRICING, PRO_MODELS } from '@/lib/constants';
 import type { ChatModel } from './models';
 
 interface Entitlements {
-  maxMessagesPerDay: number;
-  availableChatModelIds: Array<ChatModel['id']>;
+  maxMessagesPerDay?: number; // For free tier
+  maxMessagesPerMonth?: number; // For paid tier
+  getAllowedModelIds: () => Array<string>;
+  planName: string;
+  planDescription: string;
 }
 
 export const entitlementsByUserType: Record<UserType, Entitlements> = {
   /*
-   * For users without an account
+   * For logged-in users without a paid subscription - Free tier with daily limits
    */
-  guest: {
-    maxMessagesPerDay: 20,
-    availableChatModelIds: ['chat-model', 'chat-model-reasoning'],
+  free: {
+    maxMessagesPerDay: PRICING.FREE_TIER.dailyMessages,
+    getAllowedModelIds: () => [...FREE_MODELS],
+    planName: PRICING.FREE_TIER.name,
+    planDescription: PRICING.FREE_TIER.description,
   },
 
   /*
-   * For users with an account
+   * For users with an active paid subscription - Pro tier with monthly limits
    */
-  regular: {
-    maxMessagesPerDay: 100,
-    availableChatModelIds: ['chat-model', 'chat-model-reasoning'],
+  pro: {
+    maxMessagesPerMonth: PRICING.PAID_TIER.monthlyMessages,
+    getAllowedModelIds: () => [...FREE_MODELS, ...PRO_MODELS],
+    planName: PRICING.PAID_TIER.name,
+    planDescription: PRICING.PAID_TIER.description,
   },
+};
 
-  /*
-   * TODO: For users with an account and a paid membership
-   */
+// Helper function to get allowed model IDs for a user type
+export const getAllowedModelIdsForUser = (
+  userType: UserType,
+): Array<string> => {
+  return entitlementsByUserType[userType].getAllowedModelIds();
+};
+
+// Filter models from /api/models based on user entitlements
+export const filterModelsForUser = (
+  models: ChatModel[],
+  userType: UserType,
+): ChatModel[] => {
+  const allowedIds = getAllowedModelIdsForUser(userType);
+  return models.filter((model) => allowedIds.includes(model.id));
 };

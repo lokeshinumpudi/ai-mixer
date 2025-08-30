@@ -10,29 +10,43 @@ import {
   gte,
   inArray,
   lt,
+  or,
+  sum,
   type SQL,
 } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import {
-  user,
-  chat,
-  type User,
-  document,
-  type Suggestion,
-  suggestion,
-  message,
-  vote,
-  type DBMessage,
-  type Chat,
-  stream,
-} from './schema';
+import type { UserType } from '@/app/(auth)/auth';
 import type { ArtifactKind } from '@/components/artifact';
-import { generateUUID } from '../utils';
-import { generateHashedPassword } from './utils';
 import type { VisibilityType } from '@/components/visibility-selector';
+import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import { PRICING } from '@/lib/constants';
+import { sql } from 'drizzle-orm';
 import { ChatSDKError } from '../errors';
+import {
+  chat,
+  creditLedger,
+  document,
+  message,
+  payment,
+  paymentEvent,
+  refund,
+  serviceDowntime,
+  stream,
+  subscription,
+  suggestion,
+  usageDaily,
+  usageMonthly,
+  user,
+  userNotification,
+  vote,
+  type Chat,
+  type DBMessage,
+  type Suggestion,
+  type User,
+} from './schema';
+import { generateHashedPassword } from './utils';
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -53,6 +67,15 @@ export async function getUser(email: string): Promise<Array<User>> {
   }
 }
 
+export async function getUserById(id: string): Promise<User | null> {
+  try {
+    const users = await db.select().from(user).where(eq(user.id, id)).limit(1);
+    return users[0] || null;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get user by ID');
+  }
+}
+
 export async function createUser(email: string, password: string) {
   const hashedPassword = generateHashedPassword(password);
 
@@ -60,23 +83,6 @@ export async function createUser(email: string, password: string) {
     return await db.insert(user).values({ email, password: hashedPassword });
   } catch (error) {
     throw new ChatSDKError('bad_request:database', 'Failed to create user');
-  }
-}
-
-export async function createGuestUser() {
-  const email = `guest-${Date.now()}`;
-  const password = generateHashedPassword(generateUUID());
-
-  try {
-    return await db.insert(user).values({ email, password }).returning({
-      id: user.id,
-      email: user.email,
-    });
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to create guest user',
-    );
   }
 }
 
@@ -472,7 +478,10 @@ export async function updateChatVisiblityById({
 export async function getMessageCountByUserId({
   id,
   differenceInHours,
-}: { id: string; differenceInHours: number }) {
+}: {
+  id: string;
+  differenceInHours: number;
+}) {
   try {
     const twentyFourHoursAgo = new Date(
       Date.now() - differenceInHours * 60 * 60 * 1000,
@@ -533,6 +542,732 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get stream ids by chat id',
+    );
+  }
+}
+
+// Billing & Usage
+
+export async function createPaymentRecord({
+  userId,
+  orderId,
+  amountPaise,
+  currency,
+}: {
+  userId: string;
+  orderId: string;
+  amountPaise: number;
+  currency: string;
+}) {
+  try {
+    await db
+      .insert(payment)
+      .values({
+        userId,
+        orderId,
+        amountPaise,
+        currency,
+        status: 'created',
+        createdAt: new Date(),
+      })
+      .onConflictDoNothing({ target: payment.orderId });
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to create payment');
+  }
+}
+
+export async function updatePaymentFromWebhook({
+  orderId,
+  paymentId,
+  status,
+}: {
+  orderId: string;
+  paymentId: string;
+  status: string;
+}) {
+  try {
+    await db
+      .update(payment)
+      .set({ paymentId, status })
+      .where(eq(payment.orderId, orderId));
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to update payment');
+  }
+}
+
+export async function addCredit({
+  userId,
+  tokensDelta,
+  reason,
+}: {
+  userId: string;
+  tokensDelta: number;
+  reason: string;
+}) {
+  try {
+    await db.insert(creditLedger).values({
+      userId,
+      tokensDelta,
+      reason,
+      createdAt: new Date(),
+    });
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to add credit');
+  }
+}
+
+export async function getRecentPurchaseCreditsCount({
+  userId,
+  since,
+}: {
+  userId: string;
+  since: Date;
+}): Promise<number> {
+  try {
+    const rows = await db
+      .select({ id: creditLedger.id })
+      .from(creditLedger)
+      .where(
+        and(
+          eq(creditLedger.userId, userId),
+          eq(creditLedger.reason, 'purchase'),
+          gte(creditLedger.createdAt, since),
+        ),
+      );
+
+    return rows.length;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get recent purchase credits',
+    );
+  }
+}
+
+export async function getRecentPaymentEventsCount({
+  userId,
+  since,
+}: {
+  userId: string;
+  since: Date;
+}): Promise<number> {
+  try {
+    const rows = await db
+      .select({ id: paymentEvent.id })
+      .from(paymentEvent)
+      .where(
+        and(
+          eq(paymentEvent.userId, userId),
+          or(
+            eq(paymentEvent.eventType, 'captured'),
+            eq(paymentEvent.eventType, 'paid'),
+          ),
+          gte(paymentEvent.createdAt, since),
+        ),
+      );
+
+    return rows.length;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get recent payment events',
+    );
+  }
+}
+
+// Enhanced payment event tracking
+export async function createPaymentEvent({
+  paymentId,
+  orderId,
+  userId,
+  eventType,
+  status,
+  amountPaise,
+  currency = 'INR',
+  method,
+  errorCode,
+  errorDescription,
+  metadata,
+}: {
+  paymentId: string;
+  orderId?: string;
+  userId: string;
+  eventType: string;
+  status: string;
+  amountPaise: number;
+  currency?: string;
+  method?: string;
+  errorCode?: string;
+  errorDescription?: string;
+  metadata?: any;
+}) {
+  try {
+    await db.insert(paymentEvent).values({
+      paymentId,
+      orderId,
+      userId,
+      eventType,
+      status,
+      amountPaise,
+      currency,
+      method,
+      errorCode,
+      errorDescription,
+      metadata,
+    });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create payment event',
+    );
+  }
+}
+
+// Refund management
+export async function createRefund({
+  refundId,
+  paymentId,
+  userId,
+  amountPaise,
+  currency = 'INR',
+  status,
+  reason,
+  errorCode,
+  razorpayCreatedAt,
+}: {
+  refundId: string;
+  paymentId: string;
+  userId: string;
+  amountPaise: number;
+  currency?: string;
+  status: string;
+  reason?: string;
+  errorCode?: string;
+  razorpayCreatedAt?: Date;
+}) {
+  try {
+    await db.insert(refund).values({
+      refundId,
+      paymentId,
+      userId,
+      amountPaise,
+      currency,
+      status,
+      reason,
+      errorCode,
+      razorpayCreatedAt,
+      processedAt: status === 'processed' ? new Date() : null,
+    });
+
+    // If refund processed, reverse credits
+    if (status === 'processed') {
+      await addCredit({
+        userId,
+        tokensDelta: -(amountPaise / 100) * 100, // Negative tokens
+        reason: 'refund',
+      });
+    }
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to create refund');
+  }
+}
+
+export async function updateRefundStatus({
+  refundId,
+  status,
+  errorCode,
+}: {
+  refundId: string;
+  status: string;
+  errorCode?: string;
+}) {
+  try {
+    await db
+      .update(refund)
+      .set({
+        status,
+        errorCode,
+        processedAt: status === 'processed' ? new Date() : null,
+      })
+      .where(eq(refund.refundId, refundId));
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to update refund');
+  }
+}
+
+// Service downtime tracking
+export async function upsertServiceDowntime({
+  downtimeId,
+  method,
+  status,
+  severity,
+  instrument,
+  startedAt,
+  resolvedAt,
+  scheduled = false,
+}: {
+  downtimeId: string;
+  method: string;
+  status: string;
+  severity: string;
+  instrument: any;
+  startedAt?: Date;
+  resolvedAt?: Date;
+  scheduled?: boolean;
+}) {
+  try {
+    await db
+      .insert(serviceDowntime)
+      .values({
+        downtimeId,
+        method,
+        status,
+        severity,
+        instrument,
+        startedAt,
+        resolvedAt,
+        scheduled,
+      })
+      .onConflictDoUpdate({
+        target: serviceDowntime.downtimeId,
+        set: {
+          status,
+          severity,
+          resolvedAt,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to upsert service downtime',
+    );
+  }
+}
+
+export async function getActiveDowntimes() {
+  try {
+    return await db
+      .select()
+      .from(serviceDowntime)
+      .where(eq(serviceDowntime.status, 'started'))
+      .orderBy(desc(serviceDowntime.createdAt));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get active downtimes',
+    );
+  }
+}
+
+// User notifications
+export async function createUserNotification({
+  userId,
+  type,
+  title,
+  message,
+  metadata,
+}: {
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  metadata?: any;
+}) {
+  try {
+    await db.insert(userNotification).values({
+      userId,
+      type,
+      title,
+      message,
+      metadata,
+    });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create notification',
+    );
+  }
+}
+
+export async function getUserNotifications({
+  userId,
+  unreadOnly = false,
+  limit = 50,
+}: {
+  userId: string;
+  unreadOnly?: boolean;
+  limit?: number;
+}) {
+  try {
+    const conditions = [eq(userNotification.userId, userId)];
+    if (unreadOnly) {
+      conditions.push(eq(userNotification.read, false));
+    }
+
+    return await db
+      .select()
+      .from(userNotification)
+      .where(and(...conditions))
+      .orderBy(desc(userNotification.createdAt))
+      .limit(limit);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get notifications',
+    );
+  }
+}
+
+export async function markNotificationAsRead(notificationId: string) {
+  try {
+    await db
+      .update(userNotification)
+      .set({ read: true })
+      .where(eq(userNotification.id, notificationId));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to mark notification as read',
+    );
+  }
+}
+
+export async function setSubscriptionPlan({
+  userId,
+  plan,
+  status,
+  currentPeriodEnd,
+}: {
+  userId: string;
+  plan: string;
+  status: string;
+  currentPeriodEnd?: Date | null;
+}) {
+  try {
+    await db
+      .insert(subscription)
+      .values({
+        userId,
+        plan,
+        status,
+        currentPeriodEnd: currentPeriodEnd ?? null,
+        createdAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: subscription.userId,
+        set: { plan, status, currentPeriodEnd: currentPeriodEnd ?? null },
+      });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set subscription plan',
+    );
+  }
+}
+
+export async function upsertDailyUsage({
+  userId,
+  modelId,
+  tokensIn,
+  tokensOut,
+  messages = 0,
+  day,
+}: {
+  userId: string;
+  modelId: string;
+  tokensIn: number;
+  tokensOut: number;
+  messages?: number;
+  day?: Date;
+}) {
+  const d = day ? new Date(day) : new Date();
+  const dayOnly = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
+    2,
+    '0',
+  )}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+  try {
+    await db
+      .insert(usageDaily)
+      .values({
+        userId,
+        day: dayOnly,
+        modelId,
+        tokensIn,
+        tokensOut,
+        messages,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [usageDaily.userId, usageDaily.day, usageDaily.modelId],
+        set: {
+          tokensIn: sql`${usageDaily.tokensIn} + ${tokensIn}`,
+          tokensOut: sql`${usageDaily.tokensOut} + ${tokensOut}`,
+          messages: sql`${usageDaily.messages} + ${messages}`,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to upsert usage');
+  }
+}
+
+export async function upsertMonthlyUsage({
+  userId,
+  messages = 1,
+  month,
+}: {
+  userId: string;
+  messages?: number;
+  month?: Date;
+}) {
+  const d = month ? new Date(month) : new Date();
+  const monthOnly = `${d.getUTCFullYear()}-${String(
+    d.getUTCMonth() + 1,
+  ).padStart(2, '0')}-01`;
+
+  try {
+    await db
+      .insert(usageMonthly)
+      .values({
+        userId,
+        month: monthOnly,
+        messages,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [usageMonthly.userId, usageMonthly.month],
+        set: {
+          messages: sql`${usageMonthly.messages} + ${messages}`,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to upsert monthly usage',
+    );
+  }
+}
+
+// Get current usage and check limits for a user
+export async function getUserUsageAndLimits({
+  userId,
+  userType,
+}: {
+  userId: string;
+  userType: UserType;
+}) {
+  try {
+    const entitlements = entitlementsByUserType[userType];
+
+    if (userType === 'free') {
+      // Free users: daily limits
+      const today = new Date();
+      const todayString = `${today.getUTCFullYear()}-${String(
+        today.getUTCMonth() + 1,
+      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+
+      const [dailyUsage] = await db
+        .select({ totalMessages: sum(usageDaily.messages) })
+        .from(usageDaily)
+        .where(
+          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString)),
+        );
+
+      const used = Number(dailyUsage?.totalMessages) || 0;
+      const quota = entitlements.maxMessagesPerDay ?? 0;
+
+      return {
+        used,
+        quota,
+        remaining: Math.max(0, quota - used),
+        isOverLimit: used >= quota,
+        type: 'daily' as const,
+        resetInfo: 'tomorrow at 5:29 AM',
+      };
+    } else {
+      // Pro users: monthly limits
+      const now = new Date();
+      const monthStart = `${now.getUTCFullYear()}-${String(
+        now.getUTCMonth() + 1,
+      ).padStart(2, '0')}-01`;
+
+      const [monthlyUsage] = await db
+        .select({ totalMessages: sum(usageMonthly.messages) })
+        .from(usageMonthly)
+        .where(
+          and(
+            eq(usageMonthly.userId, userId),
+            eq(usageMonthly.month, monthStart),
+          ),
+        );
+
+      const used = Number(monthlyUsage?.totalMessages) || 0;
+      const quota = entitlements.maxMessagesPerMonth ?? 0;
+
+      return {
+        used,
+        quota,
+        remaining: Math.max(0, quota - used),
+        isOverLimit: used >= quota,
+        type: 'monthly' as const,
+        resetInfo: 'monthly at 5:29 AM',
+      };
+    }
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user usage and limits',
+    );
+  }
+}
+
+// Helper function to check if user has active subscription
+export async function getUserType(userId: string): Promise<UserType> {
+  try {
+    const [userSubscription] = await db
+      .select()
+      .from(subscription)
+      .where(eq(subscription.userId, userId))
+      .limit(1);
+
+    // Check if user has an active pro subscription
+    if (
+      userSubscription?.plan === 'pro' &&
+      userSubscription?.status === 'active'
+    ) {
+      return 'pro';
+    }
+
+    return 'free';
+  } catch (error) {
+    console.error('Error checking subscription status:', error);
+    return 'free'; // Default to free on error
+  }
+}
+
+// Get user subscription details
+export async function getUserSubscription(userId: string) {
+  try {
+    const [userSubscription] = await db
+      .select()
+      .from(subscription)
+      .where(eq(subscription.userId, userId))
+      .limit(1);
+
+    return userSubscription;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user subscription',
+    );
+  }
+}
+
+// Get usage history for the last 30 days
+export async function getUsageHistory(userId: string) {
+  try {
+    const now = new Date();
+    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const startDateString = `${start.getUTCFullYear()}-${String(
+      start.getUTCMonth() + 1,
+    ).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`;
+
+    return await db
+      .select()
+      .from(usageDaily)
+      .where(
+        and(
+          eq(usageDaily.userId, userId),
+          gte(usageDaily.day, startDateString),
+        ),
+      )
+      .orderBy(desc(usageDaily.day));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get usage history',
+    );
+  }
+}
+
+// Get complete usage summary for a user
+export async function getUserUsageSummary(userId: string) {
+  try {
+    const [userSubscription, usageHistory] = await Promise.all([
+      getUserSubscription(userId),
+      getUsageHistory(userId),
+    ]);
+
+    const isProUser =
+      userSubscription?.plan === 'pro' && userSubscription?.status === 'active';
+
+    let used = 0;
+    let quota = 0;
+    let resetInfo = '';
+    let type: 'daily' | 'monthly';
+
+    if (isProUser) {
+      // Pro users: monthly message limit
+      quota = PRICING.PAID_TIER.monthlyMessages;
+      resetInfo = 'monthly at 5:29 AM';
+      type = 'monthly';
+
+      // Get current month usage
+      const now = new Date();
+      const monthStart = `${now.getUTCFullYear()}-${String(
+        now.getUTCMonth() + 1,
+      ).padStart(2, '0')}-01`;
+
+      const [monthlyUsage] = await db
+        .select({ totalMessages: sum(usageMonthly.messages) })
+        .from(usageMonthly)
+        .where(
+          and(
+            eq(usageMonthly.userId, userId),
+            eq(usageMonthly.month, monthStart),
+          ),
+        );
+
+      used = Number(monthlyUsage?.totalMessages) || 0;
+    } else {
+      // Free users: daily message limit
+      quota = PRICING.FREE_TIER.dailyMessages;
+      resetInfo = 'tomorrow at 5:29 AM';
+      type = 'daily';
+
+      // Get today's usage
+      const today = new Date();
+      const todayString = `${today.getUTCFullYear()}-${String(
+        today.getUTCMonth() + 1,
+      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+
+      const [dailyUsage] = await db
+        .select({ totalMessages: sum(usageDaily.messages) })
+        .from(usageDaily)
+        .where(
+          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString)),
+        );
+
+      used = Number(dailyUsage?.totalMessages) || 0;
+    }
+
+    return {
+      plan: {
+        name: isProUser ? 'Pro' : 'Free',
+        quota,
+        used,
+        resetInfo,
+        type,
+      },
+      usage: usageHistory,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user usage summary',
     );
   }
 }

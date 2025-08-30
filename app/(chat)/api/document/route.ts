@@ -1,5 +1,5 @@
-import { auth } from '@/app/(auth)/auth';
 import type { ArtifactKind } from '@/components/artifact';
+import { protectedRoute } from '@/lib/auth-decorators';
 import {
   deleteDocumentsByIdAfterTimestamp,
   getDocumentsById,
@@ -7,7 +7,7 @@ import {
 } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
-export async function GET(request: Request) {
+export const GET = protectedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
@@ -18,12 +18,6 @@ export async function GET(request: Request) {
     ).toResponse();
   }
 
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:document').toResponse();
-  }
-
   const documents = await getDocumentsById({ id });
 
   const [document] = documents;
@@ -32,14 +26,14 @@ export async function GET(request: Request) {
     return new ChatSDKError('not_found:document').toResponse();
   }
 
-  if (document.userId !== session.user.id) {
+  if (document.userId !== user.id) {
     return new ChatSDKError('forbidden:document').toResponse();
   }
 
   return Response.json(documents, { status: 200 });
-}
+});
 
-export async function POST(request: Request) {
+export const POST = protectedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
@@ -48,12 +42,6 @@ export async function POST(request: Request) {
       'bad_request:api',
       'Parameter id is required.',
     ).toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('not_found:document').toResponse();
   }
 
   const {
@@ -68,7 +56,7 @@ export async function POST(request: Request) {
   if (documents.length > 0) {
     const [document] = documents;
 
-    if (document.userId !== session.user.id) {
+    if (document.userId !== user.id) {
       return new ChatSDKError('forbidden:document').toResponse();
     }
   }
@@ -78,13 +66,13 @@ export async function POST(request: Request) {
     content,
     title,
     kind,
-    userId: session.user.id,
+    userId: user.id,
   });
 
   return Response.json(document, { status: 200 });
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = protectedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   const timestamp = searchParams.get('timestamp');
@@ -103,17 +91,11 @@ export async function DELETE(request: Request) {
     ).toResponse();
   }
 
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:document').toResponse();
-  }
-
   const documents = await getDocumentsById({ id });
 
   const [document] = documents;
 
-  if (document.userId !== session.user.id) {
+  if (document.userId !== user.id) {
     return new ChatSDKError('forbidden:document').toResponse();
   }
 
@@ -123,4 +105,4 @@ export async function DELETE(request: Request) {
   });
 
   return Response.json(documentsDeleted, { status: 200 });
-}
+});

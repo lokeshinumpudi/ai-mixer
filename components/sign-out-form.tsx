@@ -9,9 +9,7 @@ export const SignOutForm = () => {
       action={async () => {
         'use server';
 
-        await signOut({
-          redirectTo: '/',
-        });
+        await signOut();
       }}
     >
       <button

@@ -1,8 +1,7 @@
+import { protectedRoute } from '@/lib/auth-decorators';
 import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-
-import { auth } from '@/app/(auth)/auth';
 
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
@@ -17,13 +16,7 @@ const FileSchema = z.object({
     }),
 });
 
-export async function POST(request: Request) {
-  const session = await auth();
-
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const POST = protectedRoute(async (request, context, user) => {
   if (request.body === null) {
     return new Response('Request body is empty', { status: 400 });
   }
@@ -65,4 +58,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
+});

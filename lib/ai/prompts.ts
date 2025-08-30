@@ -51,18 +51,22 @@ About the origin of user's request:
 `;
 
 export const systemPrompt = ({
-  selectedChatModel,
+  selectedModel,
   requestHints,
 }: {
-  selectedChatModel: string;
+  selectedModel: {
+    id: string;
+    supportsArtifacts: boolean;
+    supportsReasoning: boolean;
+  };
   requestHints: RequestHints;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
 
-  if (selectedChatModel === 'chat-model-reasoning') {
-    return `${regularPrompt}\n\n${requestPrompt}`;
-  } else {
+  if (selectedModel.supportsArtifacts) {
     return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
+  } else {
+    return `${regularPrompt}\n\n${requestPrompt}`;
   }
 };
 

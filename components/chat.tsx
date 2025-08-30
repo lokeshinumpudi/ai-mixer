@@ -22,6 +22,7 @@ import { useAutoResume } from '@/hooks/use-auto-resume';
 import { ChatSDKError } from '@/lib/errors';
 import type { Attachment, ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
+import { useAnimeOnMount } from '@/hooks/use-anime';
 
 export function Chat({
   id,
@@ -128,10 +129,17 @@ export function Chat({
 
   return (
     <>
-      <div className="flex flex-col min-w-0 h-dvh bg-background">
+      <div
+        ref={useAnimeOnMount<HTMLDivElement>({
+          opacity: [0, 1],
+          translateY: [8, 0],
+          duration: 500,
+          ease: 'outQuart',
+        })}
+        className="flex flex-col min-w-0 h-dvh bg-background"
+      >
         <ChatHeader
           chatId={id}
-          selectedModelId={initialChatModel}
           selectedVisibilityType={initialVisibilityType}
           isReadonly={isReadonly}
           session={session}
@@ -148,7 +156,7 @@ export function Chat({
           isArtifactVisible={isArtifactVisible}
         />
 
-        <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
+        <form className="flex mx-auto px-6 bg-background/95 backdrop-blur-sm pb-6 md:pb-8 gap-2 w-full md:max-w-3xl border-t border-border/30">
           {!isReadonly && (
             <MultimodalInput
               chatId={id}
@@ -162,6 +170,8 @@ export function Chat({
               setMessages={setMessages}
               sendMessage={sendMessage}
               selectedVisibilityType={visibilityType}
+              session={session}
+              selectedModelId={initialChatModel}
             />
           )}
         </form>
@@ -182,6 +192,8 @@ export function Chat({
         votes={votes}
         isReadonly={isReadonly}
         selectedVisibilityType={visibilityType}
+        session={session}
+        selectedModelId={initialChatModel}
       />
     </>
   );

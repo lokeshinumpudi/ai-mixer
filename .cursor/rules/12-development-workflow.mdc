@@ -1,0 +1,302 @@
+---
+alwaysApply: true
+---
+
+# Development Workflow and Best Practices
+
+## Pre-commit Quality Gates
+
+### Automated Code Quality Enforcement
+
+Every commit is automatically validated through [.husky/pre-commit](mdc:.husky/pre-commit):
+
+1. **TypeScript Type Checking** (BLOCKING)
+
+   - Full project validation with `pnpm type-check`
+   - Zero tolerance for type errors
+   - Catches issues like stream data type mismatches
+
+2. **ESLint + Biome Linting** (BLOCKING for errors)
+
+   - Validates only staged files for performance
+   - Blocks commits on linting errors
+   - Allows warnings for development flexibility
+
+3. **Auto-Formatting** (AUTOMATIC)
+   - Automatically formats all staged files during commit
+   - Files are formatted and re-staged automatically
+
+### Pre-commit Hook Execution Flow
+
+```bash
+🔍 Running pre-commit checks...
+→ Formatting staged files... # Auto-format all code files
+✅ Code formatted and re-staged
+→ Type checking...           # Full project TypeScript validation
+→ Linting staged files...    # ESLint + Biome on changed files only
+✅ All pre-commit checks passed!
+🎨 Files have been automatically formatted and committed.
+```
+
+## Development Commands
+
+### Daily Development Workflow
+
+```bash
+# Start development server
+pnpm dev
+
+# Check code quality (lenient - allows warnings)
+pnpm lint:check
+
+# Auto-fix linting issues
+pnpm lint:fix
+
+# Format code consistently
+pnpm format
+
+# Run type checking
+pnpm type-check
+
+# Test full pre-commit validation
+pnpm pre-commit
+```
+
+### CI/Production Commands
+
+```bash
+# Strict linting for CI (max 15 warnings)
+pnpm lint:check:strict
+
+# Format validation only
+pnpm format:check
+
+# Build verification
+pnpm build
+
+# Run tests
+pnpm test
+```
+
+## Git Workflow
+
+### Commit Process
+
+1. **Make changes** to your code
+2. **Stage files** with `git add`
+3. **Attempt commit** - pre-commit hooks run automatically
+4. **Fix any errors** if hooks fail:
+
+   ```bash
+   # Fix type errors
+   pnpm type-check
+
+   # Fix linting errors
+   pnpm lint:fix
+
+   # Fix formatting (optional but recommended)
+   pnpm format
+   ```
+
+5. **Retry commit** - should succeed if issues are resolved
+
+### If Pre-commit Fails
+
+The pre-commit hook will show clear error messages:
+
+```bash
+❌ Type check failed. Fix type errors before committing.
+# OR
+❌ Lint check failed. Fix linting errors before committing.
+```
+
+**Fix the issues** and try committing again.
+
+### Branch Protection
+
+- All commits require passing quality checks
+- CI pipeline enforces additional strict validation
+- No bypassing quality gates
+
+## Code Quality Tiers
+
+### Development (Lenient)
+
+- **Type errors**: ❌ BLOCKED
+- **Linting errors**: ❌ BLOCKED
+- **Warnings**: ✅ ALLOWED
+- **Format issues**: ⚠️ SUGGESTED
+
+### CI/Production (Strict)
+
+- **Type errors**: ❌ BLOCKED
+- **Linting errors**: ❌ BLOCKED
+- **Warnings**: ⚠️ LIMITED (max 15)
+- **Format issues**: ❌ BLOCKED
+
+## Common Development Scenarios
+
+### Adding New Features
+
+1. Create feature branch
+2. Develop with immediate type checking feedback
+3. Pre-commit validates quality automatically
+4. CI enforces production standards on PR
+
+### Fixing Type Errors
+
+```typescript
+// ❌ Common error pattern
+if (delta.type === "usage-update" && delta.content) {
+  // TypeError: 'usage-update' not in union type
+  // TypeError: Property 'content' does not exist
+}
+
+// ✅ Correct pattern
+if (delta.type === "data-usageUpdate" && delta.data) {
+  const usageInfo = delta.data; // Fully typed
+  updateUsage(usageInfo);
+}
+```
+
+### Managing Dependencies
+
+```bash
+# Add new dependency
+pnpm add package-name
+
+# Add dev dependency
+pnpm add -D package-name
+
+# Update dependencies
+pnpm update
+
+# Install after pulling changes
+pnpm install
+```
+
+## Editor Integration
+
+### VS Code Configuration in [.vscode/settings.json](mdc:.vscode/settings.json)
+
+- **Auto-format on save** enabled
+- **ESLint integration** with auto-fix
+- **TypeScript import organization**
+- **Consistent editor settings** across team
+
+### Recommended VS Code Extensions
+
+- TypeScript and JavaScript Language Features
+- ESLint
+- Biome (for formatting)
+- GitLens (for git integration)
+
+## Database Development
+
+### Migration Workflow
+
+```bash
+# Generate new migration
+pnpm db:generate
+
+# Apply migrations
+pnpm db:migrate
+
+# Open database studio
+pnpm db:studio
+
+# Push schema changes (development)
+pnpm db:push
+```
+
+### Query Development in [lib/db/queries.ts](mdc:lib/db/queries.ts)
+
+- All database queries centralized in one file
+- Type-safe with Drizzle ORM
+- Proper error handling with ChatSDKError
+- Transaction support for complex operations
+
+## Testing Strategy
+
+### Running Tests
+
+```bash
+# Run all tests
+pnpm test
+
+# Run specific test file
+pnpm test -- specific-test.test.ts
+
+# Run tests in watch mode (development)
+pnpm test -- --watch
+```
+
+### Test Types
+
+- **E2E Tests**: Playwright tests in [tests/e2e/](mdc:tests/e2e/)
+- **Unit Tests**: Component and utility tests
+- **Integration Tests**: API route and database tests
+
+## Performance Optimization
+
+### Build Analysis
+
+```bash
+# Analyze bundle size
+pnpm build --analyze
+
+# Check for unused dependencies
+pnpm dlx depcheck
+
+# Audit dependencies
+pnpm audit
+```
+
+### Development Server
+
+```bash
+# Standard development
+pnpm dev
+
+# Development with turbo (faster)
+pnpm dev --turbo
+
+# Development with specific port
+pnpm dev --port 3001
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Type errors blocking commit**
+
+   - Run `pnpm type-check` to see full error details
+   - Fix type mismatches in stream data handling
+   - Ensure proper type definitions in [lib/types.ts](mdc:lib/types.ts)
+
+2. **Linting errors blocking commit**
+
+   - Run `pnpm lint:fix` to auto-fix most issues
+   - Check for unused variables or imports
+   - Ensure proper React hook dependencies
+
+3. **Build failures**
+
+   - Check for missing environment variables
+   - Verify all dependencies are installed
+   - Run database migrations if needed
+
+4. **Test failures**
+   - Ensure test database is set up
+   - Check for proper test data setup
+   - Verify environment variables for testing
+
+### Getting Help
+
+- Check error messages carefully - they usually point to the exact issue
+- Use `pnpm lint:fix` and `pnpm format` to auto-resolve many issues
+- Run commands individually to isolate problems
+- Review recent changes if tests suddenly start failing
+
+This workflow ensures high code quality while maintaining developer productivity through clear feedback and automated fixes.

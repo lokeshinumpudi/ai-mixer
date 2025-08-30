@@ -7,13 +7,23 @@ import {
   documentHandlersByArtifactKind,
 } from '@/lib/artifacts/server';
 import type { ChatMessage } from '@/lib/types';
+interface SelectedModel {
+  id: string;
+  supportsArtifacts: boolean;
+  supportsReasoning: boolean;
+}
 
 interface CreateDocumentProps {
   session: Session;
   dataStream: UIMessageStreamWriter<ChatMessage>;
+  selectedModel: SelectedModel;
 }
 
-export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
+export const createDocument = ({
+  session,
+  dataStream,
+  selectedModel,
+}: CreateDocumentProps) =>
   tool({
     description:
       'Create a document for a writing or content creation activities. This tool will call other functions that will generate the contents of the document based on the title and kind.',
@@ -62,6 +72,7 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
         title,
         dataStream,
         session,
+        selectedModel,
       });
 
       dataStream.write({ type: 'data-finish', data: null, transient: true });

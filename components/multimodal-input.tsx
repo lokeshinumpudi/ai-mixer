@@ -28,6 +28,11 @@ import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
+import { useUsage } from '@/hooks/use-usage';
+import { useRouter } from 'next/navigation';
+import type { Session } from 'next-auth';
+import { ModelPicker } from './model-picker';
+import { useAnimeControls } from '@/hooks/use-anime';
 
 function PureMultimodalInput({
   chatId,
@@ -42,6 +47,8 @@ function PureMultimodalInput({
   sendMessage,
   className,
   selectedVisibilityType,
+  session,
+  selectedModelId,
 }: {
   chatId: string;
   input: string;
@@ -55,8 +62,12 @@ function PureMultimodalInput({
   sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
   className?: string;
   selectedVisibilityType: VisibilityType;
+  session: Session;
+  selectedModelId: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const router = useRouter();
+  const { usage } = useUsage();
   const { width } = useWindowSize();
 
   useEffect(() => {
@@ -109,6 +120,18 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
 
   const submitForm = useCallback(() => {
+    // Check rate limits before sending
+    if (usage?.isOverLimit) {
+      toast.error('Message limit reached', {
+        description: `You've reached your ${usage.type} limit. Upgrade to continue.`,
+        action: {
+          label: 'Upgrade',
+          onClick: () => router.push('/pricing'),
+        },
+      });
+      return;
+    }
+
     window.history.replaceState({}, '', `/chat/${chatId}`);
 
     sendMessage({
@@ -144,6 +167,8 @@ function PureMultimodalInput({
     setLocalStorageInput,
     width,
     chatId,
+    usage,
+    router,
   ]);
 
   const uploadFile = async (file: File) => {
@@ -276,40 +301,47 @@ function PureMultimodalInput({
         </div>
       )}
 
-      <Textarea
-        data-testid="multimodal-input"
-        ref={textareaRef}
-        placeholder="Send a message..."
-        value={input}
-        onChange={handleInput}
-        className={cx(
-          'min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-2xl !text-base bg-muted pb-10 dark:border-zinc-700',
-          className,
-        )}
-        rows={2}
-        autoFocus
-        onKeyDown={(event) => {
-          if (
-            event.key === 'Enter' &&
-            !event.shiftKey &&
-            !event.nativeEvent.isComposing
-          ) {
-            event.preventDefault();
+      <div className={cx('relative luxury-input glass rounded-3xl', className)}>
+        <Textarea
+          data-testid="multimodal-input"
+          ref={textareaRef}
+          placeholder="Send a message..."
+          value={input}
+          onChange={handleInput}
+          className="min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none text-base bg-transparent pb-12 pt-4 px-4 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 focus:shadow-none"
+          rows={2}
+          autoFocus
+          onKeyDown={(event) => {
+            if (
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
 
-            if (status !== 'ready') {
-              toast.error('Please wait for the model to finish its response!');
-            } else {
-              submitForm();
+              if (status !== 'ready') {
+                toast.error(
+                  'Please wait for the model to finish its response!',
+                );
+              } else {
+                submitForm();
+              }
             }
-          }
-        }}
-      />
-
-      <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start">
-        <AttachmentsButton fileInputRef={fileInputRef} status={status} />
+          }}
+        />
       </div>
 
-      <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
+      <div className="absolute bottom-0 left-0 p-3 w-fit flex flex-row justify-start items-center gap-2">
+        <AttachmentsButton fileInputRef={fileInputRef} status={status} />
+        <ModelPicker
+          session={session}
+          selectedModelId={selectedModelId}
+          disabled={status !== 'ready'}
+          compact={true}
+        />
+      </div>
+
+      <div className="absolute bottom-0 right-0 p-3 w-fit flex flex-row justify-end">
         {status === 'submitted' ? (
           <StopButton stop={stop} setMessages={setMessages} />
         ) : (
@@ -332,6 +364,7 @@ export const MultimodalInput = memo(
     if (!equal(prevProps.attachments, nextProps.attachments)) return false;
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
+    if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
 
     return true;
   },
@@ -347,7 +380,7 @@ function PureAttachmentsButton({
   return (
     <Button
       data-testid="attachments-button"
-      className="rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200"
+      className="luxury-button rounded-xl p-2 h-9 w-9 border-0 hover:bg-accent/80"
       onClick={(event) => {
         event.preventDefault();
         fileInputRef.current?.click();
@@ -355,7 +388,7 @@ function PureAttachmentsButton({
       disabled={status !== 'ready'}
       variant="ghost"
     >
-      <PaperclipIcon size={14} />
+      <PaperclipIcon size={16} />
     </Button>
   );
 }
@@ -372,14 +405,14 @@ function PureStopButton({
   return (
     <Button
       data-testid="stop-button"
-      className="rounded-full p-1.5 h-fit border dark:border-zinc-600"
+      className="luxury-button rounded-full p-2 h-9 w-9 border border-border/50 bg-background hover:bg-destructive hover:text-destructive-foreground"
       onClick={(event) => {
         event.preventDefault();
         stop();
         setMessages((messages) => messages);
       }}
     >
-      <StopIcon size={14} />
+      <StopIcon size={16} />
     </Button>
   );
 }
@@ -395,17 +428,45 @@ function PureSendButton({
   input: string;
   uploadQueue: Array<string>;
 }) {
+  const canSend = input.length > 0 && uploadQueue.length === 0;
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const { hoverAnimation } = useAnimeControls();
+
+  useEffect(() => {
+    if (buttonRef.current) {
+      return hoverAnimation(
+        buttonRef.current,
+        {
+          scale: 1.06,
+          duration: 180,
+          ease: 'outQuad',
+        },
+        {
+          scale: 1,
+          duration: 180,
+          ease: 'outQuad',
+        },
+      );
+    }
+  }, [buttonRef.current]);
+
   return (
     <Button
+      ref={buttonRef}
       data-testid="send-button"
-      className="rounded-full p-1.5 h-fit border dark:border-zinc-600"
+      className={cx(
+        'luxury-button rounded-full p-2 h-9 w-9 border-0 transition-all duration-300',
+        canSend
+          ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md'
+          : 'bg-muted text-muted-foreground cursor-not-allowed',
+      )}
       onClick={(event) => {
         event.preventDefault();
-        submitForm();
+        if (canSend) submitForm();
       }}
-      disabled={input.length === 0 || uploadQueue.length > 0}
+      disabled={!canSend}
     >
-      <ArrowUpIcon size={14} />
+      <ArrowUpIcon size={16} />
     </Button>
   );
 }

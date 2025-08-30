@@ -1,0 +1,159 @@
+---
+alwaysApply: true
+---
+
+# Lint Enforcement and Code Quality Rules
+
+## Pre-commit Hook System
+
+This project uses **Husky pre-commit hooks** to enforce code quality. All commits are validated for:
+
+### Type Checking (BLOCKING)
+
+- Full TypeScript validation with `pnpm type-check`
+- Uses strict TypeScript configuration with enhanced checks
+- **Commits are blocked** if any type errors exist
+- Test files are excluded from strict checking
+
+### Linting (BLOCKING for errors, ALLOWS warnings)
+
+- ESLint + Biome validation on staged files only
+- **Linting errors block commits**, warnings are allowed
+- Use `pnpm lint:fix` to auto-fix issues before committing
+
+### Auto-Formatting (AUTOMATIC)
+
+- Biome automatically formats all staged files during commit
+- Files are formatted and re-staged automatically
+- No manual formatting required - happens seamlessly
+
+## Development Scripts
+
+### Local Development (Lenient)
+
+```bash
+pnpm lint:check        # Allows warnings, blocks errors
+pnpm type-check        # Full TypeScript validation
+pnpm format:check      # Check formatting without fixes
+pnpm pre-commit        # Run full pre-commit validation
+```
+
+### CI/Production (Strict)
+
+```bash
+pnpm lint:check:strict # Max 15 warnings allowed
+pnpm format:check      # Strict format validation
+```
+
+## Adding New Types to Stream Data
+
+When adding new stream data types (like usage updates), follow this pattern:
+
+### 1. Update Type Definitions in [lib/types.ts](mdc:lib/types.ts)
+
+```typescript
+export type CustomUIDataTypes = {
+  // existing types...
+  newDataType: {
+    field1: string;
+    field2: number;
+    // Define complete type structure
+  };
+};
+```
+
+### 2. Update Stream Handler in [components/data-stream-handler.tsx](mdc:components/data-stream-handler.tsx)
+
+```typescript
+// Handle new data type
+if (delta.type === "data-newDataType" && delta.data) {
+  const newData = delta.data;
+  // Process the data
+  return; // Exit early for new data types
+}
+```
+
+### 3. Common Type Error Patterns to Avoid
+
+- ❌ `delta.type === 'usage-update'` - Type not in union
+- ❌ `delta.content` - Property doesn't exist
+- ✅ `delta.type === 'data-usageUpdate'` - Correct type pattern
+- ✅ `delta.data` - Correct property access
+
+## Git Workflow
+
+### Commit Process
+
+1. Make code changes
+2. Pre-commit hooks automatically run:
+   - Type checking (full project)
+   - Linting (staged files only)
+   - Format suggestions
+3. **Fix any type/lint errors** before commit succeeds
+4. Push triggers CI validation with strict standards
+
+### If Pre-commit Fails
+
+```bash
+# Fix type errors first
+pnpm type-check
+
+# Fix linting errors
+pnpm lint:fix
+
+# Check formatting
+pnpm format
+
+# Try commit again
+git commit -m "your message"
+```
+
+## TypeScript Configuration
+
+### Strict Mode Settings in [tsconfig.json](mdc:tsconfig.json)
+
+- `strict: true` - Enable all strict checks
+- `noUnusedLocals: true` - Catch unused variables
+- `noImplicitReturns: true` - Ensure all code paths return
+- Test files excluded from strict validation
+
+### Type Safety Best Practices
+
+- Always define complete interfaces for stream data
+- Use proper union types for discriminated unions
+- Validate data at runtime with Zod schemas
+- Handle all code paths in switch statements
+
+## CI/CD Pipeline in [.github/workflows/ci.yml](mdc:.github/workflows/ci.yml)
+
+### Validation Steps
+
+1. **Type checking** - Must pass with zero errors
+2. **Strict linting** - Max 15 warnings allowed
+3. **Format checking** - Must be properly formatted
+4. **Build verification** - Must build successfully
+5. **Test execution** - All tests must pass
+
+### Branch Protection
+
+- All checks must pass before merging
+- No bypassing quality gates
+- Consistent quality across all environments
+
+## Team Development
+
+### VS Code Integration in [.vscode/settings.json](mdc:.vscode/settings.json)
+
+- Auto-format on save enabled
+- ESLint integration with auto-fix
+- TypeScript import organization
+- Consistent editor configuration
+
+### Best Practices
+
+- Run `pnpm lint:fix` before committing
+- Use `pnpm format` for consistent styling
+- Address type errors immediately
+- Keep warning count under control (<15)
+
+This system ensures **zero tolerance for type errors** while maintaining developer productivity through helpful warnings and automated fixes.

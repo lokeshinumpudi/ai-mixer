@@ -42,6 +42,14 @@ export type CustomUIDataTypes = {
   kind: ArtifactKind;
   clear: null;
   finish: null;
+  usageUpdate: {
+    used: number;
+    quota: number;
+    remaining: number;
+    isOverLimit: boolean;
+    type: 'daily' | 'monthly';
+    resetInfo: string;
+  };
 };
 
 export type ChatMessage = UIMessage<

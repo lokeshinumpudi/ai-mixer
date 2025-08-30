@@ -1,5 +1,6 @@
 import type { Attachment } from '@/lib/types';
-import { LoaderIcon } from './icons';
+import { useEffect, useRef, useState } from 'react';
+import { useAnimeControls } from '@/hooks/use-anime';
 
 export const PreviewAttachment = ({
   attachment,
@@ -9,19 +10,42 @@ export const PreviewAttachment = ({
   isUploading?: boolean;
 }) => {
   const { name, url, contentType } = attachment;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const { createAnimation } = useAnimeControls();
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      createAnimation(containerRef.current, {
+        opacity: [0, 1],
+        translateY: [6, 0],
+        duration: 220,
+        ease: 'outQuad',
+      });
+    }
+  }, [createAnimation, url]);
 
   return (
-    <div data-testid="input-attachment-preview" className="flex flex-col gap-2">
-      <div className="w-20 h-16 aspect-video bg-muted rounded-md relative flex flex-col items-center justify-center">
+    <div
+      ref={containerRef}
+      data-testid="input-attachment-preview"
+      className="flex flex-col gap-2"
+    >
+      <div className="w-20 h-16 aspect-video bg-muted rounded-md relative flex flex-col items-center justify-center overflow-hidden">
         {contentType ? (
           contentType.startsWith('image') ? (
             // NOTE: it is recommended to use next/image for images
             // eslint-disable-next-line @next/next/no-img-element
             <img
+              ref={imageRef}
               key={url}
               src={url}
               alt={name ?? 'An image attachment'}
               className="rounded-md size-full object-cover"
+              onLoad={() => {
+                setLoaded(true);
+              }}
             />
           ) : (
             <div className="" />
@@ -30,12 +54,12 @@ export const PreviewAttachment = ({
           <div className="" />
         )}
 
-        {isUploading && (
+        {(isUploading || !loaded) && (
           <div
             data-testid="input-attachment-loader"
-            className="animate-spin absolute text-zinc-500"
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-[shimmer_1.2s_infinite]"
           >
-            <LoaderIcon />
+            {/* shimmer overlay */}
           </div>
         )}
       </div>

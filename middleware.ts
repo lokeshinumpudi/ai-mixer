@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { guestRegex, isDevelopmentEnvironment } from './lib/constants';
+import { NextResponse, type NextRequest } from 'next/server';
+import { isDevelopmentEnvironment } from './lib/constants';
+import { getRouteAccessLevel } from './lib/route-config';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -13,28 +14,44 @@ export async function middleware(request: NextRequest) {
     return new Response('pong', { status: 200 });
   }
 
-  if (pathname.startsWith('/api/auth')) {
+  // Determine route access level using centralized configuration
+  const accessLevel = getRouteAccessLevel(pathname);
+
+  // Public routes bypass all authentication
+  if (accessLevel === 'public') {
     return NextResponse.next();
   }
 
+  // Get authentication token for protected and conditional routes
   const token = await getToken({
     req: request,
-    secret: process.env.AUTH_SECRET,
+    secret: process.env.AUTH_SECRET ?? '',
     secureCookie: !isDevelopmentEnvironment,
   });
 
-  if (!token) {
-    const redirectUrl = encodeURIComponent(request.url);
-
-    return NextResponse.redirect(
-      new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url),
-    );
+  // Handle login page based on authentication status
+  if (pathname === '/login') {
+    if (token) {
+      // Authenticated users trying to access login should go to home
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+    // Unauthenticated users can access login
+    return NextResponse.next();
   }
 
-  const isGuest = guestRegex.test(token?.email ?? '');
+  // Redirect old register route to unified login
+  if (pathname === '/register') {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
 
-  if (token && !isGuest && ['/login', '/register'].includes(pathname)) {
-    return NextResponse.redirect(new URL('/', request.url));
+  // Conditional routes handle their own auth logic
+  if (accessLevel === 'conditional') {
+    return NextResponse.next();
+  }
+
+  // Protected routes require authentication
+  if (accessLevel === 'protected' && !token) {
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   return NextResponse.next();
@@ -46,7 +63,7 @@ export const config = {
     '/chat/:id',
     '/api/:path*',
     '/login',
-    '/register',
+    '/register', // Keep for redirect to login
 
     /*
      * Match all request paths except for the ones starting with:

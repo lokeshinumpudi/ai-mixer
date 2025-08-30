@@ -1,20 +1,28 @@
-export const DEFAULT_CHAT_MODEL: string = 'chat-model';
+import { DEFAULT_MODEL, getModelCapabilities } from '@/lib/constants';
 
+export const DEFAULT_CHAT_MODEL: string = DEFAULT_MODEL;
+
+// Model interface for client-side usage
 export interface ChatModel {
   id: string;
   name: string;
   description: string;
+  provider: string;
+  supportsReasoning: boolean;
+  supportsArtifacts: boolean;
+  enabled?: boolean; // Optional for backward compatibility
 }
 
-export const chatModels: Array<ChatModel> = [
-  {
-    id: 'chat-model',
-    name: 'Chat model',
-    description: 'Primary model for all-purpose chat',
-  },
-  {
-    id: 'chat-model-reasoning',
-    name: 'Reasoning model',
-    description: 'Uses advanced reasoning',
-  },
-];
+// Helper function to convert gateway model to our ChatModel interface
+export const enrichModelWithCapabilities = (gatewayModel: any): ChatModel => {
+  const capabilities = getModelCapabilities(gatewayModel.id);
+
+  return {
+    id: gatewayModel.id,
+    name: gatewayModel.name || gatewayModel.id,
+    description: gatewayModel.description || `${gatewayModel.id} model`,
+    provider: gatewayModel.id.split('/')[0] || 'unknown',
+    supportsReasoning: capabilities.supportsReasoning,
+    supportsArtifacts: capabilities.supportsArtifacts,
+  };
+};

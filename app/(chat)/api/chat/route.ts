@@ -1,3 +1,32 @@
+import type { UserType } from '@/app/(auth)/auth';
+import type { VisibilityType } from '@/components/visibility-selector';
+import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
+import type { ChatModel } from '@/lib/ai/models';
+import { systemPrompt, type RequestHints } from '@/lib/ai/prompts';
+import { getLanguageModel, modelSupports } from '@/lib/ai/providers';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { getWeather } from '@/lib/ai/tools/get-weather';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { protectedRoute } from '@/lib/auth-decorators';
+import { SessionUtils } from '@/lib/auth/session-config';
+import { isProductionEnvironment } from '@/lib/constants';
+import {
+  createStreamId,
+  deleteChatById,
+  getChatById,
+  getMessagesByChatId,
+  getUserUsageAndLimits,
+  saveChat,
+  saveMessages,
+  upsertDailyUsage,
+  upsertMonthlyUsage,
+} from '@/lib/db/queries';
+import { ChatSDKError } from '@/lib/errors';
+import { validateModelAccess } from '@/lib/security';
+import type { ChatMessage } from '@/lib/types';
+import { convertToUIMessages, generateUUID } from '@/lib/utils';
+import { geolocation } from '@vercel/functions';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -6,37 +35,13 @@ import {
   stepCountIs,
   streamText,
 } from 'ai';
-import { auth, type UserType } from '@/app/(auth)/auth';
-import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
-import {
-  createStreamId,
-  deleteChatById,
-  getChatById,
-  getMessageCountByUserId,
-  getMessagesByChatId,
-  saveChat,
-  saveMessages,
-} from '@/lib/db/queries';
-import { convertToUIMessages, generateUUID } from '@/lib/utils';
-import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
-import { isProductionEnvironment } from '@/lib/constants';
-import { myProvider } from '@/lib/ai/providers';
-import { entitlementsByUserType } from '@/lib/ai/entitlements';
-import { postRequestBodySchema, type PostRequestBody } from './schema';
-import { geolocation } from '@vercel/functions';
+import { after } from 'next/server';
 import {
   createResumableStreamContext,
   type ResumableStreamContext,
 } from 'resumable-stream';
-import { after } from 'next/server';
-import { ChatSDKError } from '@/lib/errors';
-import type { ChatMessage } from '@/lib/types';
-import type { ChatModel } from '@/lib/ai/models';
-import type { VisibilityType } from '@/components/visibility-selector';
+import { generateTitleFromUserMessage } from '../../actions';
+import { postRequestBodySchema, type PostRequestBody } from './schema';
 
 export const maxDuration = 60;
 
@@ -62,7 +67,7 @@ export function getStreamContext() {
   return globalStreamContext;
 }
 
-export async function POST(request: Request) {
+export const POST = protectedRoute(async (request, _context, user) => {
   let requestBody: PostRequestBody;
 
   try {
@@ -85,22 +90,21 @@ export async function POST(request: Request) {
       selectedVisibilityType: VisibilityType;
     } = requestBody;
 
-    const session = await auth();
+    const userType: UserType = user.type;
 
-    if (!session?.user) {
-      return new ChatSDKError('unauthorized:chat').toResponse();
-    }
-
-    const userType: UserType = session.user.type;
-
-    const messageCount = await getMessageCountByUserId({
-      id: session.user.id,
-      differenceInHours: 24,
+    // Check usage and rate limits
+    const usageInfo = await getUserUsageAndLimits({
+      userId: user.id,
+      userType,
     });
 
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
+    if (usageInfo.isOverLimit) {
       return new ChatSDKError('rate_limit:chat').toResponse();
     }
+
+    // Validate that the user has access to the selected model
+    const allowedModelIds = getAllowedModelIdsForUser(userType);
+    validateModelAccess(selectedChatModel, userType, user.id, allowedModelIds);
 
     const chat = await getChatById({ id });
 
@@ -111,12 +115,12 @@ export async function POST(request: Request) {
 
       await saveChat({
         id,
-        userId: session.user.id,
+        userId: user.id,
         title,
         visibility: selectedVisibilityType,
       });
     } else {
-      if (chat.userId !== session.user.id) {
+      if (chat.userId !== user.id) {
         return new ChatSDKError('forbidden:chat').toResponse();
       }
     }
@@ -149,30 +153,65 @@ export async function POST(request: Request) {
     const streamId = generateUUID();
     await createStreamId({ streamId, chatId: id });
 
+    let dataStreamRef: any = null;
+
     const stream = createUIMessageStream({
       execute: ({ writer: dataStream }) => {
+        dataStreamRef = dataStream; // Store reference for onFinish callback
+
+        const model = getLanguageModel(selectedChatModel);
+        const supportsArtifacts = modelSupports(selectedChatModel, 'artifacts');
+        const supportsReasoning = modelSupports(selectedChatModel, 'reasoning');
+
         const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
+          model,
+          system: systemPrompt({
+            selectedModel: {
+              id: selectedChatModel,
+              supportsArtifacts,
+              supportsReasoning,
+            },
+            requestHints,
+          }),
           messages: convertToModelMessages(uiMessages),
           stopWhen: stepCountIs(5),
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                  'getWeather',
-                  'createDocument',
-                  'updateDocument',
-                  'requestSuggestions',
-                ],
+          experimental_activeTools: supportsArtifacts
+            ? [
+                'getWeather',
+                'createDocument',
+                'updateDocument',
+                'requestSuggestions',
+              ]
+            : ['getWeather'],
           experimental_transform: smoothStream({ chunking: 'word' }),
           tools: {
             getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session,
+            createDocument: createDocument({
+              session: SessionUtils.createSession(user, 'DEFAULT'),
               dataStream,
+              selectedModel: {
+                id: selectedChatModel,
+                supportsArtifacts,
+                supportsReasoning,
+              },
+            }),
+            updateDocument: updateDocument({
+              session: SessionUtils.createSession(user, 'DEFAULT'),
+              dataStream,
+              selectedModel: {
+                id: selectedChatModel,
+                supportsArtifacts,
+                supportsReasoning,
+              },
+            }),
+            requestSuggestions: requestSuggestions({
+              session: SessionUtils.createSession(user, 'DEFAULT'),
+              dataStream,
+              selectedModel: {
+                id: selectedChatModel,
+                supportsArtifacts,
+                supportsReasoning,
+              },
             }),
           },
           experimental_telemetry: {
@@ -185,7 +224,7 @@ export async function POST(request: Request) {
 
         dataStream.merge(
           result.toUIMessageStream({
-            sendReasoning: true,
+            sendReasoning: supportsReasoning,
           }),
         );
       },
@@ -201,6 +240,61 @@ export async function POST(request: Request) {
             chatId: id,
           })),
         });
+
+        // Usage tracking and real-time usage update
+        try {
+          const getText = (msg: any) =>
+            Array.isArray(msg?.parts)
+              ? msg.parts
+                  .filter((p: any) => p?.type === 'text')
+                  .map((p: any) => String(p.text || ''))
+                  .join('')
+              : '';
+
+          const lastUser = [...messages]
+            .reverse()
+            .find((m) => m.role === 'user');
+          const lastAssistant = [...messages]
+            .reverse()
+            .find((m) => m.role === 'assistant');
+
+          const inChars = lastUser ? getText(lastUser).length : 0;
+          const outChars = lastAssistant ? getText(lastAssistant).length : 0;
+          const toTokens = (n: number) => Math.ceil(n / 4);
+
+          // Track daily usage (for all users - includes tokens for legacy and messages for new system)
+          await upsertDailyUsage({
+            userId: user.id,
+            modelId: selectedChatModel,
+            tokensIn: toTokens(inChars),
+            tokensOut: toTokens(outChars),
+            messages: 1, // Count this as 1 message interaction
+          });
+
+          // Track monthly usage for pro users
+          if (userType === 'pro') {
+            await upsertMonthlyUsage({
+              userId: user.id,
+              messages: 1,
+            });
+          }
+
+          // Get updated usage info after tracking
+          const updatedUsageInfo = await getUserUsageAndLimits({
+            userId: user.id,
+            userType,
+          });
+
+          // Send usage update to client via data stream (if available)
+          if (dataStreamRef) {
+            dataStreamRef.write({
+              type: 'usage-update',
+              content: updatedUsageInfo,
+            });
+          }
+        } catch (err) {
+          console.error('usage upsert failed', err);
+        }
       },
       onError: () => {
         return 'Oops, an error occurred!';
@@ -222,10 +316,14 @@ export async function POST(request: Request) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
     }
+    return new ChatSDKError(
+      'bad_request:api',
+      'Internal server error',
+    ).toResponse();
   }
-}
+});
 
-export async function DELETE(request: Request) {
+export const DELETE = protectedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
@@ -233,19 +331,13 @@ export async function DELETE(request: Request) {
     return new ChatSDKError('bad_request:api').toResponse();
   }
 
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
-  }
-
   const chat = await getChatById({ id });
 
-  if (chat.userId !== session.user.id) {
+  if (chat.userId !== user.id) {
     return new ChatSDKError('forbidden:chat').toResponse();
   }
 
   const deletedChat = await deleteChatById({ id });
 
   return Response.json(deletedChat, { status: 200 });
-}
+});
