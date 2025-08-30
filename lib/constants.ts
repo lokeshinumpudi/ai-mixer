@@ -2,6 +2,7 @@ import { generateDummyPassword } from './db/utils';
 
 export const isProductionEnvironment = process.env.NODE_ENV === 'production';
 export const isDevelopmentEnvironment = process.env.NODE_ENV === 'development';
+
 export const isTestEnvironment = Boolean(
   process.env.PLAYWRIGHT_TEST_BASE_URL ||
     process.env.PLAYWRIGHT ||
@@ -30,69 +31,20 @@ export const PRICING = {
 } as const;
 
 // Free models (available to all users)
-export const FREE_MODELS = [
-  'xai/grok-3-mini',
-  'openai/gpt-3.5-turbo',
-  'google/gemma2-9b-it',
-  'meta/llama-3.1-8b',
-  'mistral/ministral-3b',
-  'amazon/nova-micro',
-] as const;
+export const FREE_MODELS = ['google/gemini-2.5-flash-lite'] as const;
 
 // Pro models (require paid subscription)
-export const PRO_MODELS = [
-  'xai/grok-3',
-  'openai/gpt-4o-mini',
-  'anthropic/claude-3.5-haiku',
-  'google/gemini-2.0-flash',
-  'amazon/nova-lite',
-] as const;
+export const PRO_MODELS = ['xai/grok-code-fast-1'] as const;
 
 // Unified model configuration - single source of truth
 export const SUPPORTED_MODELS = {
-  'xai/grok-3': {
+  'google/gemini-2.5-flash-lite': {
     supportsReasoning: true,
     supportsArtifacts: true,
   },
-  'xai/grok-3-mini': {
+  'xai/grok-code-fast-1': {
     supportsReasoning: true,
     supportsArtifacts: true,
-  },
-  'openai/gpt-4o-mini': {
-    supportsReasoning: false,
-    supportsArtifacts: true,
-  },
-  'openai/gpt-3.5-turbo': {
-    supportsReasoning: false,
-    supportsArtifacts: false,
-  },
-  'anthropic/claude-3.5-haiku': {
-    supportsReasoning: false,
-    supportsArtifacts: true,
-  },
-  'google/gemini-2.0-flash': {
-    supportsReasoning: false,
-    supportsArtifacts: true,
-  },
-  'google/gemma2-9b-it': {
-    supportsReasoning: false,
-    supportsArtifacts: false,
-  },
-  'meta/llama-3.1-8b': {
-    supportsReasoning: false,
-    supportsArtifacts: false,
-  },
-  'mistral/ministral-3b': {
-    supportsReasoning: false,
-    supportsArtifacts: false,
-  },
-  'amazon/nova-lite': {
-    supportsReasoning: false,
-    supportsArtifacts: true,
-  },
-  'amazon/nova-micro': {
-    supportsReasoning: false,
-    supportsArtifacts: false,
   },
 } as const;
 

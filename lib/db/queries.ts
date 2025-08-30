@@ -10,6 +10,7 @@ import {
   gte,
   inArray,
   lt,
+  or,
   sum,
   type SQL,
 } from 'drizzle-orm';
@@ -20,7 +21,6 @@ import type { UserType } from '@/app/(auth)/auth';
 import type { ArtifactKind } from '@/components/artifact';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
-import { SESSION_CONFIG } from '@/lib/auth/session-config';
 import { PRICING } from '@/lib/constants';
 import { sql } from 'drizzle-orm';
 import { ChatSDKError } from '../errors';
@@ -644,6 +644,37 @@ export async function getRecentPurchaseCreditsCount({
   }
 }
 
+export async function getRecentPaymentEventsCount({
+  userId,
+  since,
+}: {
+  userId: string;
+  since: Date;
+}): Promise<number> {
+  try {
+    const rows = await db
+      .select({ id: paymentEvent.id })
+      .from(paymentEvent)
+      .where(
+        and(
+          eq(paymentEvent.userId, userId),
+          or(
+            eq(paymentEvent.eventType, 'captured'),
+            eq(paymentEvent.eventType, 'paid'),
+          ),
+          gte(paymentEvent.createdAt, since),
+        ),
+      );
+
+    return rows.length;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get recent payment events',
+    );
+  }
+}
+
 // Enhanced payment event tracking
 export async function createPaymentEvent({
   paymentId,
@@ -1139,9 +1170,7 @@ export async function getUserSubscription(userId: string) {
 export async function getUsageHistory(userId: string) {
   try {
     const now = new Date();
-    const start = new Date(
-      now.getTime() - SESSION_CONFIG.ANALYTICS.USAGE_HISTORY,
-    );
+    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const startDateString = `${start.getUTCFullYear()}-${String(
       start.getUTCMonth() + 1,
     ).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`;

@@ -1,4 +1,4 @@
-import { type UserType } from '@/app/(auth)/auth';
+import type { UserType } from '@/app/(auth)/auth';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
 import type { ChatModel } from '@/lib/ai/models';

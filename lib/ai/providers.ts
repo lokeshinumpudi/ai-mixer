@@ -1,7 +1,7 @@
-import { extractReasoningMiddleware, wrapLanguageModel } from 'ai';
 import { gateway } from '@/lib/gateway';
+import { extractReasoningMiddleware, wrapLanguageModel } from 'ai';
+import { getModelCapabilities, isTestEnvironment } from '../constants';
 import { chatModel, titleModel } from './models.test';
-import { isTestEnvironment, getModelCapabilities } from '../constants';
 
 // Helper function to get a model with reasoning if supported
 export const getLanguageModel = (modelId: string) => {
