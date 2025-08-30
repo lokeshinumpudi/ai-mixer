@@ -18,9 +18,9 @@ export const DEFAULT_IMAGE_MODEL = 'xai/grok-2-image-1212'; // Or whatever image
 // Pricing configuration
 export const PRICING = {
   FREE_TIER: {
-    dailyMessages: 50,
+    dailyMessages: 5,
     name: 'Free Plan',
-    description: '20 messages per day with basic models',
+    description: '5 messages per day with basic models',
   },
   PAID_TIER: {
     monthlyMessages: 1000,
