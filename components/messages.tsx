@@ -1,14 +1,13 @@
-import { PreviewMessage, ThinkingMessage } from './message';
-import { Greeting } from './greeting';
-import { memo, useEffect } from 'react';
-import type { Vote } from '@/lib/db/schema';
-import equal from 'fast-deep-equal';
-import type { UseChatHelpers } from '@ai-sdk/react';
-import { motion } from 'framer-motion';
 import { useMessages } from '@/hooks/use-messages';
+import type { Vote } from '@/lib/db/schema';
 import type { ChatMessage } from '@/lib/types';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import equal from 'fast-deep-equal';
+import { motion } from 'framer-motion';
+import { memo } from 'react';
 import { useDataStream } from './data-stream-provider';
-import { useAnimeControls } from '@/hooks/use-anime';
+import { Greeting } from './greeting';
+import { PreviewMessage, ThinkingMessage } from './message';
 
 interface MessagesProps {
   chatId: string;
@@ -42,27 +41,6 @@ function PureMessages({
   });
 
   useDataStream();
-
-  const { staggerAnimation } = useAnimeControls();
-
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (container) {
-      const elements = Array.from(
-        container.querySelectorAll('[data-testid^="message-"]'),
-      ) as HTMLElement[];
-      staggerAnimation(
-        elements,
-        {
-          opacity: [0, 1],
-          translateY: [8, 0],
-          duration: 400,
-          ease: 'outQuart',
-        },
-        60,
-      );
-    }
-  }, [messages.length]);
 
   return (
     <div

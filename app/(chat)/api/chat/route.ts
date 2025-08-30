@@ -2,6 +2,7 @@ import type { UserType } from '@/app/(auth)/auth';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
 import type { ChatModel } from '@/lib/ai/models';
+import { getDefaultModelForUser } from '@/lib/ai/models';
 import { systemPrompt, type RequestHints } from '@/lib/ai/prompts';
 import { getLanguageModel, modelSupports } from '@/lib/ai/providers';
 import { createDocument } from '@/lib/ai/tools/create-document';
@@ -104,7 +105,18 @@ export const POST = protectedRoute(async (request, _context, user) => {
 
     // Validate that the user has access to the selected model
     const allowedModelIds = getAllowedModelIdsForUser(userType);
-    validateModelAccess(selectedChatModel, userType, user.id, allowedModelIds);
+
+    // Use fallback to plan-based default if selected model is not allowed
+    let effectiveModel = selectedChatModel;
+    if (!allowedModelIds.includes(selectedChatModel)) {
+      effectiveModel = getDefaultModelForUser(userType);
+      console.warn(
+        `User ${user.id} attempted to use unauthorized model ${selectedChatModel}, falling back to ${effectiveModel}`,
+      );
+    }
+
+    // Final validation of the effective model
+    validateModelAccess(effectiveModel, userType, user.id, allowedModelIds);
 
     const chat = await getChatById({ id });
 
@@ -159,15 +171,15 @@ export const POST = protectedRoute(async (request, _context, user) => {
       execute: ({ writer: dataStream }) => {
         dataStreamRef = dataStream; // Store reference for onFinish callback
 
-        const model = getLanguageModel(selectedChatModel);
-        const supportsArtifacts = modelSupports(selectedChatModel, 'artifacts');
-        const supportsReasoning = modelSupports(selectedChatModel, 'reasoning');
+        const model = getLanguageModel(effectiveModel);
+        const supportsArtifacts = modelSupports(effectiveModel, 'artifacts');
+        const supportsReasoning = modelSupports(effectiveModel, 'reasoning');
 
         const result = streamText({
           model,
           system: systemPrompt({
             selectedModel: {
-              id: selectedChatModel,
+              id: effectiveModel,
               supportsArtifacts,
               supportsReasoning,
             },

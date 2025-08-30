@@ -1,28 +1,29 @@
 'use client';
 
-import { DefaultChatTransport } from 'ai';
-import { useChat } from '@ai-sdk/react';
-import { useEffect, useState } from 'react';
-import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
-import type { Vote } from '@/lib/db/schema';
-import { fetcher, fetchWithErrorHandlers, generateUUID } from '@/lib/utils';
-import { Artifact } from './artifact';
-import { MultimodalInput } from './multimodal-input';
-import { Messages } from './messages';
-import type { VisibilityType } from './visibility-selector';
+
 import { useArtifactSelector } from '@/hooks/use-artifact';
-import { unstable_serialize } from 'swr/infinite';
-import { getChatHistoryPaginationKey } from './sidebar-history';
-import { toast } from './toast';
-import type { Session } from 'next-auth';
-import { useSearchParams } from 'next/navigation';
-import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { useAutoResume } from '@/hooks/use-auto-resume';
+import { useChatVisibility } from '@/hooks/use-chat-visibility';
+import { useCurrentModel } from '@/hooks/use-current-model';
+import type { Vote } from '@/lib/db/schema';
 import { ChatSDKError } from '@/lib/errors';
 import type { Attachment, ChatMessage } from '@/lib/types';
+import { fetcher, fetchWithErrorHandlers, generateUUID } from '@/lib/utils';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+import type { Session } from 'next-auth';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
+import { unstable_serialize } from 'swr/infinite';
+import { Artifact } from './artifact';
 import { useDataStream } from './data-stream-provider';
-import { useAnimeOnMount } from '@/hooks/use-anime';
+import { Messages } from './messages';
+import { MultimodalInput } from './multimodal-input';
+import { getChatHistoryPaginationKey } from './sidebar-history';
+import { toast } from './toast';
+import type { VisibilityType } from './visibility-selector';
 
 export function Chat({
   id,
@@ -49,6 +50,9 @@ export function Chat({
   const { mutate } = useSWRConfig();
   const { setDataStream } = useDataStream();
 
+  // Use dynamic model selection instead of static initialChatModel
+  const { currentModel } = useCurrentModel(initialChatModel, session.user.type);
+
   const [input, setInput] = useState<string>('');
 
   const {
@@ -72,7 +76,7 @@ export function Chat({
           body: {
             id,
             message: messages.at(-1),
-            selectedChatModel: initialChatModel,
+            selectedChatModel: currentModel,
             selectedVisibilityType: visibilityType,
             ...body,
           },
@@ -129,15 +133,7 @@ export function Chat({
 
   return (
     <>
-      <div
-        ref={useAnimeOnMount<HTMLDivElement>({
-          opacity: [0, 1],
-          translateY: [8, 0],
-          duration: 500,
-          ease: 'outQuart',
-        })}
-        className="flex flex-col min-w-0 h-dvh bg-background"
-      >
+      <div className="flex flex-col min-w-0 h-dvh bg-background">
         <ChatHeader
           chatId={id}
           selectedVisibilityType={initialVisibilityType}
@@ -171,7 +167,7 @@ export function Chat({
               sendMessage={sendMessage}
               selectedVisibilityType={visibilityType}
               session={session}
-              selectedModelId={initialChatModel}
+              selectedModelId={currentModel}
             />
           )}
         </form>

@@ -1,12 +1,11 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Button } from './ui/button';
-import { memo, useEffect, useRef } from 'react';
-import type { UseChatHelpers } from '@ai-sdk/react';
-import type { VisibilityType } from './visibility-selector';
 import type { ChatMessage } from '@/lib/types';
-import { useAnimeControls } from '@/hooks/use-anime';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import { motion } from 'framer-motion';
+import { memo, useRef } from 'react';
+import { Button } from './ui/button';
+import type { VisibilityType } from './visibility-selector';
 
 interface SuggestedActionsProps {
   chatId: string;
@@ -20,23 +19,6 @@ function PureSuggestedActions({
   selectedVisibilityType,
 }: SuggestedActionsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { staggerAnimation } = useAnimeControls();
-
-  useEffect(() => {
-    if (containerRef.current) {
-      staggerAnimation(
-        Array.from(containerRef.current.children),
-        {
-          opacity: [0, 1],
-          translateY: [20, 0],
-          scale: [0.95, 1],
-          duration: 600,
-          ease: 'outQuart',
-        },
-        100,
-      );
-    }
-  }, []);
 
   const suggestedActions = [
     {
