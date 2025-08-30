@@ -45,7 +45,7 @@ export default function Page() {
       }
       setIsSuccessful(true);
       updateSession();
-      router.refresh();
+      router.push('/'); // Redirect to home page after successful authentication
     }
   }, [state.status, state.isNewUser]);
 
