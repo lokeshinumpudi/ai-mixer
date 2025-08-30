@@ -1,9 +1,8 @@
 'use client';
 
-import { startTransition, useMemo, useOptimistic, useState } from 'react';
 import { saveChatModelAsCookie } from '@/app/(chat)/actions';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -11,8 +10,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { useAnimeOnMount } from '@/hooks/use-anime';
+import { useRouter } from 'next/navigation';
+import { startTransition, useMemo, useOptimistic, useState } from 'react';
 
 import {
   Tooltip,
@@ -20,19 +21,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
-import { useModels, isModelEnabled } from '@/hooks/use-models';
-import type { Session } from 'next-auth';
+import { isModelEnabled, useModels } from '@/hooks/use-models';
 import type { ChatModel } from '@/lib/ai/models';
+import { getDefaultModelForUser } from '@/lib/ai/models';
+import { cn } from '@/lib/utils';
+import type { Session } from 'next-auth';
 import {
-  SearchIcon,
-  StarIcon,
   BrainIcon,
-  CodeIcon,
-  ImageIcon,
-  SparklesIcon,
   CheckIcon,
+  CodeIcon,
   DiamondIcon,
+  ImageIcon,
+  SearchIcon,
+  SparklesIcon,
+  StarIcon,
 } from './icons';
 
 // Provider icons mapping
@@ -79,6 +81,7 @@ function ModelCard({
   onSelect,
   onToggleFavorite,
 }: ModelCardProps) {
+  const router = useRouter();
   const enabled = isModelEnabled(model);
   const providerIcon = getProviderIcon(model.provider);
 
@@ -98,14 +101,14 @@ function ModelCard({
           data-testid={`model-selector-item-${model.id}`}
           className={cn(
             'relative transition-all duration-200',
-            enabled && 'cursor-pointer hover:shadow-md hover:border-primary/20',
+            'cursor-pointer hover:shadow-md hover:border-primary/20',
             'border-2',
             isSelected && enabled && 'border-primary bg-primary/5',
             !enabled &&
-              'cursor-not-allowed border-dashed border-muted-foreground/20 bg-muted/50 grayscale opacity-60',
+              'border-dashed border-muted-foreground/20 bg-muted/50 grayscale opacity-60 hover:opacity-80',
             enabled && !isSelected && 'hover:border-primary/20',
           )}
-          onClick={enabled ? onSelect : undefined}
+          onClick={enabled ? onSelect : () => router.push('/pricing')}
         >
           <CardContent className="p-4 h-28 flex flex-col">
             {/* Header with provider icon and favorite */}
@@ -254,6 +257,7 @@ export function ModelPicker({
   compact = false,
   disabled = false,
 }: ModelPickerProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -263,9 +267,22 @@ export function ModelPicker({
 
   const { models: allModels, isLoading, userType } = useModels();
 
+  // Get plan-based default model when selectedModelId is not valid or not available
+  const planBasedDefaultModel = useMemo(() => {
+    return getDefaultModelForUser(session.user.type);
+  }, [session.user.type]);
+
+  // Use plan-based default if selectedModelId is not found in available models
+  const effectiveModelId = useMemo(() => {
+    const modelExists = allModels.some(
+      (model) => model.id === optimisticModelId,
+    );
+    return modelExists ? optimisticModelId : planBasedDefaultModel;
+  }, [optimisticModelId, allModels, planBasedDefaultModel]);
+
   const selectedModel = useMemo(
-    () => allModels.find((model) => model.id === optimisticModelId),
-    [optimisticModelId, allModels],
+    () => allModels.find((model) => model.id === effectiveModelId),
+    [effectiveModelId, allModels],
   );
 
   // Filter models based on search
@@ -386,9 +403,16 @@ export function ModelPicker({
                   <span className="text-muted-foreground">
                     Unlock all models + higher limits
                   </span>
-                  <span className="text-2xl font-bold text-primary">$8</span>
+                  <span className="text-2xl font-bold text-primary">₹249</span>
                   <span className="text-muted-foreground">/month</span>
-                  <Button size="sm" className="ml-2">
+                  <Button
+                    size="sm"
+                    className="ml-2"
+                    onClick={() => {
+                      setOpen(false);
+                      router.push('/pricing');
+                    }}
+                  >
                     Upgrade now
                   </Button>
                 </div>
@@ -431,7 +455,7 @@ export function ModelPicker({
                     <ModelCard
                       key={model.id}
                       model={model}
-                      isSelected={model.id === optimisticModelId}
+                      isSelected={model.id === effectiveModelId}
                       isFavorite={favorites.includes(model.id)}
                       onSelect={() => handleModelSelect(model.id)}
                       onToggleFavorite={() => toggleFavorite(model.id)}
@@ -468,7 +492,7 @@ export function ModelPicker({
                         <ModelCard
                           key={model.id}
                           model={model}
-                          isSelected={model.id === optimisticModelId}
+                          isSelected={model.id === effectiveModelId}
                           isFavorite={true}
                           onSelect={() => handleModelSelect(model.id)}
                           onToggleFavorite={() => toggleFavorite(model.id)}
@@ -489,7 +513,7 @@ export function ModelPicker({
                         <ModelCard
                           key={model.id}
                           model={model}
-                          isSelected={model.id === optimisticModelId}
+                          isSelected={model.id === effectiveModelId}
                           isFavorite={false}
                           onSelect={() => handleModelSelect(model.id)}
                           onToggleFavorite={() => toggleFavorite(model.id)}

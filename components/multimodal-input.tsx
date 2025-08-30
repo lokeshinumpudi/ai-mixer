@@ -4,35 +4,34 @@ import type { UIMessage } from 'ai';
 import cx from 'classnames';
 import type React from 'react';
 import {
-  useRef,
-  useEffect,
-  useState,
+  memo,
   useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
   type Dispatch,
   type SetStateAction,
-  type ChangeEvent,
-  memo,
 } from 'react';
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
 
-import { ArrowUpIcon, PaperclipIcon, StopIcon } from './icons';
-import { PreviewAttachment } from './preview-attachment';
-import { Button } from './ui/button';
-import { Textarea } from './ui/textarea';
-import { SuggestedActions } from './suggested-actions';
-import equal from 'fast-deep-equal';
+import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
+import { useUsage } from '@/hooks/use-usage';
+import type { Attachment, ChatMessage } from '@/lib/types';
 import type { UseChatHelpers } from '@ai-sdk/react';
+import equal from 'fast-deep-equal';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
-import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
-import type { VisibilityType } from './visibility-selector';
-import type { Attachment, ChatMessage } from '@/lib/types';
-import { useUsage } from '@/hooks/use-usage';
-import { useRouter } from 'next/navigation';
 import type { Session } from 'next-auth';
+import { useRouter } from 'next/navigation';
+import { ArrowUpIcon, PaperclipIcon, StopIcon } from './icons';
 import { ModelPicker } from './model-picker';
-import { useAnimeControls } from '@/hooks/use-anime';
+import { PreviewAttachment } from './preview-attachment';
+import { SuggestedActions } from './suggested-actions';
+import { Button } from './ui/button';
+import { Textarea } from './ui/textarea';
+import type { VisibilityType } from './visibility-selector';
 
 function PureMultimodalInput({
   chatId,
@@ -79,7 +78,9 @@ function PureMultimodalInput({
   const adjustHeight = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight + 2}px`;
+      textareaRef.current.style.height = `${
+        textareaRef.current.scrollHeight + 2
+      }px`;
     }
   };
 
@@ -430,25 +431,6 @@ function PureSendButton({
 }) {
   const canSend = input.length > 0 && uploadQueue.length === 0;
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const { hoverAnimation } = useAnimeControls();
-
-  useEffect(() => {
-    if (buttonRef.current) {
-      return hoverAnimation(
-        buttonRef.current,
-        {
-          scale: 1.06,
-          duration: 180,
-          ease: 'outQuad',
-        },
-        {
-          scale: 1,
-          duration: 180,
-          ease: 'outQuad',
-        },
-      );
-    }
-  }, [buttonRef.current]);
 
   return (
     <Button

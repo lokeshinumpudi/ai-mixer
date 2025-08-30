@@ -1,6 +1,5 @@
 import type { Attachment } from '@/lib/types';
-import { useEffect, useRef, useState } from 'react';
-import { useAnimeControls } from '@/hooks/use-anime';
+import { useRef, useState } from 'react';
 
 export const PreviewAttachment = ({
   attachment,
@@ -12,19 +11,7 @@ export const PreviewAttachment = ({
   const { name, url, contentType } = attachment;
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  const { createAnimation } = useAnimeControls();
   const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (containerRef.current) {
-      createAnimation(containerRef.current, {
-        opacity: [0, 1],
-        translateY: [6, 0],
-        duration: 220,
-        ease: 'outQuad',
-      });
-    }
-  }, [createAnimation, url]);
 
   return (
     <div

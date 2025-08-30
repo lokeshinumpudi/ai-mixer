@@ -1,11 +1,11 @@
 'use client';
 
+import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { artifactDefinitions } from './artifact';
-import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
 import { useDataStream } from './data-stream-provider';
-import { usePathname, useRouter } from 'next/navigation';
-import { toast } from './toast';
+import { upgradeToast } from './toast';
 
 import { useUsage } from '@/hooks/use-usage';
 
@@ -36,21 +36,34 @@ export function DataStreamHandler() {
         // Update the usage hook with new data
         updateUsage(usageInfo);
 
-        // Show rate limit toast when user is approaching or over limit
-        if (usageInfo.remaining <= 5 && usageInfo.remaining > 0) {
-          // Warning: approaching limit
+        // Show upgrade toast when user is approaching or over limit
+        if (usageInfo.remaining <= 10 && usageInfo.remaining > 5) {
+          // Early warning
           if (!hasShownRateLimitToast.current) {
             hasShownRateLimitToast.current = true;
-            toast({
-              type: 'error',
-              description: `${usageInfo.remaining} messages remaining. You're approaching your ${usageInfo.type} limit. Upgrade for unlimited access.`,
+            upgradeToast({
+              title: 'Running low on messages',
+              description: `You have ${
+                usageInfo.remaining
+              } messages remaining this ${
+                usageInfo.type === 'daily' ? 'day' : 'month'
+              }. Upgrade to Pro for unlimited access to all models.`,
+              actionText: 'Upgrade to Pro',
             });
           }
+        } else if (usageInfo.remaining <= 5 && usageInfo.remaining > 0) {
+          // Final warning
+          upgradeToast({
+            title: 'Almost out of messages!',
+            description: `Only ${usageInfo.remaining} messages left! Upgrade now to keep chatting with premium models.`,
+            actionText: 'Upgrade Now',
+          });
         } else if (usageInfo.isOverLimit) {
-          // Over limit
-          toast({
-            type: 'error',
-            description: `You've reached your ${usageInfo.type} message limit. Upgrade to continue chatting.`,
+          // Over limit - show error toast
+          upgradeToast({
+            title: 'Message limit reached',
+            description: `You've used all your ${usageInfo.type} messages. Upgrade to Pro for unlimited access.`,
+            actionText: 'Get Pro Access',
           });
         }
 
