@@ -11,11 +11,11 @@ import { ChatSDKError } from './errors';
 
 export type RouteHandler = (
   request: NextRequest,
-  context?: any,
+  context?: { params?: Promise<Record<string, string>> },
 ) => Promise<Response>;
 export type AuthenticatedRouteHandler = (
   request: NextRequest,
-  context: any,
+  context: { params?: Promise<Record<string, string>> },
   user: any,
 ) => Promise<Response>;
 

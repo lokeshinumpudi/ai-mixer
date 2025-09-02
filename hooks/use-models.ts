@@ -1,12 +1,13 @@
 'use client';
 
-import useSWR from 'swr';
-import { fetcher } from '@/lib/utils';
 import type { ChatModel } from '@/lib/ai/models';
+import { fetcher } from '@/lib/utils';
+import useSWR from 'swr';
 
 interface ModelsResponse {
   models: ChatModel[];
   userType: 'free' | 'pro';
+  userSettings?: Record<string, any>;
 }
 
 export function useModels() {
@@ -14,15 +15,21 @@ export function useModels() {
     '/api/models',
     fetcher,
     {
+      revalidateOnMount: true,
+      // Fetch on first mount, reuse cache across chat navigations
+      revalidateIfStale: false,
       revalidateOnFocus: false,
       revalidateOnReconnect: true,
-      refreshInterval: 5 * 60 * 1000, // Refresh every 5 minutes
+      // Periodic background refresh is still fine but make it lighter
+      refreshInterval: 15 * 60 * 1000, // 15 minutes
+      dedupingInterval: 60 * 60 * 1000, // 1 hour
     },
   );
 
   return {
     models: data?.models ?? [],
     userType: data?.userType ?? 'free',
+    userSettings: data?.userSettings ?? {},
     isLoading,
     error,
     mutate,

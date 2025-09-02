@@ -13,7 +13,8 @@ export function DataStreamHandler() {
   const { dataStream } = useDataStream();
   const pathname = usePathname();
   const router = useRouter();
-  const { updateUsage } = useUsage();
+  // Do not fetch usage summary on every mount; only consume stream updates
+  const { updateUsage } = useUsage({ fetch: false });
 
   // Extract chatId from pathname (e.g., /chat/123 -> 123)
   const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;

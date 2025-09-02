@@ -21,6 +21,19 @@ export const user = pgTable('User', {
 
 export type User = InferSelectModel<typeof user>;
 
+// User settings table for storing user preferences
+export const userSettings = pgTable('UserSettings', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id)
+    .unique(),
+  settings: json('settings').notNull().default({}),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type UserSettings = InferSelectModel<typeof userSettings>;
+
 export const chat = pgTable('Chat', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   createdAt: timestamp('createdAt').notNull(),

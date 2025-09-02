@@ -2,6 +2,7 @@ import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
 import { enrichModelWithCapabilities } from '@/lib/ai/models';
 import { protectedRoute } from '@/lib/auth-decorators';
 import { SUPPORTED_MODEL_IDS } from '@/lib/constants';
+import { getUserSettings } from '@/lib/db/queries';
 import { gateway } from '@/lib/gateway';
 import { NextResponse } from 'next/server';
 
@@ -9,7 +10,12 @@ export const dynamic = 'force-dynamic';
 
 export const GET = protectedRoute(async (request, context, user) => {
   try {
-    const allModels = await gateway.getAvailableModels();
+    // Fetch user settings alongside models
+    const [userSettings, allModels] = await Promise.all([
+      getUserSettings(user.id),
+      gateway.getAvailableModels(),
+    ]);
+
     const allowedModelIds = getAllowedModelIdsForUser(user.type);
 
     // Filter supported models, enrich with capabilities, and add enabled flag
@@ -26,6 +32,7 @@ export const GET = protectedRoute(async (request, context, user) => {
     return NextResponse.json({
       models: supportedModels,
       userType: user.type,
+      userSettings: userSettings?.settings || {},
     });
   } catch (error) {
     console.error('Failed to get available models:', error);
@@ -43,9 +50,19 @@ export const GET = protectedRoute(async (request, context, user) => {
       };
     });
 
+    // Try to get user settings even in fallback
+    let userSettings = {};
+    try {
+      const settings = await getUserSettings(user.id);
+      userSettings = settings?.settings || {};
+    } catch (settingsError) {
+      console.error('Failed to get user settings in fallback:', settingsError);
+    }
+
     return NextResponse.json({
       models: fallbackModels,
       userType: user.type,
+      userSettings,
       warning: 'Using fallback model configuration due to provider error',
     });
   }

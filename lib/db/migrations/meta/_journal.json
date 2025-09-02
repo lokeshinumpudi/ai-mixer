@@ -71,6 +71,13 @@
       "when": 1756366046445,
       "tag": "0009_redundant_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1756629660774,
+      "tag": "0010_empty_the_captain",
+      "breakpoints": true
     }
   ]
 }

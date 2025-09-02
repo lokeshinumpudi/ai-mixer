@@ -16,8 +16,8 @@ description: Component patterns, UI conventions, React best practices, and conte
 ### Component Patterns
 
 ```typescript
-// Standard component structure
-"use client"; // Only when needed for interactivity
+// Standard component structure with settings integration
+"use client"; // Required for all interactive components
 
 import { type ComponentProps } from "react";
 // External imports first
@@ -26,10 +26,14 @@ import { type ComponentProps } from "react";
 
 interface ComponentNameProps {
   // Props interface with clear documentation
+  session?: Session | null; // Include for settings-aware components
 }
 
-export function ComponentName({ prop1, prop2 }: ComponentNameProps) {
-  // Hooks at the top
+export function ComponentName({ prop1, prop2, session }: ComponentNameProps) {
+  // Settings hooks first for user preferences
+  const { settings, updateSetting } = useUserSettings(session);
+
+  // Other hooks (SWR, useState, etc.)
   // Event handlers
   // Render logic
 
@@ -126,6 +130,77 @@ export function ChatProvider({
     </ChatContext.Provider>
   );
 }
+```
+
+## Settings-Aware Components
+
+### User Settings Integration
+
+All components that use user preferences should be settings-aware:
+
+```typescript
+// Reference: components/model-picker.tsx
+interface ModelPickerProps {
+  session?: Session | null;
+  selectedModelId?: string;
+  className?: string;
+  compact?: boolean;
+  disabled?: boolean;
+}
+
+export function ModelPicker({
+  session,
+  selectedModelId,
+  className,
+  compact = false,
+  disabled = false,
+}: ModelPickerProps) {
+  // Use settings-based model selection
+  const { selectedModel: settingsModel, setSelectedModel } =
+    useSelectedModel(session);
+
+  // Determine the effective model to use
+  const effectiveModelId = useMemo(() => {
+    // Props override for backward compatibility
+    if (selectedModelId) {
+      const modelExists = allModels.some(
+        (model) => model.id === selectedModelId
+      );
+      if (modelExists) return selectedModelId;
+    }
+
+    // Settings-based model
+    const modelExists = allModels.some((model) => model.id === settingsModel);
+    return modelExists ? settingsModel : planBasedDefaultModel;
+  }, [selectedModelId, settingsModel, allModels, planBasedDefaultModel]);
+
+  const handleModelSelect = async (modelId: string) => {
+    setOpen(false);
+    try {
+      await setSelectedModel(modelId);
+    } catch (error) {
+      console.error("Failed to save model selection:", error);
+    }
+  };
+
+  // Component logic...
+}
+```
+
+### Settings Persistence
+
+Components should handle settings updates with optimistic updates:
+
+```typescript
+// Optimistic settings updates
+const handleThemeChange = async (newTheme: string) => {
+  // Instant UI update, server sync happens in background
+  await updateSetting("theme", newTheme);
+};
+
+const handlePreferenceChange = async (key: string, value: any) => {
+  await updateSetting(key, value);
+};
 ```
 
 ## State Management Patterns

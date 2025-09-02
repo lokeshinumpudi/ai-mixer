@@ -125,6 +125,75 @@ export async function deleteChatById({ id }: { id: string }) {
   /* */
 }
 
+// User Settings Management
+export async function getUserSettings(userId: string) {
+  try {
+    const [settings] = await db
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+      .limit(1);
+
+    return settings;
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to get user settings"
+    );
+  }
+}
+
+export async function upsertUserSettings(
+  userId: string,
+  settings: Record<string, any>
+) {
+  try {
+    await db
+      .insert(userSettings)
+      .values({
+        userId,
+        settings,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: {
+          settings,
+          updatedAt: new Date(),
+        },
+      });
+
+    return { success: true };
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to upsert user settings"
+    );
+  }
+}
+
+export async function updateUserSetting(
+  userId: string,
+  key: string,
+  value: any
+) {
+  try {
+    // Get current settings and merge with updates
+    const currentSettings = await getUserSettings(userId);
+    const updatedSettings = {
+      ...currentSettings?.settings,
+      [key]: value,
+    };
+
+    return await upsertUserSettings(userId, updatedSettings);
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to update user setting"
+    );
+  }
+}
+
 // Usage Tracking
 export async function upsertDailyUsage(params: DailyUsageParams) {
   /* */
@@ -162,6 +231,8 @@ The only acceptable database operations outside of queries.ts are:
 1. **Database migrations** in [lib/db/migrate.ts](mdc:lib/db/migrate.ts)
 2. **Schema definitions** in [lib/db/schema.ts](mdc:lib/db/schema.ts)
 3. **Database connection setup** in [lib/db/utils.ts](mdc:lib/db/utils.ts)
+
+**Note**: User settings are considered core business logic and should be managed through the centralized queries.ts file, even though they represent user-specific configuration data rather than traditional "queries".
 
 ## Review Checklist
 

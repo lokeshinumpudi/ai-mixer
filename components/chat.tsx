@@ -5,7 +5,7 @@ import { ChatHeader } from '@/components/chat-header';
 import { useArtifactSelector } from '@/hooks/use-artifact';
 import { useAutoResume } from '@/hooks/use-auto-resume';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
-import { useCurrentModel } from '@/hooks/use-current-model';
+import { getDefaultModelForUser } from '@/lib/ai/models';
 import type { Vote } from '@/lib/db/schema';
 import { ChatSDKError } from '@/lib/errors';
 import type { Attachment, ChatMessage } from '@/lib/types';
@@ -17,6 +17,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { unstable_serialize } from 'swr/infinite';
+import { useModels } from '../hooks/use-models';
 import { Artifact } from './artifact';
 import { useDataStream } from './data-stream-provider';
 import { Messages } from './messages';
@@ -50,8 +51,14 @@ export function Chat({
   const { mutate } = useSWRConfig();
   const { setDataStream } = useDataStream();
 
-  // Use dynamic model selection instead of static initialChatModel
-  const { currentModel } = useCurrentModel(initialChatModel, session.user.type);
+  // Use integrated models API that includes user settings
+  const { userSettings, models } = useModels();
+
+  // Get current model from settings with fallback to initialChatModel
+  const currentModel =
+    userSettings?.defaultModel ||
+    initialChatModel ||
+    getDefaultModelForUser(session.user.type);
 
   const [input, setInput] = useState<string>('');
 

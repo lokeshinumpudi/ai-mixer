@@ -32,10 +32,11 @@ This is a Next.js 15 AI chatbot application built with the AI SDK, featuring rea
 
 ### Frontend Stack
 
-- **Next.js 15** with App Router and React Server Components
+- **Next.js 15** with App Router and React Client Components
 - **AI SDK v5** for chat functionality with streaming and tool calling
 - **shadcn/ui + Tailwind CSS** for UI components and styling
-- **Framer Motion** for animations and transitions
+- **Offline-First** with localStorage persistence and cache-first loading
+- **User Settings** database-backed preferences with optimistic updates
 - **TypeScript** throughout for type safety
 
 ### Backend Stack
@@ -59,24 +60,29 @@ This is a Next.js 15 AI chatbot application built with the AI SDK, featuring rea
 
 ### Component Architecture
 
-- **Client components** marked with `'use client'` for interactivity
-- **Server components** by default for better performance
-- **Custom hooks** for complex state management and reusable logic
+- **Client components** marked with `'use client'` for all interactive features
+- **Settings-aware components** with session props and user preferences hooks
+- **Cache-first data loading** with localStorage persistence
+- **Custom hooks** for settings, cache, and offline-first patterns
 - **Type-safe props** with proper TypeScript interfaces
 
 ### State Management
 
-- **React hooks** (useState, useEffect) for local state
-- **SWR** for server state management and caching
-- **Custom hooks** for complex logic abstraction
-- **Context providers** for global state (DataStream, Theme)
+- **React hooks** (useState, useEffect) for local component state
+- **SWR** for cache-first server state with optimistic updates
+- **User settings** database-backed preferences with cross-session persistence
+- **localStorage** for offline-first data persistence
+- **Custom hooks** for settings, cache, and complex logic abstraction
+- **Context providers** for global state (DataStream, Theme, Settings)
 
 ### Data Flow
 
+- **Cache-first loading** with localStorage persistence and background sync
 - **Server Actions** for mutations and database operations
 - **API routes** with centralized authentication decorators
+- **User settings** database-backed preferences with optimistic updates
 - **Real-time streaming** with usage tracking updates
-- **Optimistic updates** with SWR mutations
+- **Optimistic updates** with SWR mutations and automatic rollback
 - **Message-based billing** with real-time limit enforcement
 
 ### Authentication Architecture
@@ -118,7 +124,9 @@ This is a Next.js 15 AI chatbot application built with the AI SDK, featuring rea
 
 ### Performance
 
-- **Server components** by default
+- **Client components** with cache-first data loading
+- **localStorage persistence** for offline-first experiences
+- **Optimistic updates** for instant UI feedback
 - **Dynamic imports** for large components
 - **Image optimization** with Next.js Image component
 - **Bundle analysis** and code splitting

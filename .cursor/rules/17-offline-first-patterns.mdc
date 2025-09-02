@@ -1,0 +1,656 @@
+---
+alwaysApply: true
+description: Offline-first patterns, cache-first data loading, and localStorage persistence strategies
+---
+
+# Offline-First Patterns
+
+## Overview
+
+The application implements comprehensive offline-first patterns that prioritize cached data loading with background synchronization, providing instant user experiences while ensuring data consistency across all user devices and sessions.
+
+## Core Principles
+
+### 1. Cache-First Data Loading
+
+All data fetching follows a cache-first strategy with automatic background synchronization:
+
+```typescript
+// Pattern: Cache-first with background sync
+const { data, error, isLoading } = useSWR("/api/data", fetcher, {
+  fallbackData: cachedData, // Load from cache immediately
+  revalidateOnMount: true, // Sync in background
+  revalidateOnFocus: false, // Don't refetch on window focus
+});
+
+// UX: User sees cached data instantly, fresh data loads silently in background
+```
+
+### 2. localStorage Persistence
+
+Critical data is persisted locally for offline access:
+
+```typescript
+// Pattern: Safe localStorage operations
+const safeReadFromCache = (key: string): any => {
+  try {
+    if (typeof window === "undefined") return null;
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : null;
+  } catch (error) {
+    console.warn(`Failed to read from cache: ${key}`, error);
+    return null;
+  }
+};
+
+const safeWriteToCache = (key: string, data: any): void => {
+  try {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (error) {
+    console.warn(`Failed to write to cache: ${key}`, error);
+    // Handle storage quota exceeded
+    if (error.name === "QuotaExceededError") {
+      // Implement cache eviction strategy
+      clearOldCacheEntries();
+    }
+  }
+};
+```
+
+## Cache-First Data Loading Patterns
+
+### 1. Models Cache with User Settings Integration
+
+```typescript
+// hooks/use-models.ts - Updated with consolidated API
+export function useModels() {
+  const { data, error, isLoading } = useSWR<ModelsResponse>(
+    "/api/models", // Now includes user settings
+    fetcher,
+    {
+      revalidateOnMount: true,
+      revalidateIfStale: false,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      refreshInterval: 15 * 60 * 1000, // 15 minutes
+      dedupingInterval: 60 * 60 * 1000, // 1 hour
+    }
+  );
+
+  return {
+    models: data?.models ?? [],
+    userType: data?.userType ?? "free",
+    userSettings: data?.userSettings ?? {}, // Integrated user settings
+    isLoading,
+    error,
+    mutate,
+  };
+}
+```
+
+### 2. Chat History Cache
+
+```typescript
+// Sidebar with cache-first chat history
+export function SidebarHistory() {
+  const [cachedChats, setCachedChats] = useState(() =>
+    safeReadFromCache("chats-history-cache")
+  );
+
+  const { data: chats, mutate } = useSWR("/api/chats/history", fetcher, {
+    fallbackData: cachedChats,
+    revalidateOnMount: true,
+    onSuccess: (data) => {
+      if (data) {
+        safeWriteToCache("chats-history-cache", data);
+        setCachedChats(data);
+      }
+    },
+  });
+
+  // User sees cached chats instantly
+  const displayChats = chats || cachedChats || [];
+
+  return (
+    <div>
+      {displayChats.map((chat) => (
+        <ChatItem key={chat.id} chat={chat} />
+      ))}
+      {/* Show sync indicator if cache is stale */}
+      {chats &&
+        cachedChats &&
+        JSON.stringify(chats) !== JSON.stringify(cachedChats) && (
+          <div className="text-xs text-muted-foreground p-2">
+            Synced just now
+          </div>
+        )}
+    </div>
+  );
+}
+```
+
+### 3. Chat Messages Cache
+
+```typescript
+// hooks/use-chat-messages.ts
+export function useChatMessages(chatId: string) {
+  const cacheKey = `chat-messages-${chatId}`;
+
+  // Load from localStorage immediately
+  const [cachedMessages, setCachedMessages] = useState(() =>
+    safeReadFromCache(cacheKey)
+  );
+
+  const { data: messages, mutate } = useSWR(
+    `/api/chat/${chatId}/messages`,
+    fetcher,
+    {
+      fallbackData: cachedMessages,
+      revalidateOnMount: true,
+      onSuccess: (data) => {
+        if (data) {
+          safeWriteToCache(cacheKey, data);
+          setCachedMessages(data);
+        }
+      },
+    }
+  );
+
+  // Always fetch from network for chat messages
+  // But hydrate UI with cache for instant experience
+  return {
+    messages: messages || cachedMessages || [],
+    isFromCache: !messages && cachedMessages,
+    mutate,
+  };
+}
+```
+
+### 4. User Settings Cache
+
+```typescript
+// hooks/use-user-settings.ts - Already includes SWR caching
+export function useUserSettings(session: Session | null) {
+  const userId = session?.user?.id;
+
+  const { data: settingsData, mutate: mutateSettings } = useSWR<UserSettings>(
+    userId ? `/api/user/settings` : null,
+    fetcher,
+    {
+      fallbackData: {},
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+    }
+  );
+
+  // Optimistic updates for instant UI feedback
+  const [optimisticSettings, setOptimisticSettings] = useState<UserSettings>(
+    {}
+  );
+
+  return {
+    settings: { ...settingsData, ...optimisticSettings },
+    updateSetting,
+    updateSettings,
+    mutate: mutateSettings,
+  };
+}
+```
+
+## Cache Management Strategies
+
+### 1. Cache Eviction
+
+Implement smart cache eviction for storage quota management:
+
+```typescript
+// Cache eviction strategy
+const clearOldCacheEntries = () => {
+  try {
+    const keys = Object.keys(localStorage);
+    const cacheKeys = keys.filter((key) => key.startsWith("cache-"));
+
+    // Sort by timestamp (newest first)
+    cacheKeys.sort((a, b) => {
+      const aTime = safeReadFromCache(a)?.timestamp || 0;
+      const bTime = safeReadFromCache(b)?.timestamp || 0;
+      return bTime - aTime;
+    });
+
+    // Keep only the 10 most recent entries
+    const keysToRemove = cacheKeys.slice(10);
+    keysToRemove.forEach((key) => {
+      localStorage.removeItem(key);
+    });
+  } catch (error) {
+    console.warn("Failed to clear old cache entries:", error);
+  }
+};
+```
+
+### 2. Cache Invalidation
+
+Invalidate cache when data becomes stale:
+
+```typescript
+// Cache invalidation patterns
+const invalidateChatCache = (chatId: string) => {
+  const cacheKey = `chat-messages-${chatId}`;
+  localStorage.removeItem(cacheKey);
+
+  // Invalidate related SWR caches
+  mutate(`/api/chat/${chatId}/messages`);
+};
+
+const invalidateUserCache = (userId: string) => {
+  localStorage.removeItem(`user-settings-${userId}`);
+  mutate(`/api/user/settings`);
+};
+```
+
+### 3. Cache Metadata
+
+Add metadata to cache entries for better management:
+
+```typescript
+// Cache with metadata
+const writeCacheWithMetadata = (key: string, data: any) => {
+  const cacheEntry = {
+    data,
+    timestamp: Date.now(),
+    version: "1.0", // For schema versioning
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+  };
+
+  safeWriteToCache(key, cacheEntry);
+};
+
+const readCacheWithMetadata = (key: string) => {
+  const cacheEntry = safeReadFromCache(key);
+
+  if (!cacheEntry) return null;
+
+  // Check if cache is expired
+  if (Date.now() > cacheEntry.expiresAt) {
+    localStorage.removeItem(key);
+    return null;
+  }
+
+  return cacheEntry.data;
+};
+```
+
+## Sync Indicators and UX Patterns
+
+### 1. Background Sync Indicators
+
+Show users when data is being synchronized:
+
+```typescript
+// Sync status component
+export function SyncIndicator({ isSyncing, lastSynced }: SyncIndicatorProps) {
+  if (!isSyncing && !lastSynced) return null;
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      {isSyncing ? (
+        <>
+          <LoaderIcon className="animate-spin h-3 w-3" />
+          <span>Syncing...</span>
+        </>
+      ) : (
+        <>
+          <CheckIcon className="h-3 w-3 text-green-500" />
+          <span>Synced {formatDistanceToNow(lastSynced)} ago</span>
+        </>
+      )}
+    </div>
+  );
+}
+```
+
+### 2. Cache-First Loading States
+
+Handle loading states appropriately for cache-first patterns:
+
+```typescript
+export function CacheFirstComponent() {
+  const { data, isLoading, error } = useCacheFirstHook();
+
+  // Show cached data immediately
+  if (data) {
+    return (
+      <div>
+        <Content data={data} />
+        {/* Show subtle sync indicator */}
+        {isLoading && <SyncIndicator isSyncing={true} />}
+      </div>
+    );
+  }
+
+  // Show loading state only if no cache
+  if (isLoading) {
+    return <SkeletonLoader />;
+  }
+
+  // Handle errors
+  if (error) {
+    return <ErrorFallback error={error} />;
+  }
+
+  return null;
+}
+```
+
+### 3. Offline Detection
+
+Handle offline/online state changes:
+
+```typescript
+// hooks/use-online-status.ts
+export function useOnlineStatus() {
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  return isOnline;
+}
+
+// Usage in components
+export function OfflineAwareComponent() {
+  const isOnline = useOnlineStatus();
+
+  return (
+    <div>
+      {!isOnline && (
+        <div className="bg-yellow-100 border border-yellow-300 p-2 rounded">
+          You're offline. Changes will sync when connection is restored.
+        </div>
+      )}
+      <Content />
+    </div>
+  );
+}
+```
+
+## Data Synchronization Patterns
+
+### 1. Background Sync with Conflict Resolution
+
+```typescript
+// Background sync with conflict resolution
+const syncWithServer = async (localData: any, serverData: any) => {
+  // Simple last-write-wins strategy
+  const localTimestamp = localData.timestamp || 0;
+  const serverTimestamp = serverData.timestamp || 0;
+
+  if (localTimestamp > serverTimestamp) {
+    // Local is newer, push to server
+    await updateServer(localData);
+  } else if (serverTimestamp > localTimestamp) {
+    // Server is newer, update local
+    safeWriteToCache(cacheKey, serverData);
+  }
+  // If timestamps are equal, no action needed
+};
+```
+
+### 2. Optimistic Updates with Rollback
+
+```typescript
+// Optimistic updates with automatic rollback
+const updateWithOptimism = async (key: string, newData: any) => {
+  const originalData = safeReadFromCache(key);
+
+  // Update cache optimistically
+  safeWriteToCache(key, { ...newData, timestamp: Date.now() });
+
+  try {
+    // Try server update
+    await updateServer(newData);
+
+    // Update cache with server response
+    safeWriteToCache(key, await getServerData());
+  } catch (error) {
+    // Rollback on failure
+    if (originalData) {
+      safeWriteToCache(key, originalData);
+    } else {
+      localStorage.removeItem(key);
+    }
+    throw error;
+  }
+};
+```
+
+## Performance Optimizations
+
+### 1. SWR Configuration for Offline-First
+
+```typescript
+// Optimal SWR configuration for offline-first
+const swrConfig = {
+  fetcher: fetcher,
+  revalidateOnMount: true, // Always try to sync on mount
+  revalidateOnFocus: false, // Don't refetch on window focus
+  revalidateOnReconnect: true, // Sync when connection restored
+  dedupingInterval: 5000, // Dedupe requests within 5 seconds
+  focusThrottleInterval: 10000, // Throttle focus events
+  errorRetryInterval: 5000, // Retry failed requests every 5 seconds
+  shouldRetryOnError: (error) => {
+    // Don't retry auth errors
+    return error.status !== 401 && error.status !== 403;
+  },
+};
+```
+
+### 2. Cache Size Management
+
+```typescript
+// Cache size monitoring and management
+const getCacheSize = () => {
+  let totalSize = 0;
+  for (let key in localStorage) {
+    if (localStorage.hasOwnProperty(key)) {
+      totalSize += localStorage[key].length;
+    }
+  }
+  return totalSize;
+};
+
+const MAX_CACHE_SIZE = 50 * 1024 * 1024; // 50MB
+
+const enforceCacheSizeLimit = () => {
+  const currentSize = getCacheSize();
+
+  if (currentSize > MAX_CACHE_SIZE) {
+    // Implement LRU eviction
+    const cacheEntries = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("cache-")) {
+        const data = safeReadFromCache(key);
+        if (data && data.timestamp) {
+          cacheEntries.push({ key, timestamp: data.timestamp });
+        }
+      }
+    }
+
+    // Sort by timestamp (oldest first)
+    cacheEntries.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Remove oldest entries until under limit
+    let sizeToRemove = currentSize - MAX_CACHE_SIZE;
+    for (const entry of cacheEntries) {
+      if (sizeToRemove <= 0) break;
+
+      const entrySize = localStorage.getItem(entry.key)?.length || 0;
+      localStorage.removeItem(entry.key);
+      sizeToRemove -= entrySize;
+    }
+  }
+};
+```
+
+## Security Considerations
+
+### 1. Cache Data Validation
+
+Validate cached data integrity:
+
+```typescript
+// Validate cache data structure
+const validateCachedData = (data: any, schema: any) => {
+  try {
+    // Basic structure validation
+    if (!data || typeof data !== "object") return false;
+
+    // Schema validation
+    return schema.safeParse(data).success;
+  } catch (error) {
+    return false;
+  }
+};
+
+// Usage
+const cachedModels = safeReadFromCache("models-cache");
+if (!validateCachedData(cachedModels, modelsSchema)) {
+  localStorage.removeItem("models-cache");
+  cachedModels = null;
+}
+```
+
+### 2. Sensitive Data in Cache
+
+Never cache sensitive information:
+
+```typescript
+// Good - Cache only non-sensitive data
+const cacheUserPreferences = {
+  theme: "dark",
+  defaultModel: "gpt-4",
+  sidebarCollapsed: false,
+};
+
+// Avoid - Never cache sensitive data
+const avoidCaching = {
+  apiKey: "sk-1234567890", // Never cache!
+  sessionToken: "token123", // Never cache!
+  personalInfo: {}, // Be careful with PII
+};
+```
+
+## Testing Offline-First Features
+
+### 1. Cache Testing
+
+```typescript
+describe("Cache-first loading", () => {
+  beforeEach(() => {
+    // Clear cache before each test
+    localStorage.clear();
+  });
+
+  it("should load from cache immediately", () => {
+    // Setup cache
+    const mockData = { items: [{ id: 1, name: "Test" }] };
+    safeWriteToCache("test-cache", mockData);
+
+    const { result } = renderHook(() => useCacheFirstHook());
+
+    expect(result.current.data).toEqual(mockData);
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it("should sync with server in background", async () => {
+    const mockServerData = { items: [{ id: 2, name: "Server" }] };
+
+    // Mock API
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        json: () => Promise.resolve(mockServerData),
+      })
+    );
+
+    const { result, waitForNextUpdate } = renderHook(() => useCacheFirstHook());
+
+    // Should eventually update to server data
+    await waitForNextUpdate();
+    expect(result.current.data).toEqual(mockServerData);
+  });
+});
+```
+
+### 2. Offline Testing
+
+```typescript
+describe("Offline behavior", () => {
+  it("should work offline with cached data", () => {
+    // Setup cache
+    const mockData = { items: [{ id: 1, name: "Cached" }] };
+    safeWriteToCache("test-cache", mockData);
+
+    // Simulate offline
+    Object.defineProperty(navigator, "onLine", { value: false });
+
+    const { result } = renderHook(() => useCacheFirstHook());
+
+    expect(result.current.data).toEqual(mockData);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("should sync when back online", async () => {
+    // Simulate coming back online
+    Object.defineProperty(navigator, "onLine", { value: true });
+
+    const { result } = renderHook(() => useCacheFirstHook());
+
+    // Should trigger sync
+    expect(result.current.isLoading).toBe(true);
+  });
+});
+```
+
+## Migration to Offline-First
+
+### 1. Gradual Migration Strategy
+
+1. **Identify critical user journeys** that benefit from instant loading
+2. **Implement cache-first loading** for high-impact components
+3. **Add sync indicators** for user awareness
+4. **Monitor cache hit rates** and user experience metrics
+5. **Expand to additional features** based on success
+
+### 2. Backward Compatibility
+
+Maintain compatibility during migration:
+
+```typescript
+// Support both cache-first and traditional loading
+export function useFlexibleData(endpoint: string, options: Options = {}) {
+  const { useCache = true } = options;
+
+  if (useCache) {
+    return useCacheFirstData(endpoint, options);
+  } else {
+    return useTraditionalData(endpoint, options);
+  }
+}
+```
+
+This comprehensive offline-first architecture ensures users always have instant access to their data while maintaining consistency across all devices and sessions.

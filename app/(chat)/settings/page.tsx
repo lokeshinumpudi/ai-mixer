@@ -10,6 +10,7 @@ import { fetcher } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 
@@ -26,11 +27,22 @@ const tabs = [
 export default function SettingsPage() {
   // All hooks must be called at the top level, before any conditional logic
   const { data: session, update: updateSession } = useSession();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState('history');
   const { plan, usageHistory, mutate: mutateUsage } = useUsage();
-  const { data: billingStatus } = useSWR('/api/billing/status', fetcher, {
-    refreshInterval: 5000, // Check every 5 seconds for recent payments
-  });
+
+  // Check for refresh parameter to force fresh billing status check
+  const shouldRefreshBilling = searchParams.get('refresh') === 'billing';
+
+  // Only check billing status once when component mounts, or when refresh is requested
+  const { data: billingStatus, mutate: mutateBillingStatus } = useSWR(
+    '/api/billing/status',
+    fetcher,
+    {
+      // Force revalidation if refresh parameter is present
+      revalidateOnMount: shouldRefreshBilling,
+    },
+  );
   const { setOpen, setOpenMobile } = useSidebar();
 
   // Close sidebar whenever we land on settings (mobile or desktop)
@@ -42,6 +54,15 @@ export default function SettingsPage() {
       // no-op: sidebar context always exists under (chat) layout
     }
   }, [setOpen, setOpenMobile]);
+
+  // Clean up refresh parameter from URL after handling it
+  useEffect(() => {
+    if (shouldRefreshBilling && typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('refresh');
+      window.history.replaceState({}, '', url.pathname + url.search);
+    }
+  }, [shouldRefreshBilling]);
 
   // Refresh session and data when payment is detected
   useEffect(() => {

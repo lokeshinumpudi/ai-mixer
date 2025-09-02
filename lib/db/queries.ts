@@ -40,6 +40,7 @@ import {
   usageMonthly,
   user,
   userNotification,
+  userSettings,
   vote,
   type Chat,
   type DBMessage,
@@ -1180,6 +1181,75 @@ export async function getUserUsageAndLimits({
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get user usage and limits',
+    );
+  }
+}
+
+// User Settings Management
+export async function getUserSettings(userId: string) {
+  try {
+    const [settings] = await db
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+      .limit(1);
+
+    return settings;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user settings',
+    );
+  }
+}
+
+export async function upsertUserSettings(
+  userId: string,
+  settings: Record<string, any>,
+) {
+  try {
+    await db
+      .insert(userSettings)
+      .values({
+        userId,
+        settings,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: {
+          settings,
+          updatedAt: new Date(),
+        },
+      });
+
+    return { success: true };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to upsert user settings',
+    );
+  }
+}
+
+export async function updateUserSetting(
+  userId: string,
+  key: string,
+  value: any,
+) {
+  try {
+    // Get current settings
+    const currentSettings = await getUserSettings(userId);
+    const updatedSettings = {
+      ...(currentSettings?.settings || {}),
+      [key]: value,
+    };
+
+    return await upsertUserSettings(userId, updatedSettings);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to update user setting',
     );
   }
 }

@@ -1,20 +1,51 @@
-import { cookies } from 'next/headers';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 
 import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
-import { auth } from '../(auth)/auth';
-import Script from 'next/script';
 import { DataStreamProvider } from '@/components/data-stream-provider';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import Script from 'next/script';
 
-export const experimental_ppr = true;
+// Hook for managing sidebar state
+function useSidebarState() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-export default async function Layout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const [session, cookieStore] = await Promise.all([auth(), cookies()]);
-  const isCollapsed = cookieStore.get('sidebar:state')?.value !== 'true';
+  useEffect(() => {
+    // Load sidebar state from localStorage or cookies
+    const savedState = localStorage.getItem('sidebar:state');
+    if (savedState !== null) {
+      setIsCollapsed(savedState !== 'true');
+    }
+    setIsLoaded(true);
+  }, []);
+
+  const toggleSidebar = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('sidebar:state', (!newState).toString());
+  };
+
+  return { isCollapsed, isLoaded, toggleSidebar };
+}
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  const { data: session } = useSession();
+  const { isCollapsed, isLoaded } = useSidebarState();
+  // Warm the usage cache once at app shell level
+  const { useUsage } = require('@/hooks/use-usage');
+  useUsage({ fetch: true });
+
+  // Show loading state until sidebar state is loaded
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+      </div>
+    );
+  }
 
   return (
     <>

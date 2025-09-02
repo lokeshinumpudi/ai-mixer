@@ -1,6 +1,5 @@
 'use client';
 
-import { saveChatModelAsCookie } from '@/app/(chat)/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -13,7 +12,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useAnimeOnMount } from '@/hooks/use-anime';
 import { useRouter } from 'next/navigation';
-import { startTransition, useMemo, useOptimistic, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   Tooltip,
@@ -65,6 +64,38 @@ const mockFavorites = [
   'openai/gpt-4o-mini',
   'anthropic/claude-3.5-haiku',
 ];
+
+// localStorage utilities for model selection persistence
+const MODEL_SELECTION_KEY = 'user-model-selection';
+
+const safeLocalStorage = {
+  get: (key: string): any => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : null;
+    } catch (error) {
+      console.warn(`Failed to read from localStorage: ${key}`, error);
+      return null;
+    }
+  },
+  set: (key: string, value: any): void => {
+    try {
+      if (typeof window === 'undefined') return;
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.warn(`Failed to write to localStorage: ${key}`, error);
+    }
+  },
+  remove: (key: string): void => {
+    try {
+      if (typeof window === 'undefined') return;
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.warn(`Failed to remove from localStorage: ${key}`, error);
+    }
+  },
+};
 
 interface ModelCardProps {
   model: ChatModel;
@@ -262,23 +293,72 @@ export function ModelPicker({
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [favorites, setFavorites] = useState<string[]>(mockFavorites);
-  const [optimisticModelId, setOptimisticModelId] =
-    useOptimistic(selectedModelId);
 
-  const { models: allModels, isLoading, userType } = useModels();
+  // Use models API which now includes user settings
+  const {
+    models: allModels,
+    userSettings,
+    userType,
+    mutate: mutateModels,
+  } = useModels();
 
-  // Get plan-based default model when selectedModelId is not valid or not available
+  // Extract the selected model from user settings
+  const serverModel = userSettings?.defaultModel;
+
+  // Get localStorage model as immediate fallback
+  const [localModel, setLocalModel] = useState<string | null>(() =>
+    safeLocalStorage.get(MODEL_SELECTION_KEY),
+  );
+
+  // Get plan-based default model as ultimate fallback
   const planBasedDefaultModel = useMemo(() => {
     return getDefaultModelForUser(session.user.type);
   }, [session.user.type]);
 
-  // Use plan-based default if selectedModelId is not found in available models
+  // Sync localStorage with server when server data arrives
+  useEffect(() => {
+    if (serverModel && serverModel !== localModel) {
+      setLocalModel(serverModel);
+      safeLocalStorage.set(MODEL_SELECTION_KEY, serverModel);
+    }
+  }, [serverModel, localModel]);
+
+  // Determine the effective model to use:
+  // 1. Props selectedModelId (if provided) - for backward compatibility
+  // 2. Server settings model (authoritative once loaded)
+  // 3. localStorage model (immediate persistence when server not available)
+  // 4. Plan-based default
   const effectiveModelId = useMemo(() => {
-    const modelExists = allModels.some(
-      (model) => model.id === optimisticModelId,
-    );
-    return modelExists ? optimisticModelId : planBasedDefaultModel;
-  }, [optimisticModelId, allModels, planBasedDefaultModel]);
+    // If selectedModelId prop is provided, use it (for backward compatibility)
+    if (selectedModelId) {
+      const modelExists = allModels.some(
+        (model) => model.id === selectedModelId,
+      );
+      if (modelExists) return selectedModelId;
+    }
+
+    // Use server model first (authoritative)
+    if (serverModel) {
+      const modelExists = allModels.some((model) => model.id === serverModel);
+      if (modelExists) return serverModel;
+    }
+
+    // Use localStorage model for immediate response (when server not loaded yet)
+    if (localModel) {
+      const modelExists = allModels.some((model) => model.id === localModel);
+      if (modelExists) return localModel;
+    }
+
+    // Ultimate fallback to plan-based default
+    return planBasedDefaultModel;
+  }, [
+    selectedModelId,
+    serverModel, // Server model takes priority now
+    localModel,
+    allModels,
+    planBasedDefaultModel,
+    userSettings,
+  ]);
 
   const selectedModel = useMemo(
     () => allModels.find((model) => model.id === effectiveModelId),
@@ -328,12 +408,32 @@ export function ModelPicker({
     return compactList.slice(0, 8); // Limit to 8 for compact view
   }, [favoriteModels, topModels, favorites]);
 
-  const handleModelSelect = (modelId: string) => {
+  const handleModelSelect = async (modelId: string) => {
     setOpen(false);
-    startTransition(() => {
-      setOptimisticModelId(modelId);
-      saveChatModelAsCookie(modelId);
-    });
+
+    // Immediate localStorage update for instant UI feedback
+    setLocalModel(modelId);
+    safeLocalStorage.set(MODEL_SELECTION_KEY, modelId);
+
+    try {
+      // Update user settings via PATCH API
+      const response = await fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultModel: modelId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update settings');
+      }
+
+      // Refresh models data to get updated user settings from server
+      await mutateModels();
+    } catch (error) {
+      console.error('Failed to save model selection to server:', error);
+      // Note: localStorage was already updated for immediate feedback
+      // Server sync will happen on next page load or when API recovers
+    }
   };
 
   const toggleFavorite = (modelId: string) => {

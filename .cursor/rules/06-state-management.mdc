@@ -66,99 +66,188 @@ const handleVote = async (messageId: string, type: "up" | "down") => {
 };
 ```
 
-### 3. Chat-Scoped State Pattern
+### 3. User Settings State Pattern
 
-For features that need to be isolated per chat session (like artifacts), use SWR keys that include the chat ID.
-
-```typescript
-// Reference: hooks/use-artifact.ts
-export function useArtifact(chatId?: string) {
-  const artifactKey = chatId ? `artifact-${chatId}` : "artifact";
-
-  const { data: localArtifact, mutate: setLocalArtifact } = useSWR<UIArtifact>(
-    artifactKey,
-    null,
-    {
-      fallbackData: initialArtifactData,
-    }
-  );
-
-  const setArtifact = useCallback(
-    (updaterFn: UIArtifact | ((currentArtifact: UIArtifact) => UIArtifact)) => {
-      setLocalArtifact((currentArtifact) => {
-        const artifactToUpdate = currentArtifact || initialArtifactData;
-
-        if (typeof updaterFn === "function") {
-          return updaterFn(artifactToUpdate);
-        }
-
-        return updaterFn;
-      });
-    },
-    [setLocalArtifact]
-  );
-
-  return { artifact: localArtifact, setArtifact };
-}
-
-// Usage in components with chat context
-const chatId = usePathname().startsWith("/chat/")
-  ? usePathname().slice(6)
-  : undefined;
-const { artifact, setArtifact } = useArtifact(chatId);
-```
-
-### 4. Custom Hooks for Complex State
-
-Abstract complex state logic into custom hooks for reusability and testability.
+For user preferences that persist across sessions, use the database-backed settings system with optimistic updates.
 
 ```typescript
-// Reference: hooks/use-usage.ts - Real-time usage tracking
-export function useUsage() {
-  const [currentUsage, setCurrentUsage] = useState<UsageInfo | null>(null);
+// Reference: hooks/use-user-settings.ts
+export function useUserSettings(
+  session: Session | null
+): UseUserSettingsReturn {
+  const userId = session?.user?.id;
 
-  const { data, mutate } = useSWR("/api/usage/summary", fetcher, {
-    refreshInterval: 30000, // 30 seconds
-    onSuccess: (data) => {
-      if (data?.plan) {
-        setCurrentUsage(data.plan);
-      }
-    },
+  const {
+    data: settingsData,
+    mutate: mutateSettings,
+    isLoading,
+    error,
+  } = useSWR<UserSettings>(userId ? `/api/user/settings` : null, fetcher, {
+    fallbackData: {},
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
   });
 
-  const updateUsage = useCallback(
-    (newUsage: UsageInfo) => {
-      setCurrentUsage(newUsage);
-      // Optionally sync back to SWR cache
-      mutate({ ...data, plan: newUsage }, false);
+  // Optimistic local state for immediate UI updates
+  const [optimisticSettings, setOptimisticSettings] = useState<UserSettings>(
+    {}
+  );
+
+  // Combine server data with optimistic updates
+  const settings = { ...settingsData, ...optimisticSettings };
+
+  const updateSetting = useCallback(
+    async (key: string, value: any) => {
+      if (!userId) return;
+
+      // Optimistic update
+      setOptimisticSettings((prev) => ({ ...prev, [key]: value }));
+
+      try {
+        const response = await fetch("/api/user/settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [key]: value }),
+        });
+
+        if (!response.ok) throw new Error("Failed to update setting");
+
+        await mutateSettings((current) => ({
+          ...current,
+          [key]: value,
+        }));
+
+        // Clear optimistic update
+        setOptimisticSettings((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      } catch (error) {
+        // Revert optimistic update on error
+        setOptimisticSettings((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        throw error;
+      }
     },
-    [data, mutate]
+    [userId, mutateSettings]
   );
 
   return {
-    usage: currentUsage || data?.plan,
-    updateUsage,
-    isLoading: !data && !currentUsage,
+    settings,
+    updateSetting,
+    updateSettings,
+    isLoading,
+    error,
   };
 }
 
-// Reference: hooks/use-models.ts - Dynamic model fetching
+// Usage with optimistic updates
+const { settings, updateSetting } = useUserSettings(session);
+
+// Instant UI update, server sync happens in background
+await updateSetting("theme", "dark");
+```
+
+### 4. Cache-First State Pattern
+
+For instant user experiences, implement cache-first data loading with background synchronization.
+
+```typescript
+// Reference: hooks/use-models.ts - Cache-first model loading
 export function useModels() {
+  // Load from localStorage immediately for instant UX
+  const [cachedModels, setCachedModels] = useState(() =>
+    safeReadFromCache("models-cache")
+  );
+
   const { data, error, isLoading } = useSWR<ModelsResponse>(
     "/api/models",
     fetcher,
     {
+      fallbackData: cachedModels, // Use cached data immediately
+      revalidateOnMount: true, // Sync in background
       revalidateOnFocus: false,
       refreshInterval: 5 * 60 * 1000, // 5 minutes
+      onSuccess: (data) => {
+        // Update cache when fresh data arrives
+        if (data) {
+          safeWriteToCache("models-cache", data);
+          setCachedModels(data);
+        }
+      },
     }
   );
 
   return {
-    models: data?.models ?? [],
-    userType: data?.userType ?? "free",
-    isLoading,
+    models: data?.models ?? cachedModels?.models ?? [],
+    userType: data?.userType ?? cachedModels?.userType ?? "free",
+    isLoading: isLoading && !cachedModels, // Only show loading if no cache
     error,
   };
+}
+
+// Reference: hooks/use-chat-messages.ts - Cache-first chat messages
+export function useChatMessages(chatId: string) {
+  const cacheKey = `chat-messages-${chatId}`;
+
+  // Load from localStorage immediately
+  const [cachedMessages, setCachedMessages] = useState(() =>
+    safeReadFromCache(cacheKey)
+  );
+
+  const { data: messages, mutate } = useSWR(
+    `/api/chat/${chatId}/messages`,
+    fetcher,
+    {
+      fallbackData: cachedMessages,
+      revalidateOnMount: true,
+      onSuccess: (data) => {
+        if (data) {
+          safeWriteToCache(cacheKey, data);
+          setCachedMessages(data);
+        }
+      },
+    }
+  );
+
+  return {
+    messages: messages || cachedMessages || [],
+    isFromCache: !messages && cachedMessages,
+    mutate,
+  };
+}
+```
+
+### 5. Custom Hooks for Complex State
+
+Abstract complex state logic into custom hooks for reusability and testability.
+
+```typescript
+// Reference: hooks/use-selected-model.ts - Settings-aware model selection
+export function useSelectedModel(session: Session | null): {
+  selectedModel: string;
+  setSelectedModel: (modelId: string) => Promise<void>;
+  isLoading: boolean;
+} {
+  const { settings, updateSetting, isLoading } = useUserSettings(session);
+
+  // Get the selected model from settings, with plan-based fallback
+  const selectedModel =
+    settings?.defaultModel ||
+    getDefaultModelForUser(session?.user?.type as UserType);
+
+  const setSelectedModel = useCallback(
+    async (modelId: string) => {
+      await updateSetting("defaultModel", modelId);
+    },
+    [updateSetting]
+  );
+
+  return { selectedModel, setSelectedModel, isLoading };
 }
 ```
 
