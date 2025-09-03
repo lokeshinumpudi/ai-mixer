@@ -1,0 +1,41 @@
+---
+alwaysApply: true
+description: "Local development, scripts, and Git workflow."
+---
+
+# 13: Development Workflow
+
+## Daily Workflow
+
+The development workflow is optimized for speed and quality.
+
+1.  **Start Dev Server**: `pnpm dev` starts the Next.js development server with hot reloading.
+2.  **Code**: Make changes to the code.
+3.  **Validate**: Use `pnpm lint` and `pnpm type-check` for quick validation. Avoid running a full `pnpm build` unless making significant architectural changes.
+4.  **Commit**: Git pre-commit hooks automatically format code, run the linter, and perform a type check, ensuring that only quality code is committed.
+
+## Key Scripts
+
+- `pnpm dev`: Starts the development server.
+- `pnpm lint`: Runs ESLint and Biome to check for code quality issues.
+- `pnpm format`: Formats the code using Biome.
+- `pnpm type-check`: Runs the TypeScript compiler to check for type errors.
+- `pnpm test`: Runs Playwright end-to-end tests.
+- `pnpm db:generate`: Generates a new database migration.
+- `pnpm db:migrate`: Applies pending database migrations.
+
+## Pre-commit Quality Gates
+
+Husky pre-commit hooks enforce quality standards on every commit:
+
+- **Auto-formatting**: Staged files are automatically formatted.
+- **Linting**: The linter runs on staged files, blocking commits on errors.
+- **Type Checking**: The entire project is type-checked, blocking commits on any errors.
+
+## Git Workflow
+
+- Create feature branches from `main`.
+- Make small, atomic commits.
+- Keep your branch updated with `main` by rebasing.
+- Create a pull request for code review.
+- Once approved and all checks pass, merge into `main`.

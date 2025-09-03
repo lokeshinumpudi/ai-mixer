@@ -1,5 +1,5 @@
-import type { UserType } from '@/app/(auth)/auth';
 import { FREE_MODELS, PRICING, PRO_MODELS } from '@/lib/constants';
+import type { UserType } from '@/lib/supabase/types';
 import type { ChatModel } from './models';
 
 interface Entitlements {
@@ -11,6 +11,16 @@ interface Entitlements {
 }
 
 export const entitlementsByUserType: Record<UserType, Entitlements> = {
+  /*
+   * For anonymous/guest users - Limited access to basic models
+   */
+  anonymous: {
+    maxMessagesPerDay: 5, // 5 messages for anonymous users
+    getAllowedModelIds: () => [...FREE_MODELS],
+    planName: 'Guest',
+    planDescription: 'Limited access for anonymous users',
+  },
+
   /*
    * For logged-in users without a paid subscription - Free tier with daily limits
    */

@@ -1,8 +1,8 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
 
 export default function BillingFailurePage() {
   const params = useSearchParams();
@@ -18,8 +18,22 @@ export default function BillingFailurePage() {
         <p className="text-muted-foreground">{reason}</p>
       </div>
       <div className="flex gap-4">
-        <Button asChild>
-          <Link href="/pricing">Try Again</Link>
+        <Button
+          onClick={() => {
+            const paymentUrl =
+              process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+            if (paymentUrl) {
+              window.open(paymentUrl, '_blank');
+            } else {
+              console.error(
+                'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+              );
+              // Fallback to settings page
+              window.location.href = '/settings';
+            }
+          }}
+        >
+          Try Again
         </Button>
         <Button variant="outline" asChild>
           <Link href="/">Back to Chat</Link>

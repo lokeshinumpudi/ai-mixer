@@ -1,12 +1,12 @@
-import { generateUUID } from '@/lib/utils';
-import { tool, type UIMessageStreamWriter } from 'ai';
-import { z } from 'zod';
-import type { Session } from 'next-auth';
 import {
   artifactKinds,
   documentHandlersByArtifactKind,
 } from '@/lib/artifacts/server';
+import type { AppUser } from '@/lib/supabase/types';
 import type { ChatMessage } from '@/lib/types';
+import { generateUUID } from '@/lib/utils';
+import { tool, type UIMessageStreamWriter } from 'ai';
+import { z } from 'zod';
 interface SelectedModel {
   id: string;
   supportsArtifacts: boolean;
@@ -14,13 +14,13 @@ interface SelectedModel {
 }
 
 interface CreateDocumentProps {
-  session: Session;
+  user: AppUser;
   dataStream: UIMessageStreamWriter<ChatMessage>;
   selectedModel: SelectedModel;
 }
 
 export const createDocument = ({
-  session,
+  user,
   dataStream,
   selectedModel,
 }: CreateDocumentProps) =>
@@ -71,7 +71,7 @@ export const createDocument = ({
         id,
         title,
         dataStream,
-        session,
+        user,
         selectedModel,
       });
 

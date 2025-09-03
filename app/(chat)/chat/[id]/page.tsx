@@ -1,6 +1,6 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import { useParams, useRouter } from 'next/navigation';
 
 import { Chat } from '@/components/chat';
@@ -12,7 +12,7 @@ import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 export default function Page() {
   const params = useParams();
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { user, loading } = useSupabaseAuth();
   const id = params.id as string;
 
   const { chat, messages, isLoading, error } = useChatData(id);
@@ -21,10 +21,10 @@ export default function Page() {
     isLoading: accessLoading,
     error: accessError,
   } = useChatAccess(chat, id, error);
-  const isReadonly = useChatReadOnly(chat, session);
+  const isReadonly = useChatReadOnly(chat, user);
 
   // Show loading state
-  if (status === 'loading' || isLoading || accessLoading) {
+  if (loading || isLoading || accessLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
@@ -59,8 +59,8 @@ export default function Page() {
     );
   }
 
-  // Don't render until we have session, access, and chat data
-  if (!session || !hasAccess || !chat) {
+  // Don't render until we have user, access, and chat data
+  if (!user || !hasAccess || !chat) {
     return null;
   }
 
@@ -72,7 +72,7 @@ export default function Page() {
         initialChatModel={DEFAULT_CHAT_MODEL}
         initialVisibilityType={chat.visibility}
         isReadonly={isReadonly}
-        session={session}
+        user={user}
         autoResume={true}
       />
       <DataStreamHandler />

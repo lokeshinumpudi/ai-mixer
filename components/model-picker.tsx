@@ -14,6 +14,7 @@ import { useAnimeOnMount } from '@/hooks/use-anime';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
+import { LoginCTA } from '@/components/login-cta';
 import {
   Tooltip,
   TooltipContent,
@@ -21,10 +22,11 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { isModelEnabled, useModels } from '@/hooks/use-models';
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import type { ChatModel } from '@/lib/ai/models';
 import { getDefaultModelForUser } from '@/lib/ai/models';
+import type { AppUser } from '@/lib/supabase/types';
 import { cn } from '@/lib/utils';
-import type { Session } from 'next-auth';
 import {
   BrainIcon,
   CheckIcon,
@@ -131,26 +133,48 @@ function ModelCard({
         <Card
           data-testid={`model-selector-item-${model.id}`}
           className={cn(
-            'relative transition-all duration-200',
-            'cursor-pointer hover:shadow-md hover:border-primary/20',
+            'relative transition-all duration-200 h-full',
+            'cursor-pointer hover:shadow-md',
             'border-2',
-            isSelected && enabled && 'border-primary bg-primary/5',
+            isSelected && enabled && 'border-primary bg-primary/5 shadow-md',
             !enabled &&
-              'border-dashed border-muted-foreground/20 bg-muted/50 grayscale opacity-60 hover:opacity-80',
-            enabled && !isSelected && 'hover:border-primary/20',
+              'border-dashed border-muted-foreground/30 bg-muted/30 opacity-75 hover:opacity-90',
+            enabled &&
+              !isSelected &&
+              'border-border hover:border-primary/30 hover:shadow-sm',
           )}
-          onClick={enabled ? onSelect : () => router.push('/pricing')}
+          onClick={
+            enabled
+              ? onSelect
+              : () => {
+                  const paymentUrl =
+                    process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+                  if (paymentUrl) {
+                    window.open(paymentUrl, '_blank');
+                  } else {
+                    console.error(
+                      'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+                    );
+                    router.push('/settings');
+                  }
+                }
+          }
         >
-          <CardContent className="p-4 h-28 flex flex-col">
+          <CardContent className="p-4 flex flex-col h-32">
             {/* Header with provider icon and favorite */}
-            <div className="flex items-center justify-between mb-3">
-              <span className={cn('text-xl', !enabled && 'opacity-50')}>
+            <div className="flex items-center justify-between mb-2">
+              <span
+                className={cn(
+                  'text-lg transition-opacity',
+                  !enabled && 'opacity-60',
+                )}
+              >
                 {providerIcon}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 {!enabled && (
-                  <div className="text-amber-500">
-                    <DiamondIcon size={14} />
+                  <div className="text-amber-600 dark:text-amber-500">
+                    <DiamondIcon size={12} />
                   </div>
                 )}
                 <button
@@ -167,7 +191,7 @@ function ModelCard({
                       ? 'text-amber-500'
                       : enabled
                         ? 'text-muted-foreground hover:text-amber-500'
-                        : 'text-muted-foreground/50 cursor-not-allowed',
+                        : 'text-muted-foreground/40 cursor-not-allowed',
                   )}
                 >
                   <StarIcon size={12} />
@@ -176,58 +200,58 @@ function ModelCard({
             </div>
 
             {/* Model name - takes remaining space */}
-            <div className="flex-1 flex items-start">
+            <div className="flex-1 flex items-start min-h-0">
               <h3
                 className={cn(
-                  'font-medium text-sm line-clamp-2 leading-tight flex-1',
-                  !enabled && 'text-muted-foreground/70',
+                  'font-medium text-sm leading-tight flex-1 line-clamp-2',
+                  enabled ? 'text-foreground' : 'text-muted-foreground',
                 )}
               >
                 {model.name}
               </h3>
               {isSelected && enabled && (
-                <div className="text-primary ml-2 mt-0.5">
+                <div className="text-primary ml-2 flex-shrink-0">
                   <CheckIcon size={16} />
                 </div>
               )}
             </div>
 
             {/* Bottom capabilities and badges row */}
-            <div className="flex items-center justify-between mt-auto pt-2">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
+              <div className="flex items-center gap-1.5">
                 {supportsImageAnalysis && enabled && (
-                  <div className="text-purple-500 bg-purple-500/10 rounded-md p-1.5">
-                    <ImageIcon size={12} />
+                  <div className="text-purple-600 bg-purple-100 dark:bg-purple-500/20 dark:text-purple-400 rounded p-1">
+                    <ImageIcon size={10} />
                   </div>
                 )}
                 {model.supportsReasoning && enabled && (
-                  <div className="text-blue-500 bg-blue-500/10 rounded-md p-1.5">
-                    <BrainIcon size={12} />
+                  <div className="text-blue-600 bg-blue-100 dark:bg-blue-500/20 dark:text-blue-400 rounded p-1">
+                    <BrainIcon size={10} />
                   </div>
                 )}
                 {model.supportsArtifacts && enabled && (
-                  <div className="text-green-500 bg-green-500/10 rounded-md p-1.5">
-                    <CodeIcon size={12} />
+                  <div className="text-green-600 bg-green-100 dark:bg-green-500/20 dark:text-green-400 rounded p-1">
+                    <CodeIcon size={10} />
                   </div>
                 )}
               </div>
 
-              <div className="flex gap-1.5">
+              <div className="flex gap-1">
                 {!enabled && (
-                  <div className="text-xs bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2 py-1 rounded-full flex items-center gap-1.5">
-                    <DiamondIcon size={10} />
-                    <span>Pro</span>
+                  <div className="text-xs bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <DiamondIcon size={8} />
+                    <span className="font-medium">Pro</span>
                   </div>
                 )}
                 {model.id.includes('mini') && enabled && (
-                  <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                  <div className="text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded font-medium">
                     Fast
                   </div>
                 )}
                 {model.id.includes('pro') && enabled && (
-                  <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded flex items-center gap-1">
+                  <div className="text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded flex items-center gap-1">
                     <SparklesIcon size={8} />
-                    Pro
+                    <span className="font-medium">Pro</span>
                   </div>
                 )}
               </div>
@@ -274,7 +298,7 @@ function ModelCard({
 }
 
 interface ModelPickerProps {
-  session: Session;
+  user?: AppUser | null;
   selectedModelId: string;
   className?: string;
   compact?: boolean;
@@ -282,16 +306,25 @@ interface ModelPickerProps {
 }
 
 export function ModelPicker({
-  session,
+  user,
   selectedModelId,
   className,
   compact = false,
   disabled = false,
 }: ModelPickerProps) {
   const router = useRouter();
+  const { user: authUser } = useSupabaseAuth();
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filters, setFilters] = useState({
+    fast: false,
+    vision: false,
+    reasoning: false,
+    image: false,
+    tools: false,
+    pdf: false,
+  });
   const [favorites, setFavorites] = useState<string[]>(mockFavorites);
 
   // Use models API which now includes user settings
@@ -312,8 +345,9 @@ export function ModelPicker({
 
   // Get plan-based default model as ultimate fallback
   const planBasedDefaultModel = useMemo(() => {
-    return getDefaultModelForUser(session.user.type);
-  }, [session.user.type]);
+    // Prefer userType from /api/models (falls back to "free" in hook)
+    return getDefaultModelForUser(userType);
+  }, [userType]);
 
   // Sync localStorage with server when server data arrives
   useEffect(() => {
@@ -357,7 +391,6 @@ export function ModelPicker({
     localModel,
     allModels,
     planBasedDefaultModel,
-    userSettings,
   ]);
 
   const selectedModel = useMemo(
@@ -367,14 +400,32 @@ export function ModelPicker({
 
   // Filter models based on search
   const filteredModels = useMemo(() => {
-    if (!searchQuery) return allModels;
-    return allModels.filter(
-      (model) =>
-        model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        model.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        model.provider.toLowerCase().includes(searchQuery.toLowerCase()),
-    );
-  }, [allModels, searchQuery]);
+    let list = allModels;
+    if (searchQuery) {
+      list = list.filter(
+        (model) =>
+          model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          model.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          model.provider.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+    }
+
+    // Capability filters
+    if (filters.fast)
+      list = list.filter(
+        (m) =>
+          m.id.includes('mini') ||
+          m.id.includes('flash') ||
+          m.id.includes('fast'),
+      );
+    if (filters.vision) list = list.filter((m) => m.supportsVision);
+    if (filters.reasoning) list = list.filter((m) => m.supportsReasoning);
+    if (filters.image) list = list.filter((m) => m.supportsImageGeneration);
+    if (filters.tools) list = list.filter((m) => m.supportsToolCalling);
+    if (filters.pdf) list = list.filter((m) => m.supportsPdf);
+
+    return list;
+  }, [allModels, searchQuery, filters]);
 
   // Get top models (enabled models sorted by some priority)
   const topModels = useMemo(() => {
@@ -416,6 +467,11 @@ export function ModelPicker({
     safeLocalStorage.set(MODEL_SELECTION_KEY, modelId);
 
     try {
+      // Guests: don't call settings API
+      if (!user || user.is_anonymous) {
+        await mutateModels();
+        return;
+      }
       // Update user settings via PATCH API
       const response = await fetch('/api/user/settings', {
         method: 'PATCH',
@@ -443,6 +499,11 @@ export function ModelPicker({
         : [...prev, modelId],
     );
   };
+
+  // Determine anonymous status using live auth state first, falling back to props/models
+  const isAnonymousUser = Boolean(
+    authUser?.is_anonymous ?? user?.is_anonymous ?? false,
+  );
 
   return (
     <TooltipProvider>
@@ -484,8 +545,8 @@ export function ModelPicker({
 
         <DialogContent
           className={cn(
-            'overflow-hidden flex flex-col transition-all duration-300',
-            isExpanded ? 'max-w-6xl max-h-[85vh]' : 'max-w-2xl max-h-[70vh]',
+            'flex flex-col transition-all duration-300',
+            isExpanded ? 'max-w-6xl max-h-[90vh]' : 'max-w-md max-h-[70vh]',
           )}
           ref={useAnimeOnMount({
             opacity: [0, 1],
@@ -495,30 +556,59 @@ export function ModelPicker({
             ease: 'outQuad',
           })}
         >
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
+          <DialogHeader className="space-y-3">
+            <DialogTitle>
               <span>Choose a Model</span>
-              {userType === 'free' && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">
-                    Unlock all models + higher limits
-                  </span>
-                  <span className="text-2xl font-bold text-primary">₹249</span>
-                  <span className="text-muted-foreground">/month</span>
+            </DialogTitle>
+            {userType === 'free' && (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-3 rounded-lg border border-amber-200/50 dark:border-amber-800/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Unlock all models + higher limits
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-lg font-bold text-primary">
+                        ₹249
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        /month
+                      </span>
+                    </div>
+                  </div>
                   <Button
                     size="sm"
-                    className="ml-2"
+                    className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 text-xs h-7"
                     onClick={() => {
                       setOpen(false);
-                      router.push('/pricing');
+                      const paymentUrl =
+                        process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+                      if (paymentUrl) {
+                        window.open(paymentUrl, '_blank');
+                      } else {
+                        console.error(
+                          'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+                        );
+                        router.push('/settings');
+                      }
                     }}
                   >
                     Upgrade now
                   </Button>
                 </div>
-              )}
-            </DialogTitle>
+              </div>
+            )}
           </DialogHeader>
+
+          {/* Guest CTA - only show for anonymous users */}
+          {isAnonymousUser && (
+            <div className="mb-3">
+              <div className="text-xs text-muted-foreground mb-1">
+                Sign in to save chats and unlock more models.
+              </div>
+              <LoginCTA />
+            </div>
+          )}
 
           {/* Search - only in expanded mode */}
           {isExpanded && (
@@ -532,35 +622,246 @@ export function ModelPicker({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
+              {/* Capability filters */}
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                <Button
+                  type="button"
+                  variant={filters.fast ? 'default' : 'outline'}
+                  className="h-8 text-xs"
+                  onClick={() => setFilters((f) => ({ ...f, fast: !f.fast }))}
+                >
+                  Fast
+                </Button>
+                <Button
+                  type="button"
+                  variant={filters.vision ? 'default' : 'outline'}
+                  className="h-8 text-xs"
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, vision: !f.vision }))
+                  }
+                >
+                  Vision
+                </Button>
+                <Button
+                  type="button"
+                  variant={filters.reasoning ? 'default' : 'outline'}
+                  className="h-8 text-xs"
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, reasoning: !f.reasoning }))
+                  }
+                >
+                  Reasoning
+                </Button>
+                <Button
+                  type="button"
+                  variant={filters.image ? 'default' : 'outline'}
+                  className="h-8 text-xs"
+                  onClick={() => setFilters((f) => ({ ...f, image: !f.image }))}
+                >
+                  Image Gen
+                </Button>
+                <Button
+                  type="button"
+                  variant={filters.tools ? 'default' : 'outline'}
+                  className="h-8 text-xs"
+                  onClick={() => setFilters((f) => ({ ...f, tools: !f.tools }))}
+                >
+                  Tool Calling
+                </Button>
+                <Button
+                  type="button"
+                  variant={filters.pdf ? 'default' : 'outline'}
+                  className="h-8 text-xs"
+                  onClick={() => setFilters((f) => ({ ...f, pdf: !f.pdf }))}
+                >
+                  PDF
+                </Button>
+              </div>
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto px-1 -mx-1">
             {!isExpanded ? (
-              /* Compact View */
+              /* Minimal Vertical List View */
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium">Quick Access</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium">Choose Model</h3>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setIsExpanded(true)}
-                    className="text-xs text-muted-foreground hover:text-foreground"
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                   >
-                    Show all
+                    <span>Show all</span>
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {compactModels.map((model) => (
-                    <ModelCard
-                      key={model.id}
-                      model={model}
-                      isSelected={model.id === effectiveModelId}
-                      isFavorite={favorites.includes(model.id)}
-                      onSelect={() => handleModelSelect(model.id)}
-                      onToggleFavorite={() => toggleFavorite(model.id)}
-                    />
-                  ))}
+                <div className="space-y-1.5">
+                  {filteredModels.slice(0, 8).map((model) => {
+                    const enabled =
+                      isModelEnabled(model) &&
+                      allModels.some((m) => m.id === model.id);
+                    const isSelected = model.id === effectiveModelId;
+                    const providerIcon = getProviderIcon(model.provider);
+
+                    // Determine capabilities
+                    const supportsImageAnalysis =
+                      model.id.includes('vision') ||
+                      model.id.includes('gpt-4') ||
+                      model.id.includes('claude-3') ||
+                      model.id.includes('gemini') ||
+                      model.description.toLowerCase().includes('vision') ||
+                      model.description.toLowerCase().includes('image');
+
+                    return (
+                      <button
+                        type="button"
+                        key={model.id}
+                        onClick={
+                          enabled
+                            ? () => handleModelSelect(model.id)
+                            : () => {
+                                const paymentUrl =
+                                  process.env
+                                    .NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL ||
+                                  '';
+                                if (paymentUrl) {
+                                  window.open(paymentUrl, '_blank');
+                                } else {
+                                  console.error(
+                                    'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+                                  );
+                                  router.push('/settings');
+                                }
+                              }
+                        }
+                        className={cn(
+                          'flex items-center gap-2.5 p-2.5 rounded-lg border-2 transition-all duration-200 cursor-pointer w-full text-left',
+                          isSelected &&
+                            enabled &&
+                            'border-primary bg-primary/5 shadow-sm',
+                          !enabled &&
+                            'border-dashed border-muted-foreground/30 opacity-75 hover:opacity-90',
+                          enabled &&
+                            !isSelected &&
+                            'border-border hover:border-primary/30 hover:bg-muted/50',
+                        )}
+                      >
+                        {/* Provider Icon */}
+                        <span
+                          className={cn('text-base', !enabled && 'opacity-60')}
+                        >
+                          {providerIcon}
+                        </span>
+
+                        {/* Model Name */}
+                        <div className="flex-1 min-w-0">
+                          <h4
+                            className={cn(
+                              'font-medium text-sm truncate',
+                              enabled
+                                ? 'text-foreground'
+                                : 'text-muted-foreground',
+                            )}
+                          >
+                            {model.name}
+                          </h4>
+                          {/* {model.description && (
+                            <p
+                              className={cn(
+                                "text-xs truncate mt-0.5",
+                                enabled
+                                  ? "text-muted-foreground"
+                                  : "text-muted-foreground/70"
+                              )}
+                            >
+                              {model.description}
+                            </p>
+                          )} */}
+                        </div>
+
+                        {/* Capability Icons */}
+                        <div className="flex items-center gap-1">
+                          {supportsImageAnalysis && enabled && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="text-purple-600 bg-purple-100 dark:bg-purple-500/20 dark:text-purple-400 rounded p-0.5">
+                                  <ImageIcon size={10} />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Vision
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          {model.supportsReasoning && enabled && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="text-blue-600 bg-blue-100 dark:bg-blue-500/20 dark:text-blue-400 rounded p-0.5">
+                                  <BrainIcon size={10} />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Reasoning
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          {model.supportsArtifacts && enabled && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="text-green-600 bg-green-100 dark:bg-green-500/20 dark:text-green-400 rounded p-0.5">
+                                  <CodeIcon size={10} />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Code
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          {model.id.includes('mini') && enabled && (
+                            <div className="text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded font-medium">
+                              Fast
+                            </div>
+                          )}
+                          {!enabled && (
+                            <div className="text-xs bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <DiamondIcon size={7} />
+                              <span className="font-medium">Pro</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Selected Indicator */}
+                        {isSelected && enabled && (
+                          <div className="text-primary">
+                            <CheckIcon size={14} />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {filteredModels.length > 8 && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => setIsExpanded(true)}
+                      className="w-full text-sm text-muted-foreground hover:text-foreground mt-3"
+                    >
+                      View {filteredModels.length - 8} more models...
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -572,9 +873,22 @@ export function ModelPicker({
                     variant="ghost"
                     size="sm"
                     onClick={() => setIsExpanded(false)}
-                    className="text-xs text-muted-foreground hover:text-foreground"
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                   >
-                    Show less
+                    <span>Show less</span>
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 15l7-7 7 7"
+                      />
+                    </svg>
                   </Button>
                 </div>
 
@@ -587,7 +901,7 @@ export function ModelPicker({
                       </div>
                       <h3 className="font-medium">Favorites</h3>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                       {favoriteModels.map((model) => (
                         <ModelCard
                           key={model.id}
@@ -608,7 +922,7 @@ export function ModelPicker({
                     <h3 className="font-medium mb-3">
                       {favoriteModels.length > 0 ? 'Others' : 'All Models'}
                     </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                       {otherModels.map((model) => (
                         <ModelCard
                           key={model.id}

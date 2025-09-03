@@ -3,10 +3,10 @@ import { imageDocumentHandler } from '@/artifacts/image/server';
 import { sheetDocumentHandler } from '@/artifacts/sheet/server';
 import { textDocumentHandler } from '@/artifacts/text/server';
 import type { ArtifactKind } from '@/components/artifact';
-import type { Document } from '../db/schema';
-import { saveDocument } from '../db/queries';
-import type { Session } from 'next-auth';
+import type { AppUser } from '@/lib/supabase/types';
 import type { UIMessageStreamWriter } from 'ai';
+import { saveDocument } from '../db/queries';
+import type { Document } from '../db/schema';
 import type { ChatMessage } from '../types';
 interface SelectedModel {
   id: string;
@@ -26,7 +26,7 @@ export interface CreateDocumentCallbackProps {
   id: string;
   title: string;
   dataStream: UIMessageStreamWriter<ChatMessage>;
-  session: Session;
+  user: AppUser;
   selectedModel: SelectedModel;
 }
 
@@ -34,7 +34,7 @@ export interface UpdateDocumentCallbackProps {
   document: Document;
   description: string;
   dataStream: UIMessageStreamWriter<ChatMessage>;
-  session: Session;
+  user: AppUser;
   selectedModel: SelectedModel;
 }
 
@@ -56,17 +56,17 @@ export function createDocumentHandler<T extends ArtifactKind>(config: {
         id: args.id,
         title: args.title,
         dataStream: args.dataStream,
-        session: args.session,
+        user: args.user,
         selectedModel: args.selectedModel,
       });
 
-      if (args.session?.user?.id) {
+      if (args.user?.id) {
         await saveDocument({
           id: args.id,
           title: args.title,
           content: draftContent,
           kind: config.kind,
-          userId: args.session.user.id,
+          userId: args.user.id,
         });
       }
 
@@ -77,17 +77,17 @@ export function createDocumentHandler<T extends ArtifactKind>(config: {
         document: args.document,
         description: args.description,
         dataStream: args.dataStream,
-        session: args.session,
+        user: args.user,
         selectedModel: args.selectedModel,
       });
 
-      if (args.session?.user?.id) {
+      if (args.user?.id) {
         await saveDocument({
           id: args.document.id,
           title: args.document.title,
           content: draftContent,
           kind: config.kind,
-          userId: args.session.user.id,
+          userId: args.user.id,
         });
       }
 

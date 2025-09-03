@@ -5,23 +5,25 @@ import { useWindowSize } from 'usehooks-ts';
 
 import { SidebarToggle } from '@/components/sidebar-toggle';
 import { Button } from '@/components/ui/button';
-import type { Session } from 'next-auth';
+import type { AppUser } from '@/lib/supabase/types';
 import { memo, useEffect, useRef } from 'react';
 import { DiamondIcon, PlusIcon } from './icons';
 import { useSidebar } from './ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
-import { type VisibilityType, VisibilitySelector } from './visibility-selector';
+// We no longer render the visibility selector UI, but keep a lightweight
+// type locally to avoid coupling to the old component.
+type VisibilityType = 'private' | 'public';
 
 function PureChatHeader({
   chatId,
   selectedVisibilityType,
   isReadonly,
-  session,
+  user,
 }: {
   chatId: string;
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
-  session: Session;
+  user?: AppUser | null;
 }) {
   const router = useRouter();
   const { open } = useSidebar();
@@ -85,23 +87,28 @@ function PureChatHeader({
         </Tooltip>
       )}
 
-      {!isReadonly && (
-        <VisibilitySelector
-          chatId={chatId}
-          selectedVisibilityType={selectedVisibilityType}
-          className="order-1 md:order-2"
-        />
-      )}
+      {/* Visibility selector temporarily removed from UI */}
 
       {/* Upgrade button for free users */}
-      {session.user.type === 'free' && (
+      {user?.user_metadata?.user_type === 'free' && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="default"
               size="sm"
               className="order-3 hidden md:flex items-center gap-1.5 text-xs bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
-              onClick={() => router.push('/pricing')}
+              onClick={() => {
+                const paymentUrl =
+                  process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+                if (paymentUrl) {
+                  window.open(paymentUrl, '_blank');
+                } else {
+                  console.error(
+                    'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+                  );
+                  router.push('/settings');
+                }
+              }}
             >
               <DiamondIcon size={12} />
               Upgrade to Pro

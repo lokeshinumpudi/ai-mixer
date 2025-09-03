@@ -1,0 +1,38 @@
+---
+alwaysApply: true
+description: "A living document covering architecture review findings and recent progress."
+---
+
+# 15: System Health & Review
+
+## Overview
+
+This is a living document that captures findings from architecture reviews, summarizes recent progress, and outlines a roadmap for future improvements.
+
+## Architecture Review Findings (as of latest review)
+
+### ✅ Strengths
+
+- **Authentication**: Robust Supabase integration with type-safe decorators.
+- **Database**: Strong data integrity with centralized, type-safe queries.
+- **Security**: Comprehensive input validation and user-scoped data access.
+
+### ⚠️ Areas for Improvement
+
+- **Schema-Reality Mismatch**: The `user` table schema in Drizzle shows a `defaultRandom()` for the ID, but in practice, it's always overridden with the Supabase user ID. This should be corrected to avoid confusion.
+- **Inconsistent User ID Types**: Some legacy tables use `varchar` for `userId` while newer ones use `uuid`. This should be standardized to `uuid`.
+- **Query Optimization**: Some high-traffic queries could benefit from composite indexes.
+
+## Summary of Recent Progress
+
+### UI/UX Overhaul
+
+- **Model Picker**: Redesigned from a grid to a content-first vertical list, improving scannability and mobile experience.
+- **Settings Page**: Layout optimized to prioritize usage tracking and a clear upgrade CTA for free users.
+- **Upgrade Flow**: Streamlined by removing the intermediate `/pricing` page, linking CTAs directly to the payment gateway to reduce friction.
+
+### Technical Optimizations
+
+- **API Performance**: Consolidated `/api/models` and `/api/user/settings` into a single endpoint, reducing network requests by ~50% on page load.
+- **Anonymous User Handling**: Fixed bugs related to rate limiting and data persistence for anonymous users, and resolved a privacy issue where chat history could leak between sessions.
+  -- **Route Simplification**: The route configuration was simplified from a three-tier (public, protected, conditional) to a two-tier (public, protected) system, reducing cognitive overhead.

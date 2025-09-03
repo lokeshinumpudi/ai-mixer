@@ -1,4 +1,3 @@
-import type { UserType } from '@/app/(auth)/auth';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
 import type { ChatModel } from '@/lib/ai/models';
@@ -9,10 +8,12 @@ import { createDocument } from '@/lib/ai/tools/create-document';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { updateDocument } from '@/lib/ai/tools/update-document';
-import { protectedRoute } from '@/lib/auth-decorators';
-import { SessionUtils } from '@/lib/auth/session-config';
+import { authenticatedRoute } from '@/lib/auth-decorators';
+
 import { isProductionEnvironment } from '@/lib/constants';
 import {
+  createAnonymousUserIfNotExists,
+  createOAuthUserIfNotExists,
   createStreamId,
   deleteChatById,
   getChatById,
@@ -25,6 +26,7 @@ import {
 } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 import { validateModelAccess } from '@/lib/security';
+import type { UserType } from '@/lib/supabase/types';
 import type { ChatMessage } from '@/lib/types';
 import { convertToUIMessages, generateUUID } from '@/lib/utils';
 import { geolocation } from '@vercel/functions';
@@ -68,7 +70,7 @@ export function getStreamContext() {
   return globalStreamContext;
 }
 
-export const POST = protectedRoute(async (request, _context, user) => {
+export const POST = authenticatedRoute(async (request, _context, user) => {
   let requestBody: PostRequestBody;
 
   try {
@@ -91,7 +93,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
       selectedVisibilityType: VisibilityType;
     } = requestBody;
 
-    const userType: UserType = user.type;
+    const userType: UserType = user.userType;
 
     // Check usage and rate limits
     const usageInfo = await getUserUsageAndLimits({
@@ -99,7 +101,13 @@ export const POST = protectedRoute(async (request, _context, user) => {
       userType,
     });
 
+    // Debug logging for rate limiting issues
+    console.log(
+      `[RATE_LIMIT_DEBUG] User ${user.id} (${userType}): ${usageInfo.used}/${usageInfo.quota} messages, isOverLimit: ${usageInfo.isOverLimit}`,
+    );
+
     if (usageInfo.isOverLimit) {
+      console.log(`[RATE_LIMIT_DEBUG] Blocking user ${user.id} - over limit`);
       return new ChatSDKError('rate_limit:chat').toResponse();
     }
 
@@ -117,6 +125,13 @@ export const POST = protectedRoute(async (request, _context, user) => {
 
     // Final validation of the effective model
     validateModelAccess(effectiveModel, userType, user.id, allowedModelIds);
+
+    // Ensure user exists in our database
+    if (user.is_anonymous) {
+      await createAnonymousUserIfNotExists(user.id);
+    } else if (user.email) {
+      await createOAuthUserIfNotExists(user.id, user.email);
+    }
 
     const chat = await getChatById({ id });
 
@@ -199,7 +214,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
           tools: {
             getWeather,
             createDocument: createDocument({
-              session: SessionUtils.createSession(user, 'DEFAULT'),
+              user,
               dataStream,
               selectedModel: {
                 id: selectedChatModel,
@@ -208,7 +223,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
               },
             }),
             updateDocument: updateDocument({
-              session: SessionUtils.createSession(user, 'DEFAULT'),
+              user,
               dataStream,
               selectedModel: {
                 id: selectedChatModel,
@@ -217,7 +232,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
               },
             }),
             requestSuggestions: requestSuggestions({
-              session: SessionUtils.createSession(user, 'DEFAULT'),
+              user,
               dataStream,
               selectedModel: {
                 id: selectedChatModel,
@@ -277,7 +292,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
           // Track daily usage (for all users - includes tokens for legacy and messages for new system)
           await upsertDailyUsage({
             userId: user.id,
-            modelId: selectedChatModel,
+            modelId: effectiveModel, // Use effectiveModel, not selectedChatModel
             tokensIn: toTokens(inChars),
             tokensOut: toTokens(outChars),
             messages: 1, // Count this as 1 message interaction
@@ -335,7 +350,7 @@ export const POST = protectedRoute(async (request, _context, user) => {
   }
 });
 
-export const DELETE = protectedRoute(async (request, context, user) => {
+export const DELETE = authenticatedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 

@@ -5,7 +5,7 @@ import type { UseChatHelpers } from '@ai-sdk/react';
 import { motion } from 'framer-motion';
 import { memo, useRef } from 'react';
 import { Button } from './ui/button';
-import type { VisibilityType } from './visibility-selector';
+type VisibilityType = 'private' | 'public';
 
 interface SuggestedActionsProps {
   chatId: string;

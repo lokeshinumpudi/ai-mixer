@@ -1,7 +1,7 @@
 'use client';
 
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import type { Chat } from '@/lib/db/schema';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -17,12 +17,11 @@ export function useChatAccess(
   chatId: string,
   chatError?: any,
 ): ChatAccessResult {
-  const { data: session, status } = useSession();
+  const { user, loading } = useSupabaseAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
-  const isLoading = status === 'loading';
-  const user = session?.user;
+  const isLoading = loading;
 
   // Check access based on chat visibility and ownership
   const hasAccess = (() => {
@@ -72,9 +71,9 @@ export function useChatAccess(
 }
 
 // Hook for determining read-only status
-export function useChatReadOnly(chat: Chat | null, session: any): boolean {
-  if (!chat || !session?.user) return true;
-  return chat.userId !== session.user.id;
+export function useChatReadOnly(chat: Chat | null, user: any): boolean {
+  if (!chat || !user) return true;
+  return chat.userId !== user.id;
 }
 
 // Hook for creating new chats with proper navigation

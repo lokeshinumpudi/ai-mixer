@@ -5,9 +5,15 @@
  * and provide consistent auth handling.
  */
 
-import { auth } from '@/app/(auth)/auth';
+import { getUserType } from '@/lib/db/queries';
+import { createClient } from '@/lib/supabase/server';
+import type { AppUser, UserType } from '@/lib/supabase/types';
 import type { NextRequest } from 'next/server';
 import { ChatSDKError } from './errors';
+
+interface AuthOptions {
+  allowAnonymous?: boolean;
+}
 
 export type RouteHandler = (
   request: NextRequest,
@@ -16,7 +22,7 @@ export type RouteHandler = (
 export type AuthenticatedRouteHandler = (
   request: NextRequest,
   context: { params?: Promise<Record<string, string>> },
-  user: any,
+  user: AppUser & { userType: UserType },
 ) => Promise<Response>;
 
 /**
@@ -40,23 +46,126 @@ export function publicRoute(handler: RouteHandler) {
 }
 
 /**
- * Decorator for protected API routes that require authentication
+ * Decorator for protected API routes that require authentication (non-anonymous users only)
  */
 export function protectedRoute(handler: AuthenticatedRouteHandler) {
   return async (request: NextRequest, context?: any) => {
     try {
-      const session = await auth();
+      const supabase = await createClient();
 
-      if (!session?.user) {
+      // Support Authorization: Bearer <token> for mobile clients
+      const authHeader = request.headers.get('authorization');
+      const bearer = authHeader?.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : undefined;
+
+      const {
+        data: { user: supabaseUser },
+        error: authError,
+      } = bearer
+        ? await supabase.auth.getUser(bearer)
+        : await supabase.auth.getUser();
+
+      // Log error details for debugging
+      if (authError) {
+        console.error('Supabase auth error:', authError);
+      }
+
+      if (!supabaseUser || supabaseUser.is_anonymous) {
         return new ChatSDKError(
           'unauthorized:api',
           'Authentication required',
         ).toResponse();
       }
 
-      return await handler(request, context, session.user);
+      // Get user type from database with robust error handling
+      const userType = await getUserType(
+        supabaseUser.id,
+        supabaseUser.is_anonymous,
+      );
+
+      const user: AppUser & { userType: UserType } = {
+        id: supabaseUser.id,
+        email: supabaseUser.email,
+        user_metadata: {
+          user_type: userType, // Keep for backward compatibility
+          created_via:
+            supabaseUser.user_metadata?.created_via ||
+            (supabaseUser.is_anonymous ? 'anonymous' : 'google'),
+        },
+        is_anonymous: supabaseUser.is_anonymous,
+        userType, // Simplified user type
+      };
+
+      return await handler(request, context, user);
     } catch (error) {
       console.error('Protected route error:', error);
+      if (error instanceof ChatSDKError) {
+        return error.toResponse();
+      }
+      return new ChatSDKError(
+        'bad_request:api',
+        'Internal server error',
+      ).toResponse();
+    }
+  };
+}
+
+/**
+ * Decorator for authenticated routes that allow anonymous users (for usage tracking, etc.)
+ */
+export function authenticatedRoute(handler: AuthenticatedRouteHandler) {
+  return async (request: NextRequest, context?: any) => {
+    try {
+      const supabase = await createClient();
+
+      // Support Authorization: Bearer <token> for mobile clients
+      const authHeader = request.headers.get('authorization');
+      const bearer = authHeader?.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : undefined;
+
+      const {
+        data: { user: supabaseUser },
+        error: authError,
+      } = bearer
+        ? await supabase.auth.getUser(bearer)
+        : await supabase.auth.getUser();
+
+      // Log error details for debugging
+      if (authError) {
+        console.error('Supabase auth error:', authError);
+      }
+
+      if (!supabaseUser) {
+        return new ChatSDKError(
+          'unauthorized:api',
+          'Authentication required',
+        ).toResponse();
+      }
+
+      // Get user type from database with robust error handling
+      const userType = await getUserType(
+        supabaseUser.id,
+        supabaseUser.is_anonymous,
+      );
+
+      const user: AppUser & { userType: UserType } = {
+        id: supabaseUser.id,
+        email: supabaseUser.email,
+        user_metadata: {
+          user_type: userType, // Keep for backward compatibility
+          created_via:
+            supabaseUser.user_metadata?.created_via ||
+            (supabaseUser.is_anonymous ? 'anonymous' : 'google'),
+        },
+        is_anonymous: supabaseUser.is_anonymous,
+        userType, // Simplified user type
+      };
+
+      return await handler(request, context, user);
+    } catch (error) {
+      console.error('Authenticated route error:', error);
       if (error instanceof ChatSDKError) {
         return error.toResponse();
       }
@@ -93,10 +202,39 @@ export function conditionalRoute(handler: RouteHandler) {
 /**
  * Utility to get current user session (for conditional routes)
  */
-export async function getCurrentUser() {
+export async function getCurrentUser(): Promise<
+  (AppUser & { userType: UserType }) | null
+> {
   try {
-    const session = await auth();
-    return session?.user || null;
+    const supabase = await createClient();
+
+    // Note: getCurrentUser cannot receive request; rely on cookies first,
+    // then allow Authorization header via Next/Edge request if available.
+    // For callers that have Request, prefer decorators.
+    const {
+      data: { user: supabaseUser },
+    } = await supabase.auth.getUser();
+
+    if (!supabaseUser) return null;
+
+    // Determine user type from database instead of user_metadata
+    const userType = await getUserType(
+      supabaseUser.id,
+      supabaseUser.is_anonymous,
+    );
+
+    return {
+      id: supabaseUser.id,
+      email: supabaseUser.email,
+      user_metadata: {
+        user_type: userType, // Keep for backward compatibility but derive from DB
+        created_via:
+          supabaseUser.user_metadata?.created_via ||
+          (supabaseUser.is_anonymous ? 'anonymous' : 'google'),
+      },
+      is_anonymous: supabaseUser.is_anonymous,
+      userType, // New database-derived user type
+    };
   } catch (error) {
     console.error('Failed to get current user:', error);
     return null;
@@ -107,19 +245,22 @@ export async function getCurrentUser() {
  * Utility for guest access with message limits
  */
 export async function handleGuestAccess(request: NextRequest) {
-  const session = await auth();
+  const user = await getCurrentUser();
 
-  if (session?.user) {
-    return { user: session.user, isGuest: false };
+  if (user && !user.is_anonymous) {
+    return { user, isGuest: false };
   }
 
-  // Implement guest logic here
-  // For now, return guest user
+  // Return anonymous user or create one if none exists
   return {
-    user: {
-      id: 'guest',
-      email: 'guest@example.com',
-      type: 'guest',
+    user: user || {
+      id: 'anonymous',
+      email: undefined,
+      user_metadata: {
+        user_type: 'anonymous' as const,
+        created_via: 'anonymous' as const,
+      },
+      is_anonymous: true,
     },
     isGuest: true,
   };
@@ -129,18 +270,22 @@ export async function handleGuestAccess(request: NextRequest) {
  * Type-safe wrapper for withSecurity function (existing pattern)
  */
 export function withAuth<T = any>(
-  handler: (user: any, request: NextRequest, context?: T) => Promise<Response>,
+  handler: (
+    user: AppUser,
+    request: NextRequest,
+    context?: T,
+  ) => Promise<Response>,
 ) {
   return async (request: NextRequest, context?: T) => {
-    const session = await auth();
+    const user = await getCurrentUser();
 
-    if (!session?.user) {
+    if (!user || user.is_anonymous) {
       return new ChatSDKError(
         'unauthorized:api',
         'Authentication required',
       ).toResponse();
     }
 
-    return await handler(session.user, request, context);
+    return await handler(user, request, context);
   };
 }

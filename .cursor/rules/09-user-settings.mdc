@@ -1,0 +1,56 @@
+---
+alwaysApply: true
+description: "Patterns for database-backed user settings."
+---
+
+# 09: User Settings
+
+## Overview
+
+The application features a robust user settings system with database persistence, cross-session synchronization, and optimistic updates for a seamless user experience.
+
+## Core Architecture
+
+- **Database Storage**: User settings are stored as a JSON object in the `UserSettings` table, linked to the `user` table by `userId`.
+- **Centralized Queries**: All database operations for settings (get, upsert, update) are centralized in `lib/db/queries.ts`.
+- **Consolidated API**: User settings are fetched as part of the consolidated `/api/models` endpoint. This reduces the number of network requests on page load.
+- **Optimistic Updates**: When a user changes a setting, the change is first written to localStorage for immediate UI feedback, and then synchronized with the server in the background.
+
+## Client-Side Integration
+
+The `useModels` hook is the primary way to access user settings in components.
+
+```typescript
+// hooks/use-models.ts
+export function useModels() {
+  const { data, ... } = useSWR<ModelsResponse>(
+    "/api/models", // This single call fetches models AND user settings
+    fetcher,
+    // ... SWR config
+  );
+
+  return {
+    // ... models, userType
+    userSettings: data?.userSettings ?? {},
+  };
+}
+```
+
+When updating a setting, components should make a `PATCH` request to `/api/user/settings` and can optimistically update the SWR cache.
+
+```typescript
+// Example: Updating the theme
+const handleThemeChange = async (newTheme: string) => {
+  // 1. Optimistic update to localStorage for instant feedback
+  safeLocalStorage.set("theme", newTheme);
+
+  // 2. Server update
+  await fetch("/api/user/settings", {
+    method: "PATCH",
+    body: JSON.stringify({ theme: newTheme }),
+  });
+
+  // 3. Revalidate the models API to get fresh settings
+  await mutateModels();
+};
+```

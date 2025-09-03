@@ -1,9 +1,9 @@
 'use client';
 
-import type { UserType } from '@/app/(auth)/auth';
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import { getDefaultModelForUser } from '@/lib/ai/models';
+import type { UserType } from '@/lib/supabase/types';
 import { fetcher } from '@/lib/utils';
-import type { Session } from 'next-auth';
 import { useCallback, useState } from 'react';
 import useSWR from 'swr';
 
@@ -26,10 +26,9 @@ export interface UseUserSettingsReturn {
  * Hook for managing user settings with database persistence
  * Provides optimistic updates and automatic synchronization
  */
-export function useUserSettings(
-  session: Session | null,
-): UseUserSettingsReturn {
-  const userId = session?.user?.id;
+export function useUserSettings(): UseUserSettingsReturn {
+  const { user } = useSupabaseAuth();
+  const userId = user?.id;
 
   // Fetch user settings from API - used primarily for manual settings updates
   // Note: Model selection is now handled via the models API for better performance
@@ -163,17 +162,18 @@ export function useUserSettings(
  * Hook specifically for managing the selected model
  * Provides plan-based defaults and persistence
  */
-export function useSelectedModel(session: Session | null): {
+export function useSelectedModel(): {
   selectedModel: string;
   setSelectedModel: (modelId: string) => Promise<void>;
   isLoading: boolean;
 } {
-  const { settings, updateSetting, isLoading } = useUserSettings(session);
+  const { settings, updateSetting, isLoading } = useUserSettings();
+  const { user } = useSupabaseAuth();
 
   // Get the selected model from settings, with plan-based fallback
   const selectedModel =
     settings?.defaultModel ||
-    getDefaultModelForUser(session?.user?.type as UserType);
+    getDefaultModelForUser(user?.user_metadata?.user_type as UserType);
 
   const setSelectedModel = useCallback(
     async (modelId: string) => {

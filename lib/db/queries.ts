@@ -17,11 +17,11 @@ import {
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import type { UserType } from '@/app/(auth)/auth';
 import type { ArtifactKind } from '@/components/artifact';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
-import { PRICING } from '@/lib/constants';
+
+import type { UserType } from '@/lib/supabase/types';
 import { sql } from 'drizzle-orm';
 import { ChatSDKError } from '../errors';
 import {
@@ -84,6 +84,80 @@ export async function createUser(email: string, password: string) {
     return await db.insert(user).values({ email, password: hashedPassword });
   } catch (error) {
     throw new ChatSDKError('bad_request:database', 'Failed to create user');
+  }
+}
+
+// Ensure a user exists for Supabase OAuth sign-ins (using Supabase user ID)
+export async function createOAuthUserIfNotExists(
+  supabaseUserId: string,
+  email: string,
+) {
+  try {
+    // First check if user exists by Supabase ID
+    const existingById = await db
+      .select()
+      .from(user)
+      .where(eq(user.id, supabaseUserId));
+    if (existingById.length > 0) return existingById[0];
+
+    // Check if user exists by email (legacy users)
+    const existingByEmail = await db
+      .select()
+      .from(user)
+      .where(eq(user.email, email));
+    if (existingByEmail.length > 0) {
+      // Update existing user with Supabase ID
+      const updated = await db
+        .update(user)
+        .set({ id: supabaseUserId })
+        .where(eq(user.email, email))
+        .returning();
+      return updated[0];
+    }
+
+    // Create new user with Supabase ID
+    const inserted = await db
+      .insert(user)
+      .values({
+        id: supabaseUserId,
+        email,
+      })
+      .returning();
+    return inserted[0];
+  } catch (error) {
+    console.error('Error in createOAuthUserIfNotExists:', error);
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to ensure OAuth user',
+    );
+  }
+}
+
+// Ensure an anonymous user exists in the database
+export async function createAnonymousUserIfNotExists(supabaseUserId: string) {
+  try {
+    // Check if user already exists by Supabase ID
+    const existingById = await db
+      .select()
+      .from(user)
+      .where(eq(user.id, supabaseUserId));
+    if (existingById.length > 0) return existingById[0];
+
+    // Create new anonymous user with Supabase ID (no email)
+    const inserted = await db
+      .insert(user)
+      .values({
+        id: supabaseUserId,
+        email: `anonymous-${supabaseUserId}@temp.local`, // Temporary email to satisfy NOT NULL constraint
+      })
+      .returning();
+    return inserted[0];
+  } catch (error) {
+    console.error('Error in createAnonymousUserIfNotExists:', error);
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to ensure anonymous user',
+    );
   }
 }
 
@@ -1123,7 +1197,32 @@ export async function getUserUsageAndLimits({
   try {
     const entitlements = entitlementsByUserType[userType];
 
-    if (userType === 'free') {
+    if (userType === 'anonymous') {
+      // Anonymous users: daily limits (same as free but different quota)
+      const today = new Date();
+      const todayString = `${today.getUTCFullYear()}-${String(
+        today.getUTCMonth() + 1,
+      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+
+      const [dailyUsage] = await db
+        .select({ totalMessages: sum(usageDaily.messages) })
+        .from(usageDaily)
+        .where(
+          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString)),
+        );
+
+      const used = Number(dailyUsage?.totalMessages) || 0;
+      const quota = entitlements.maxMessagesPerDay ?? 0;
+
+      return {
+        used,
+        quota,
+        remaining: Math.max(0, quota - used),
+        isOverLimit: used >= quota,
+        type: 'daily' as const,
+        resetInfo: 'tomorrow at 5:29 AM',
+      };
+    } else if (userType === 'free') {
       // Free users: daily limits
       const today = new Date();
       const todayString = `${today.getUTCFullYear()}-${String(
@@ -1255,8 +1354,16 @@ export async function updateUserSetting(
 }
 
 // Helper function to check if user has active subscription
-export async function getUserType(userId: string): Promise<UserType> {
+export async function getUserType(
+  userId: string,
+  isAnonymous?: boolean,
+): Promise<UserType> {
   try {
+    // Anonymous users always get 'anonymous' type
+    if (isAnonymous) {
+      return 'anonymous';
+    }
+
     const [userSubscription] = await db
       .select()
       .from(subscription)
@@ -1268,7 +1375,23 @@ export async function getUserType(userId: string): Promise<UserType> {
       userSubscription?.plan === 'pro' &&
       userSubscription?.status === 'active'
     ) {
-      return 'pro';
+      // Also check if subscription hasn't expired
+      if (
+        userSubscription.currentPeriodEnd &&
+        userSubscription.currentPeriodEnd > new Date()
+      ) {
+        return 'pro';
+      }
+      // If expired, we should update the subscription status
+      if (
+        userSubscription.currentPeriodEnd &&
+        userSubscription.currentPeriodEnd <= new Date()
+      ) {
+        await db
+          .update(subscription)
+          .set({ status: 'past_due' })
+          .where(eq(subscription.userId, userId));
+      }
     }
 
     return 'free';
@@ -1326,6 +1449,9 @@ export async function getUsageHistory(userId: string) {
 // Get complete usage summary for a user
 export async function getUserUsageSummary(userId: string) {
   try {
+    // First determine user type to decide how to get usage data
+    const userType = await getUserType(userId, false); // We'll determine if anonymous from user data
+
     const [userSubscription, usageHistory] = await Promise.all([
       getUserSubscription(userId),
       getUsageHistory(userId),
@@ -1334,63 +1460,23 @@ export async function getUserUsageSummary(userId: string) {
     const isProUser =
       userSubscription?.plan === 'pro' && userSubscription?.status === 'active';
 
-    let used = 0;
-    let quota = 0;
-    let resetInfo = '';
-    let type: 'daily' | 'monthly';
+    // Use the same logic as getUserUsageAndLimits for consistency
+    const usageInfo = await getUserUsageAndLimits({ userId, userType });
 
-    if (isProUser) {
-      // Pro users: monthly message limit
-      quota = PRICING.PAID_TIER.monthlyMessages;
-      resetInfo = 'monthly at 5:29 AM';
-      type = 'monthly';
-
-      // Get current month usage
-      const now = new Date();
-      const monthStart = `${now.getUTCFullYear()}-${String(
-        now.getUTCMonth() + 1,
-      ).padStart(2, '0')}-01`;
-
-      const [monthlyUsage] = await db
-        .select({ totalMessages: sum(usageMonthly.messages) })
-        .from(usageMonthly)
-        .where(
-          and(
-            eq(usageMonthly.userId, userId),
-            eq(usageMonthly.month, monthStart),
-          ),
-        );
-
-      used = Number(monthlyUsage?.totalMessages) || 0;
-    } else {
-      // Free users: daily message limit
-      quota = PRICING.FREE_TIER.dailyMessages;
-      resetInfo = 'tomorrow at 5:29 AM';
-      type = 'daily';
-
-      // Get today's usage
-      const today = new Date();
-      const todayString = `${today.getUTCFullYear()}-${String(
-        today.getUTCMonth() + 1,
-      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
-
-      const [dailyUsage] = await db
-        .select({ totalMessages: sum(usageDaily.messages) })
-        .from(usageDaily)
-        .where(
-          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString)),
-        );
-
-      used = Number(dailyUsage?.totalMessages) || 0;
+    let planName = 'Free';
+    if (userType === 'anonymous') {
+      planName = 'Guest';
+    } else if (isProUser) {
+      planName = 'Pro';
     }
 
     return {
       plan: {
-        name: isProUser ? 'Pro' : 'Free',
-        quota,
-        used,
-        resetInfo,
-        type,
+        name: planName,
+        quota: usageInfo.quota,
+        used: usageInfo.used,
+        resetInfo: usageInfo.resetInfo,
+        type: usageInfo.type,
       },
       usage: usageHistory,
     };

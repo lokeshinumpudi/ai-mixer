@@ -1,11 +1,11 @@
-import { z } from 'zod';
-import type { Session } from 'next-auth';
-import { streamObject, tool, type UIMessageStreamWriter } from 'ai';
 import { getDocumentById, saveSuggestions } from '@/lib/db/queries';
 import type { Suggestion } from '@/lib/db/schema';
-import { generateUUID } from '@/lib/utils';
-import { getLanguageModel } from '../providers';
+import type { AppUser } from '@/lib/supabase/types';
 import type { ChatMessage } from '@/lib/types';
+import { generateUUID } from '@/lib/utils';
+import { streamObject, tool, type UIMessageStreamWriter } from 'ai';
+import { z } from 'zod';
+import { getLanguageModel } from '../providers';
 interface SelectedModel {
   id: string;
   supportsArtifacts: boolean;
@@ -13,13 +13,13 @@ interface SelectedModel {
 }
 
 interface RequestSuggestionsProps {
-  session: Session;
+  user: AppUser;
   dataStream: UIMessageStreamWriter<ChatMessage>;
   selectedModel: SelectedModel;
 }
 
 export const requestSuggestions = ({
-  session,
+  user,
   dataStream,
   selectedModel,
 }: RequestSuggestionsProps) =>
@@ -76,8 +76,8 @@ export const requestSuggestions = ({
         suggestions.push(suggestion);
       }
 
-      if (session.user?.id) {
-        const userId = session.user.id;
+      if (user?.id) {
+        const userId = user.id;
 
         await saveSuggestions({
           suggestions: suggestions.map((suggestion) => ({

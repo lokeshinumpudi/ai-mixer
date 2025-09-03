@@ -1,0 +1,58 @@
+---
+alwaysApply: true
+description: "Details the API route protection system, auth decorators, and security best practices."
+---
+
+# 03: Authorization & API Security
+
+## Core Principle
+
+API security is managed through a combination of middleware, centralized route configuration, and type-safe authentication decorators. This layered approach ensures that all endpoints are secure by default.
+
+## Route Configuration
+
+All route access levels are defined in `lib/route-config.ts`. The system uses a simplified two-tier model:
+
+- **`public`**: Routes accessible to anyone (e.g., webhooks, health checks).
+- **`protected`**: Routes that require a valid user session (either anonymous or authenticated). This is the default for all API routes.
+
+```typescript
+// lib/route-config.ts
+export const ROUTE_CONFIG: RouteConfig = {
+  public: ["/api/auth/**", "/api/billing/razorpay/webhook", "/api/health"],
+  protected: [
+    "/api/chat/**",
+    "/api/models",
+    "/api/history",
+    "/api/user/settings",
+  ],
+};
+```
+
+## Authentication Decorators
+
+Decorators in `lib/auth-decorators.ts` wrap API route handlers to provide consistent, type-safe authentication and user context.
+
+- **`authenticatedRoute`**: For routes that can be accessed by both registered and anonymous users. The handler receives a `user` object with an `is_anonymous` flag.
+- **`protectedRoute`**: For routes that require a registered, non-anonymous user. The handler receives a `user` object where `is_anonymous` is guaranteed to be `false` and `email` is present.
+
+```typescript
+// app/api/user/settings/route.ts
+import { protectedRoute } from "@/lib/auth-decorators";
+
+// This route can only be accessed by registered users.
+export const GET = protectedRoute(async (request, context, user) => {
+  // `user` is guaranteed to be a registered user.
+  const settings = await getUserSettings(user.id);
+  return Response.json(settings);
+});
+```
+
+## Security Best Practices
+
+- **Default to Protected**: All new API routes should be `protected` unless there's a specific reason for them to be public.
+- **Validate User Ownership**: In any route that accesses a specific resource (e.g., a chat), always verify that the authenticated user is the owner of that resource.
+- **Input Validation**: Use Zod to validate and sanitize all incoming request bodies and parameters to prevent injection attacks and ensure data integrity.
+- **Rate Limiting**: Apply rate limiting, especially on sensitive or expensive endpoints, with different limits for anonymous and registered users.
+- **Secure Error Handling**: Never expose raw database or system errors to the client. Use a custom error class (e.g., `ChatSDKError`) to return safe, standardized error responses.
+- **Webhook Security**: Always verify the cryptographic signature of incoming webhooks (e.g., from Razorpay) to prevent spoofing.

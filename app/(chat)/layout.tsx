@@ -1,11 +1,11 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 
 import { AppSidebar } from '@/components/app-sidebar';
 import { DataStreamProvider } from '@/components/data-stream-provider';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { useUsage } from '@/hooks/use-usage';
 import Script from 'next/script';
 
 // Hook for managing sidebar state
@@ -32,10 +32,8 @@ function useSidebarState() {
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { data: session } = useSession();
   const { isCollapsed, isLoaded } = useSidebarState();
   // Warm the usage cache once at app shell level
-  const { useUsage } = require('@/hooks/use-usage');
   useUsage({ fetch: true });
 
   // Show loading state until sidebar state is loaded
@@ -55,7 +53,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       />
       <DataStreamProvider>
         <SidebarProvider defaultOpen={!isCollapsed}>
-          <AppSidebar user={session?.user} />
+          <AppSidebar />
           <SidebarInset>{children}</SidebarInset>
         </SidebarProvider>
       </DataStreamProvider>

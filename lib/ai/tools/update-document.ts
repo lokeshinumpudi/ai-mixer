@@ -1,9 +1,9 @@
-import { tool, type UIMessageStreamWriter } from 'ai';
-import type { Session } from 'next-auth';
-import { z } from 'zod';
-import { getDocumentById } from '@/lib/db/queries';
 import { documentHandlersByArtifactKind } from '@/lib/artifacts/server';
+import { getDocumentById } from '@/lib/db/queries';
+import type { AppUser } from '@/lib/supabase/types';
 import type { ChatMessage } from '@/lib/types';
+import { tool, type UIMessageStreamWriter } from 'ai';
+import { z } from 'zod';
 interface SelectedModel {
   id: string;
   supportsArtifacts: boolean;
@@ -11,13 +11,13 @@ interface SelectedModel {
 }
 
 interface UpdateDocumentProps {
-  session: Session;
+  user: AppUser;
   dataStream: UIMessageStreamWriter<ChatMessage>;
   selectedModel: SelectedModel;
 }
 
 export const updateDocument = ({
-  session,
+  user,
   dataStream,
   selectedModel,
 }: UpdateDocumentProps) =>
@@ -57,7 +57,7 @@ export const updateDocument = ({
         document,
         description,
         dataStream,
-        session,
+        user: user as AppUser,
         selectedModel,
       });
 

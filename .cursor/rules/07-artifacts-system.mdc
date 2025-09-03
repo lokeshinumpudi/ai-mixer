@@ -1,0 +1,42 @@
+---
+alwaysApply: true
+description: "The complete guide to the artifacts generation system."
+---
+
+# 07: Artifacts System
+
+## Overview
+
+The artifacts system allows the AI to generate rich content like text documents, code blocks, images, and spreadsheets in real-time.
+
+## Chat-Scoped State Management
+
+A critical feature of the artifacts system is **chat-scoped state management**. Previously, artifact state was global, causing artifacts to persist incorrectly when switching between chats. Now, each chat session has its own isolated artifact state.
+
+This is achieved by keying the SWR cache for the artifact state with the `chatId`.
+
+```typescript
+// hooks/use-artifact.ts
+export function useArtifact(chatId?: string) {
+  const artifactKey = chatId ? `artifact-${chatId}` : "artifact";
+  const { data: artifact, mutate: setArtifact } = useSWR<UIArtifact>(
+    artifactKey,
+    null,
+    { fallbackData: initialArtifactData }
+  );
+  // ...
+}
+```
+
+Components that interact with the artifact system, like the `DataStreamHandler` and `ArtifactCloseButton`, use the `usePathname` hook from `next/navigation` to get the current `chatId` and pass it to the `useArtifact` hook.
+
+## Artifact Implementation
+
+Each artifact type is defined in its own directory within `artifacts/` and consists of a `client.tsx` and `server.ts` file.
+
+- **`client.tsx`**: Defines the artifact's client-side behavior, including how it processes streaming data (`onStreamPart`) and renders its content.
+- **`server.ts`**: Contains the server-side logic for creating or updating the artifact content. This is typically called by an AI tool.
+
+## Auto-Visibility
+
+Artifacts become visible automatically once they reach a certain size during streaming, improving the user experience. The character thresholds are defined within each artifact's `onStreamPart` handler.

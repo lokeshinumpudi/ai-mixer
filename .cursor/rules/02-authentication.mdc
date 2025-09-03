@@ -1,0 +1,51 @@
+---
+alwaysApply: true
+description: "Covers Supabase integration, anonymous users, and user data synchronization."
+---
+
+# 02: Authentication System
+
+## Core Architecture
+
+The system uses **Supabase Authentication** as the primary identity provider. User records in the local PostgreSQL database are synchronized with Supabase, using the Supabase user ID as the primary key.
+
+### Authentication Flow
+
+1.  User authenticates with Supabase (e.g., via Google OAuth).
+2.  A JWT is issued and managed by Supabase middleware.
+3.  On the first API request, the `authenticatedRoute` or `protectedRoute` decorator is invoked.
+4.  The decorator calls `createOAuthUserIfNotExists` to create a corresponding user record in the local database if one doesn't already exist.
+5.  All subsequent operations use the synchronized local user record.
+
+## User ID Synchronization
+
+**CRITICAL RULE**: The Supabase user ID **MUST** be used as the primary key for the `user` table in the local database. This is essential for maintaining data integrity between the authentication provider and the application database.
+
+```typescript
+// lib/db/queries.ts
+export async function createOAuthUserIfNotExists(
+  supabaseUserId: string,
+  email: string
+) {
+  // Logic to find user by Supabase ID or email (for migration)
+  // If not found, create a new user:
+  const inserted = await db
+    .insert(user)
+    .values({
+      id: supabaseUserId, // Use Supabase ID directly
+      email,
+    })
+    .returning();
+  return inserted[0];
+}
+```
+
+## Anonymous User Support
+
+The application provides a seamless experience for anonymous (guest) users.
+
+- **Creation**: Anonymous sessions are initiated via `supabase.auth.signInAnonymously()`.
+- **Identification**: The `user` object from auth decorators includes an `is_anonymous` flag.
+- **Limitations**: Anonymous users have different entitlements, such as lower message quotas and access to fewer AI models, which are enforced server-side.
+- **Data Migration**: When an anonymous user signs up, their data (e.g., chat history) should be migrated and associated with their new authenticated user account.
+- **No Local Records for Guests**: To keep the database clean, we do not create a user record in our local DB for anonymous users. Their identity is managed solely by Supabase Auth for the session.

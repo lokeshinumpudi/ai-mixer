@@ -1,10 +1,15 @@
-import { protectedRoute } from '@/lib/auth-decorators';
-import { getChatsByUserId } from '@/lib/db/queries';
+import { authenticatedRoute } from '@/lib/auth-decorators';
+import { createOAuthUserIfNotExists, getChatsByUserId } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 import type { NextRequest } from 'next/server';
 
-export const GET = protectedRoute(
+export const GET = authenticatedRoute(
   async (request: NextRequest, context, user) => {
+    // Ensure user exists in our database (for OAuth users)
+    if (!user.is_anonymous && user.email) {
+      await createOAuthUserIfNotExists(user.id, user.email);
+    }
+
     const { searchParams } = request.nextUrl;
 
     const limit = Number.parseInt(searchParams.get('limit') || '10');

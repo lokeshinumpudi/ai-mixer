@@ -98,9 +98,9 @@ export const PUT = protectedRoute(async (request, context, user) => {
 
 ```typescript
 // app/api/chat/guest/route.ts
-import { conditionalRoute, handleGuestAccess } from "@/lib/auth-decorators";
+import { authenticatedRoute, handleGuestAccess } from "@/lib/auth-decorators";
 
-export const POST = conditionalRoute(async (request) => {
+export const POST = authenticatedRoute(async (request) => {
   const { user, isGuest } = await handleGuestAccess(request);
 
   if (isGuest) {
@@ -180,7 +180,7 @@ curl -X GET "http://localhost:3000/api/user/profile"
 
 # With auth
 curl -X GET "http://localhost:3000/api/user/profile" \
-  -H "Cookie: next-auth.session-token=TOKEN"
+  -H "Authorization: Bearer SUPABASE_JWT_TOKEN"
 # Expected: 200 OK with user data
 ```
 

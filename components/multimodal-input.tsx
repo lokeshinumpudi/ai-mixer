@@ -18,12 +18,12 @@ import { useLocalStorage, useWindowSize } from 'usehooks-ts';
 
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import { useUsage } from '@/hooks/use-usage';
+import type { AppUser } from '@/lib/supabase/types';
 import type { Attachment, ChatMessage } from '@/lib/types';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import equal from 'fast-deep-equal';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
-import type { Session } from 'next-auth';
 import { useRouter } from 'next/navigation';
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from './icons';
 import { ModelPicker } from './model-picker';
@@ -31,7 +31,6 @@ import { PreviewAttachment } from './preview-attachment';
 import { SuggestedActions } from './suggested-actions';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import type { VisibilityType } from './visibility-selector';
 
 function PureMultimodalInput({
   chatId,
@@ -46,7 +45,7 @@ function PureMultimodalInput({
   sendMessage,
   className,
   selectedVisibilityType,
-  session,
+  user,
   selectedModelId,
 }: {
   chatId: string;
@@ -60,8 +59,8 @@ function PureMultimodalInput({
   setMessages: UseChatHelpers<ChatMessage>['setMessages'];
   sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
   className?: string;
-  selectedVisibilityType: VisibilityType;
-  session: Session;
+  selectedVisibilityType: 'private' | 'public';
+  user: AppUser | null;
   selectedModelId: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -127,7 +126,18 @@ function PureMultimodalInput({
         description: `You've reached your ${usage.type} limit. Upgrade to continue.`,
         action: {
           label: 'Upgrade',
-          onClick: () => router.push('/pricing'),
+          onClick: () => {
+            const paymentUrl =
+              process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+            if (paymentUrl) {
+              window.open(paymentUrl, '_blank');
+            } else {
+              console.error(
+                'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+              );
+              router.push('/settings');
+            }
+          },
         },
       });
       return;
@@ -172,32 +182,53 @@ function PureMultimodalInput({
     router,
   ]);
 
-  const uploadFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await fetch('/api/files/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const { url, pathname, contentType } = data;
-
-        return {
-          url,
-          name: pathname,
-          contentType: contentType,
-        };
+  const uploadFile = useCallback(
+    async (file: File) => {
+      // Gate uploads for free users
+      if (user?.user_metadata?.user_type !== 'pro') {
+        toast.error(
+          'File uploads are a Pro feature. Upgrade to enable uploads.',
+        );
+        const paymentUrl =
+          process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+        if (paymentUrl) {
+          window.open(paymentUrl, '_blank');
+        } else {
+          console.error(
+            'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+          );
+          router.push('/settings');
+        }
+        return undefined;
       }
-      const { error } = await response.json();
-      toast.error(error);
-    } catch (error) {
-      toast.error('Failed to upload file, please try again!');
-    }
-  };
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch('/api/files/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const { url, pathname, contentType } = data;
+
+          return {
+            url,
+            name: pathname,
+            contentType: contentType,
+          };
+        }
+        const { error } = await response.json();
+        toast.error(error);
+      } catch (error) {
+        toast.error('Failed to upload file, please try again!');
+      }
+    },
+    [user?.user_metadata?.user_type, router],
+  );
 
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -222,7 +253,7 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments],
+    [setAttachments, uploadFile],
   );
 
   const { isAtBottom, scrollToBottom } = useScrollToBottom();
@@ -335,7 +366,7 @@ function PureMultimodalInput({
       <div className="absolute bottom-0 left-0 p-3 w-fit flex flex-row justify-start items-center gap-2">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
         <ModelPicker
-          session={session}
+          user={user}
           selectedModelId={selectedModelId}
           disabled={status !== 'ready'}
           compact={true}

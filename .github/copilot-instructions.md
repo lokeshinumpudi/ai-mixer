@@ -26,7 +26,7 @@ AI Comparo is a Next.js 15 AI chatbot platform with multi-provider AI integratio
 
 ### Authentication Patterns
 
-- Use auth decorators: `protectedRoute()`, `publicRoute()`, `conditionalRoute()`
+- Use auth decorators: `protectedRoute()`, `publicRoute()`, `authenticatedRoute()`
 - Configure routes in `lib/route-config.ts` with glob patterns
 - Session management via `SessionUtils` from `lib/auth/session-config.ts`
 

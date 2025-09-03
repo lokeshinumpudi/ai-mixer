@@ -8,10 +8,8 @@
 export interface RouteConfig {
   /** Routes that are completely public (no auth required) */
   public: string[];
-  /** Routes that require authentication */
+  /** Routes that require authentication (allows both authenticated and anonymous users) */
   protected: string[];
-  /** Routes that have conditional access (handled by route itself) */
-  conditional: string[];
 }
 
 export const ROUTE_CONFIG: RouteConfig = {
@@ -20,7 +18,7 @@ export const ROUTE_CONFIG: RouteConfig = {
    * These routes can be accessed by anyone, including external services
    */
   public: [
-    // NextAuth.js routes
+    // Supabase auth routes
     '/api/auth/**',
 
     // Webhooks (external services)
@@ -40,17 +38,20 @@ export const ROUTE_CONFIG: RouteConfig = {
 
   /**
    * PROTECTED ROUTES - Authentication required
-   * These routes require a valid session token
+   * These routes require authentication but work with both authenticated and anonymous users
    */
   protected: [
-    // Chat functionality
+    // Chat functionality - works for both authenticated and anonymous users
     '/api/chat',
     '/api/chat/**',
+
+    // Models - works for both user types but with different access levels
+    '/api/models',
+    '/api/models/public',
 
     // User data
     '/api/history',
     '/api/usage/**',
-    '/api/models',
 
     // Document management
     '/api/document',
@@ -63,17 +64,6 @@ export const ROUTE_CONFIG: RouteConfig = {
     // Billing (user-specific)
     '/api/billing/status',
     '/api/billing/razorpay/order',
-  ],
-
-  /**
-   * CONDITIONAL ROUTES - Access determined by route logic
-   * These routes handle their own authentication logic
-   * (e.g., guest access with limitations)
-   */
-  conditional: [
-    // Routes that might allow guest access
-    '/api/chat/guest',
-    '/api/models/public',
   ],
 };
 
@@ -96,15 +86,9 @@ function matchesPattern(pathname: string, patterns: string[]): boolean {
 /**
  * Determine the access level for a given pathname
  */
-export function getRouteAccessLevel(
-  pathname: string,
-): 'public' | 'protected' | 'conditional' {
+export function getRouteAccessLevel(pathname: string): 'public' | 'protected' {
   if (matchesPattern(pathname, ROUTE_CONFIG.public)) {
     return 'public';
-  }
-
-  if (matchesPattern(pathname, ROUTE_CONFIG.conditional)) {
-    return 'conditional';
   }
 
   if (matchesPattern(pathname, ROUTE_CONFIG.protected)) {
@@ -124,8 +108,4 @@ export function addPublicRoute(pattern: string) {
 
 export function addProtectedRoute(pattern: string) {
   ROUTE_CONFIG.protected.push(pattern);
-}
-
-export function addConditionalRoute(pattern: string) {
-  ROUTE_CONFIG.conditional.push(pattern);
 }

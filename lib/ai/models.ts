@@ -1,10 +1,10 @@
-import type { UserType } from '@/app/(auth)/auth';
 import {
   DEFAULT_MODEL,
   FREE_MODELS,
   getModelCapabilities,
   PRO_MODELS,
 } from '@/lib/constants';
+import type { UserType } from '@/lib/supabase/types';
 
 export const DEFAULT_CHAT_MODEL: string = DEFAULT_MODEL;
 
@@ -22,6 +22,9 @@ export const getDefaultModelForUser = (userType: UserType): string => {
       );
       return proOnlyModels[0] || PRO_MODELS[0] || DEFAULT_MODEL;
     }
+    case 'anonymous':
+      // Anonymous users get the same as free users
+      return FREE_MODELS[0] || DEFAULT_MODEL;
     default:
       return DEFAULT_MODEL;
   }
@@ -35,6 +38,10 @@ export interface ChatModel {
   provider: string;
   supportsReasoning: boolean;
   supportsArtifacts: boolean;
+  supportsVision?: boolean;
+  supportsImageGeneration?: boolean;
+  supportsToolCalling?: boolean;
+  supportsPdf?: boolean;
   enabled?: boolean; // Optional for backward compatibility
 }
 
@@ -49,5 +56,9 @@ export const enrichModelWithCapabilities = (gatewayModel: any): ChatModel => {
     provider: gatewayModel.id.split('/')[0] || 'unknown',
     supportsReasoning: capabilities.supportsReasoning,
     supportsArtifacts: capabilities.supportsArtifacts,
+    supportsVision: capabilities.supportsVision,
+    supportsImageGeneration: capabilities.supportsImageGeneration,
+    supportsToolCalling: capabilities.supportsToolCalling,
+    supportsPdf: capabilities.supportsPdf,
   };
 };

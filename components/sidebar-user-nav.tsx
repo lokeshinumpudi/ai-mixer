@@ -1,10 +1,10 @@
 'use client';
 
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
+import { createClient } from '@/lib/supabase/client';
 import { ChevronUp } from 'lucide-react';
-import Image from 'next/image';
-import type { User } from 'next-auth';
-import { signOut, useSession } from 'next-auth/react';
 import { useTheme } from 'next-themes';
+import Image from 'next/image';
 
 import {
   DropdownMenu,
@@ -20,20 +20,21 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useRouter } from 'next/navigation';
-import { toast } from './toast';
 import { LoaderIcon } from './icons';
-export function SidebarUserNav({ user }: { user: User }) {
+import { toast } from './toast';
+export function SidebarUserNav({ user }: { user: any }) {
   const router = useRouter();
-  const { status } = useSession();
+  const { loading, signOut } = useSupabaseAuth();
   const { setTheme, resolvedTheme } = useTheme();
   const { setOpenMobile, setOpen } = useSidebar();
+  const supabase = createClient();
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            {status === 'loading' ? (
+            {loading ? (
               <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent bg-background data-[state=open]:text-sidebar-accent-foreground h-10 justify-between">
                 <div className="flex flex-row gap-2">
                   <div className="size-6 bg-zinc-500/30 rounded-full animate-pulse" />
@@ -95,8 +96,8 @@ export function SidebarUserNav({ user }: { user: User }) {
               <button
                 type="button"
                 className="w-full cursor-pointer"
-                onClick={() => {
-                  if (status === 'loading') {
+                onClick={async () => {
+                  if (loading) {
                     toast({
                       type: 'error',
                       description:
@@ -106,7 +107,14 @@ export function SidebarUserNav({ user }: { user: User }) {
                     return;
                   }
 
-                  signOut();
+                  // Sign out using Supabase auth
+                  const { error } = await signOut();
+                  if (error) {
+                    toast({
+                      type: 'error',
+                      description: 'Failed to sign out. Please try again.',
+                    });
+                  }
                 }}
               >
                 Sign out

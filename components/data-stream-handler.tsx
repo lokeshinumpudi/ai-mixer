@@ -56,15 +56,15 @@ export function DataStreamHandler() {
           // Final warning
           upgradeToast({
             title: 'Almost out of messages!',
-            description: `Only ${usageInfo.remaining} messages left! Upgrade now to keep chatting with premium models.`,
-            actionText: 'Upgrade Now',
+            description: `Only ${usageInfo.remaining} messages left! Upgrade to Pro for unlimited access.`,
+            actionText: 'Upgrade to Pro',
           });
         } else if (usageInfo.isOverLimit) {
           // Over limit - show error toast
           upgradeToast({
             title: 'Message limit reached',
             description: `You've used all your ${usageInfo.type} messages. Upgrade to Pro for unlimited access.`,
-            actionText: 'Get Pro Access',
+            actionText: 'Upgrade to Pro',
           });
         }
 

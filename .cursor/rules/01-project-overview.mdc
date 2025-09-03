@@ -1,0 +1,42 @@
+---
+alwaysApply: true
+description: "High-level project overview, architecture, tech stack, and key patterns."
+---
+
+# 01: Project Overview & Architecture
+
+## Core Architecture
+
+This is a **Next.js 15 AI chatbot application** featuring real-time streaming, artifacts generation, multi-modal interactions, and a robust offline-first experience.
+
+### Tech Stack
+
+- **Frontend**: Next.js 15, React, shadcn/ui, Tailwind CSS
+- **AI**: Vercel AI SDK v5 with Gateway, multi-provider support, and tool calling.
+- **Backend**: Drizzle ORM, PostgreSQL, Supabase Auth, Razorpay for payments.
+- **State Management**: SWR for server state, with React hooks for local state.
+- **Offline-First**: Cache-first data loading with localStorage persistence.
+- **Authentication**: Supabase with full support for anonymous users.
+
+### Project Structure
+
+```
+app/            # Next.js App Router with route groups for auth and chat
+components/     # UI components (shadcn/ui + custom)
+lib/            # Core application logic
+├── ai/         # AI SDK integration, tools, and model management
+├── db/         # Drizzle schema, queries, and migrations
+├── supabase/   # Supabase client and middleware setup
+└── artifacts/  # Server-side artifact system logic
+artifacts/      # Implementations for text, code, image, and sheet artifacts
+hooks/          # Custom React hooks (e.g., useModels, useArtifact)
+```
+
+## Key Architectural Patterns
+
+- **Client Components**: Most interactive components are client-rendered (`'use client'`) to support the offline-first architecture.
+- **Consolidated APIs**: Endpoints like `/api/models` provide multiple related data types (models, user settings, user type) in a single call to improve performance.
+- **Authentication Decorators**: API routes are wrapped with `authenticatedRoute` or `protectedRoute` for consistent, type-safe security.
+- **Centralized Database Queries**: All database logic is centralized in `lib/db/queries.ts` to ensure consistency and maintainability.
+- **Supabase-First User IDs**: The application uses Supabase user IDs as the primary key for all user-related data in the local database to ensure synchronization.
+- **Cache-First & Offline-First**: SWR is configured for a cache-first approach, with critical data persisted in localStorage for a seamless offline experience.

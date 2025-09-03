@@ -3,8 +3,7 @@
 import { z } from 'zod';
 
 import { createUser, getUser } from '@/lib/db/queries';
-
-import { signIn } from './auth';
+import { createClient } from '@/lib/supabase/server';
 
 const authFormSchema = z.object({
   email: z.string().email(),
@@ -25,11 +24,13 @@ export const login = async (
       password: formData.get('password'),
     });
 
-    await signIn('credentials', {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithPassword({
       email: validatedData.email,
       password: validatedData.password,
-      redirect: false,
     });
+
+    if (error) throw error;
 
     return { status: 'success' };
   } catch (error) {
@@ -67,11 +68,13 @@ export const register = async (
       return { status: 'user_exists' } as RegisterActionState;
     }
     await createUser(validatedData.email, validatedData.password);
-    await signIn('credentials', {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithPassword({
       email: validatedData.email,
       password: validatedData.password,
-      redirect: false,
     });
+
+    if (error) throw error;
 
     return { status: 'success' };
   } catch (error) {
@@ -100,11 +103,13 @@ export const authenticate = async (
 
     // First, try to login with existing credentials
     try {
-      await signIn('credentials', {
+      const supabase = await createClient();
+      const { error } = await supabase.auth.signInWithPassword({
         email: validatedData.email,
         password: validatedData.password,
-        redirect: false,
       });
+
+      if (error) throw error;
       return { status: 'success', isNewUser: false };
     } catch (loginError) {
       // If login fails, check if user exists
@@ -117,11 +122,13 @@ export const authenticate = async (
 
       // User doesn't exist, create account and login
       await createUser(validatedData.email, validatedData.password);
-      await signIn('credentials', {
+      const supabase = await createClient();
+      const { error } = await supabase.auth.signInWithPassword({
         email: validatedData.email,
         password: validatedData.password,
-        redirect: false,
       });
+
+      if (error) throw error;
       return { status: 'success', isNewUser: true };
     }
   } catch (error) {

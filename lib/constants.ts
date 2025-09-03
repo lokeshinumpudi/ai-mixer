@@ -54,42 +54,82 @@ export const SUPPORTED_MODELS = {
   'google/gemini-2.0-flash': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: true,
+    supportsImageGeneration: false,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'openai/gpt-5-nano': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: false,
+    supportsImageGeneration: false,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
   'xai/grok-code-fast-1': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: false,
+    supportsImageGeneration: false,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
   'moonshotai/kimi-k2': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: false,
+    supportsImageGeneration: false,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'openai/gpt-oss-20b': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: false,
+    supportsImageGeneration: false,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
   'openai/gpt-5-mini': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: true,
+    supportsImageGeneration: false,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'openai/gpt-oss-120b': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: true,
+    supportsImageGeneration: false,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'openai/gpt-4o-mini': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: true,
+    supportsImageGeneration: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'google/gemini-2.5-flash-image-preview': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: true,
+    supportsImageGeneration: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'alibaba/qwen-3-32b': {
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsVision: false,
+    supportsImageGeneration: false,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
 } as const;
 
@@ -104,6 +144,10 @@ export function getModelCapabilities(modelId: string) {
     SUPPORTED_MODELS[modelId as keyof typeof SUPPORTED_MODELS] || {
       supportsReasoning: false,
       supportsArtifacts: false,
+      supportsVision: false,
+      supportsImageGeneration: false,
+      supportsToolCalling: false,
+      supportsPdf: false,
     }
   );
 }

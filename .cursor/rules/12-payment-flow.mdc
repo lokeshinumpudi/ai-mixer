@@ -1,0 +1,37 @@
+---
+alwaysApply: true
+description: "Razorpay integration for subscriptions and payments."
+globs: "app/(chat)/api/billing/**,lib/db/queries.ts"
+---
+
+# 12: Payment Flow
+
+## Overview
+
+The application uses **Razorpay** for payment processing and subscription management. The system is designed to be secure and reliable, with a clear separation of concerns between the frontend, backend, and payment provider.
+
+## Payment Flow
+
+1.  **Order Creation**: The frontend requests a Razorpay order from the backend.
+2.  **Payment Collection**: The user completes the payment on the frontend using the Razorpay checkout.
+3.  **Webhook Verification**: Razorpay sends a webhook to a public API endpoint to confirm the payment. The backend verifies the webhook's signature to ensure it's authentic.
+4.  **Database Updates**: Upon successful verification, the backend updates the `credit_ledger` and `subscription` tables in the database.
+5.  **Success Polling**: The frontend polls a status endpoint to confirm that the payment has been processed on the backend before redirecting the user to a success page.
+
+## Database Schema
+
+- **`credit_ledger`**: Tracks all credit purchases, usages, and refunds.
+- **`subscription`**: Manages user subscription status (e.g., `free`, `pro`), plan details, and billing cycle dates.
+- **`usage_daily` / `usage_monthly`**: Tracks message usage against subscription limits.
+
+## API Endpoints
+
+- `/api/billing/razorpay/order`: Creates a new Razorpay order. (Protected)
+- `/api/billing/razorpay/webhook`: Receives and verifies webhooks from Razorpay. (Public)
+- `/api/billing/status`: Allows the frontend to poll for payment confirmation. (Protected)
+
+## Security
+
+- **Webhook Signature Verification**: This is a critical security measure to prevent fraudulent payment confirmations. The backend uses a secret key to verify that webhooks are genuinely from Razorpay.
+- **Server-Side Amount Validation**: The backend validates all payment amounts to prevent tampering. Amounts are handled in the smallest currency unit (paisa) to avoid floating-point errors.
+- **Database Transactions**: Multi-step operations, like creating a credit entry and updating a subscription, are wrapped in a database transaction to ensure atomicity.

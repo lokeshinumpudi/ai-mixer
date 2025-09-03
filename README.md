@@ -3,7 +3,7 @@
 </a>
 
 <p align="center">
-    AI Comparo is a comprehensive AI chat platform that lets you compare and interact with multiple AI models from different providers in one unified interface.
+    AI Comparo is a comprehensive AI chat platform that lets you compare and interact with multiple AI models from different providers in one unified interface. Features offline-first architecture, anonymous user support, and seamless Supabase authentication.
 </p>
 
 <p align="center">
@@ -33,34 +33,38 @@
 
 ### 🔐 Authentication & Authorization
 
-- **Auth.js v5** - Secure authentication with session management
+- **Supabase Auth** - Secure OAuth authentication with Google login
+- **Anonymous User Support** - Graceful handling of unauthenticated users
 - **Route Protection** - Centralized access control with decorator patterns
-- **User Tiers** - Free and Pro plans with model access restrictions
-- **Session Configuration** - Type-safe duration management
+- **User Tiers** - Free, Pro, and Anonymous plans with model access restrictions
 
 ### 🏗️ Modern Architecture
 
 - **Next.js 15** - App Router with React Server Components and Server Actions
 - **TypeScript Strict Mode** - Full type safety with enhanced error checking
 - **Drizzle ORM** - Type-safe database operations with PostgreSQL
+- **Supabase Integration** - Authentication, database, and real-time features
+- **Offline-First** - Cache-first data loading with localStorage persistence
 - **Real-time Updates** - SWR for data synchronization and optimistic updates
 
 ### 🎯 Developer Experience
 
+- **Cursor Rules** - Comprehensive AI assistant rules for consistent development patterns
 - **Pre-commit Hooks** - Automated code quality enforcement with Husky
 - **Linting & Formatting** - ESLint + Biome with strict CI validation
 - **Database Migrations** - Automated schema management and version control
 - **E2E Testing** - Playwright test suite for comprehensive validation
+- **Type-Safe Architecture** - Full TypeScript coverage with strict mode
 
 ## AI Models
 
-AI Comparo provides access to cutting-edge AI models through a unified gateway system:
+AI Comparo provides access to cutting-edge AI models through a unified gateway system with support for anonymous users and seamless tier-based access:
 
 ### Currently Supported Models
 
+- **xAI Grok 3 Mini** - Default conversational model with balanced performance (Anonymous/Free tier)
 - **Google Gemini 2.5 Flash Lite** - Fast, efficient model for general conversations (Free tier)
 - **xAI Grok Code Fast** - Specialized coding model with enhanced reasoning (Pro tier)
-- **xAI Grok 3 Mini** - Default conversational model with balanced performance
 
 ### Model Capabilities
 
@@ -73,7 +77,7 @@ All models support:
 
 ### Adding New Models
 
-The platform uses the [AI SDK Gateway](https://sdk.vercel.ai/docs/ai-sdk-gateway) for easy provider integration. Add new models by updating the configuration in `lib/constants.ts` and `lib/ai/providers.ts`.
+The platform uses the [AI SDK Gateway](https://sdk.vercel.ai/docs/ai-sdk-gateway) for easy provider integration. Add new models by updating the configuration in `lib/constants.ts` and `lib/ai/providers.ts`. The system automatically handles model capabilities, access control, and user tier restrictions.
 
 ## Artifacts System
 
@@ -109,10 +113,18 @@ AI Comparo features a comprehensive artifacts system for generating and managing
 
 ## Pricing Tiers
 
+### 👤 Anonymous Users
+
+- **5 messages per session** with basic models
+- Access to xAI Grok 3 Mini
+- Limited artifacts system access
+- Basic tool calling features
+- Encourages signup for unlimited access
+
 ### 🆓 Free Plan
 
 - **20 messages per day** with basic models
-- Access to Google Gemini 2.5 Flash Lite
+- Access to xAI Grok 3 Mini and Google Gemini 2.5 Flash Lite
 - Full artifacts system access
 - Basic tool calling features
 
@@ -140,12 +152,12 @@ Create a `.env.local` file with the following variables:
 # Database
 POSTGRES_URL="postgresql://..."
 
+# Supabase Authentication
+NEXT_PUBLIC_SUPABASE_URL="your-supabase-project-url"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
+
 #Storage
 BLOB_READ_WRITE_TOKEN=""
-
-# Authentication
-AUTH_SECRET="your-auth-secret"
-NEXTAUTH_URL="http://localhost:3000"
 
 #AI providers
 AI_GATEWAY_API_KEY=""
@@ -196,15 +208,19 @@ Your AI Comparo instance will be running on [localhost:3000](http://localhost:30
 
 ```
 app/                   # Next.js App Router
-├── (auth)/           # Authentication routes
-└── (chat)/           # Chat interface and API
-components/           # Reusable UI components
+├── (auth)/           # Supabase authentication routes
+├── (chat)/           # Chat interface and API routes
+└── auth/             # Auth callback handling
+components/           # Reusable UI components (shadcn/ui + custom)
 lib/                  # Core application logic
-├── ai/              # AI SDK integration
-├── db/              # Database schema and queries
-└── auth/            # Authentication configuration
-artifacts/           # Artifact system implementations
-hooks/               # Custom React hooks
+├── ai/              # AI SDK Gateway integration and tools
+├── db/              # Database schema, queries, and Drizzle ORM
+├── supabase/        # Supabase authentication and client setup
+├── artifacts/       # Artifact system server-side logic
+└── auth-decorators.ts # Authentication decorators for API routes
+artifacts/           # Artifact type implementations (text, code, image, sheet)
+hooks/               # Custom React hooks for data fetching and state management
+.cursor/rules/       # Cursor AI assistant rules and patterns
 ```
 
 ---

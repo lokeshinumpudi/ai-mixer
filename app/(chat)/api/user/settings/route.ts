@@ -1,9 +1,18 @@
-import { protectedRoute } from '@/lib/auth-decorators';
-import { getUserSettings, upsertUserSettings } from '@/lib/db/queries';
+import { authenticatedRoute } from '@/lib/auth-decorators';
+import {
+  createOAuthUserIfNotExists,
+  getUserSettings,
+  upsertUserSettings,
+} from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
-export const GET = protectedRoute(async (request, context, user) => {
+export const GET = authenticatedRoute(async (request, context, user) => {
   try {
+    // Ensure user exists in our database (for OAuth users)
+    if (!user.is_anonymous && user.email) {
+      await createOAuthUserIfNotExists(user.id, user.email);
+    }
+
     const settings = await getUserSettings(user.id);
     const settingsData = settings?.settings || {};
 
@@ -17,8 +26,13 @@ export const GET = protectedRoute(async (request, context, user) => {
   }
 });
 
-export const PUT = protectedRoute(async (request, context, user) => {
+export const PUT = authenticatedRoute(async (request, context, user) => {
   try {
+    // Ensure user exists in our database (for OAuth users)
+    if (!user.is_anonymous && user.email) {
+      await createOAuthUserIfNotExists(user.id, user.email);
+    }
+
     const settingsUpdate = await request.json();
 
     // Validate that settings is an object
@@ -41,8 +55,13 @@ export const PUT = protectedRoute(async (request, context, user) => {
   }
 });
 
-export const PATCH = protectedRoute(async (request, context, user) => {
+export const PATCH = authenticatedRoute(async (request, context, user) => {
   try {
+    // Ensure user exists in our database (for OAuth users)
+    if (!user.is_anonymous && user.email) {
+      await createOAuthUserIfNotExists(user.id, user.email);
+    }
+
     const settingsUpdate = await request.json();
 
     // Validate that settings is an object

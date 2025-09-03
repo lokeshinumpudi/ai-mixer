@@ -1,0 +1,60 @@
+---
+alwaysApply: true
+description: "AI SDK integration, multi-provider gateway, and model validation."
+---
+
+# 05: AI Gateway & Models
+
+## Core Architecture
+
+The application uses the **Vercel AI SDK v5 with its Gateway architecture**. This provides a unified interface for interacting with various AI model providers, eliminating the need for custom abstractions.
+
+### Unified Model Configuration
+
+All supported AI models are defined in a single source of truth, `lib/constants.ts`, along with their capabilities (e.g., reasoning, artifact creation).
+
+**CRITICAL RULE**: Never hardcode model IDs. Always reference them from `lib/constants.ts` to avoid "model hallucination" and ensure consistency.
+
+```typescript
+// lib/constants.ts
+export const SUPPORTED_MODELS = {
+  "openai/gpt-4o-mini": {
+    supportsReasoning: false,
+    supportsArtifacts: true,
+  },
+  // ... other models
+} as const;
+```
+
+## Gateway Integration
+
+A single gateway provider is configured in `lib/gateway.ts`. Helper functions in `lib/ai/providers.ts` wrap the gateway to apply middleware, such as for models that support step-by-step reasoning.
+
+```typescript
+// lib/ai/providers.ts
+export const getLanguageModel = (modelId: string) => {
+  const capabilities = getModelCapabilities(modelId);
+  const baseModel = gateway.languageModel(modelId);
+
+  // Apply reasoning middleware if supported
+  if (capabilities?.supportsReasoning) {
+    return wrapLanguageModel({
+      model: baseModel,
+      middleware: extractReasoningMiddleware({ tagName: "thinking" }),
+    });
+  }
+  return baseModel;
+};
+```
+
+## Server-Side Entitlements & Security
+
+- **Model Access**: The `/api/models` endpoint fetches available models directly from the AI SDK Gateway and enriches them with capabilities from the unified configuration. It also determines which models a user can access based on their subscription tier (`free` vs. `pro`).
+- **Validation**: When a user makes a chat request, the backend validates that they are permitted to use the selected model. This server-side check is a critical security measure.
+
+## Adding a New Model
+
+1.  **Verify**: Confirm the model is available through the AI SDK Gateway.
+2.  **Configure**: Add the model's ID and capabilities to `SUPPORTED_MODELS` in `lib/constants.ts`.
+3.  **Entitlements**: Update `lib/ai/entitlements.ts` to grant access to the new model for the appropriate user tiers.
+4.  **Test**: Ensure the new model works as expected and that its capabilities are correctly identified.

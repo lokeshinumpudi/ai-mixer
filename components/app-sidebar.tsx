@@ -1,6 +1,5 @@
 'use client';
 
-import type { User } from 'next-auth';
 import { useRouter } from 'next/navigation';
 
 import { PlusIcon } from '@/components/icons';
@@ -15,12 +14,15 @@ import {
   SidebarMenu,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { useAnonymousAuth } from '@/hooks/use-anonymous-auth';
 import Link from 'next/link';
+import { GoogleLoginCTA } from './google-login-cta';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
-export function AppSidebar({ user }: { user: User | undefined }) {
+export function AppSidebar() {
   const router = useRouter();
   const { setOpenMobile } = useSidebar();
+  const { user, messageCount } = useAnonymousAuth();
 
   return (
     <Sidebar className="group-data-[side=left]:border-r-0">
@@ -61,7 +63,25 @@ export function AppSidebar({ user }: { user: User | undefined }) {
       <SidebarContent>
         <SidebarHistory user={user} />
       </SidebarContent>
-      <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
+      <SidebarFooter>
+        {user && !user.is_anonymous ? (
+          <SidebarUserNav user={user} />
+        ) : (
+          <div className="p-2">
+            <GoogleLoginCTA
+              variant="outline"
+              size="sm"
+              className="w-full"
+              showMessageCount={true}
+            />
+            {messageCount > 0 && (
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                {10 - messageCount} messages remaining
+              </p>
+            )}
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }

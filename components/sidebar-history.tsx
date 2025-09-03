@@ -17,10 +17,10 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import type { Chat } from '@/lib/db/schema';
+import type { AppUser } from '@/lib/supabase/types';
 import { fetcher } from '@/lib/utils';
 import { isToday, isYesterday, subMonths, subWeeks } from 'date-fns';
 import { motion } from 'framer-motion';
-import type { User } from 'next-auth';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -93,7 +93,7 @@ export function getChatHistoryPaginationKey(
   return `/api/history?ending_before=${firstChatFromPage.id}&limit=${PAGE_SIZE}`;
 }
 
-export function SidebarHistory({ user }: { user: User | undefined }) {
+export function SidebarHistory({ user }: { user: AppUser | null }) {
   const { setOpenMobile } = useSidebar();
   const { id } = useParams();
 
