@@ -16,15 +16,17 @@ import {
   createOAuthUserIfNotExists,
   failCompareResult,
   getChatById,
+  getCompareRun,
   getMessagesByChatId,
   getUserUsageAndLimits,
   saveChat,
+  saveMessages,
   startCompareResultInference,
   upsertDailyUsage,
 } from "@/lib/db/queries";
 import { ChatSDKError } from "@/lib/errors";
 import type { UserType } from "@/lib/supabase/types";
-import { convertToUIMessages } from "@/lib/utils";
+import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { geolocation } from "@vercel/functions";
 import { convertToModelMessages, streamText } from "ai";
 import { after } from "next/server";
@@ -171,19 +173,55 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
     const { longitude, latitude, city, country } = geolocation(request);
     const requestHints: RequestHints = { longitude, latitude, city, country };
 
-    // Load prior chat history and convert to model messages (bounded)
+    // Load prior chat history and add new user message (like regular chat)
     // History is shared across models for this compare run
     const MAX_HISTORY_MESSAGES = 24;
-    let priorCoreMessages: any[] = [];
+    let allMessages: any[] = [];
+    let uiMessagesWithMetadata: any[] = [];
+
     try {
       const dbMessages = await getMessagesByChatId({ id: chatId });
-      if (dbMessages?.length) {
-        const uiMessages = convertToUIMessages(dbMessages);
-        const trimmed = uiMessages.slice(-MAX_HISTORY_MESSAGES);
-        priorCoreMessages = convertToModelMessages(trimmed) as any[];
-      }
+
+      // Create user message object for the new prompt
+      const userMessage = {
+        id: generateUUID(),
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: prompt }],
+        metadata: {
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      // Combine existing messages with new user message (like regular chat)
+      const uiMessages = [...convertToUIMessages(dbMessages), userMessage];
+
+      // Save the new user message to database for conversation continuity
+      await saveMessages({
+        messages: [
+          {
+            chatId,
+            id: userMessage.id,
+            role: "user",
+            parts: userMessage.parts,
+            attachments: [],
+            createdAt: new Date(),
+          },
+        ],
+      });
+
+      // Trim to last N messages for context window management
+      const trimmed = uiMessages.slice(-MAX_HISTORY_MESSAGES);
+
+      // Keep UI messages with metadata for model-specific filtering
+      uiMessagesWithMetadata = trimmed;
+      allMessages = convertToModelMessages(trimmed) as any[];
     } catch (e) {
       console.warn("Failed to load/convert prior messages for compare run", e);
+      // Fallback: just use the prompt as user message
+      allMessages = [{ role: "user", content: prompt }];
+      uiMessagesWithMetadata = [
+        { role: "user", parts: [{ type: "text", text: prompt }] },
+      ];
     }
 
     // Create SSE stream
@@ -200,6 +238,124 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             })
           )
         );
+
+        // Build model-specific context with intelligent truncation
+        const buildModelSpecificContext = (
+          targetModelId: string,
+          uiMessages: any[]
+        ) => {
+          // Filter messages to only include:
+          // 1. User messages (always relevant)
+          // 2. Assistant messages from the SAME model (avoid competitor responses)
+          const filteredUIMessages = uiMessages.filter((msg) => {
+            if (msg.role === "user") return true;
+            if (msg.role === "assistant") {
+              // Check if this assistant message came from the target model
+              const msgMetadata = msg.metadata;
+              return msgMetadata?.modelId === targetModelId;
+            }
+            return true; // Keep other message types
+          });
+
+          // Apply intelligent context window management
+          const contextOptimizedMessages =
+            optimizeContextWindow(filteredUIMessages);
+
+          // Convert filtered UI messages to model messages
+          return convertToModelMessages(contextOptimizedMessages) as any[];
+        };
+
+        // Intelligent context window optimization with dynamic sizing
+        const optimizeContextWindow = (messages: any[]) => {
+          // Dynamic limits based on message complexity
+          const OPTIMAL_CONTEXT_TOKENS = 2000; // Target context size
+          const MIN_RECENT_PAIRS = 2; // Always keep at least 2 recent pairs
+          const MAX_RECENT_PAIRS = 5; // Never exceed 5 recent pairs
+
+          // Group messages into conversation pairs
+          const pairs: Array<{
+            user: any;
+            assistant?: any;
+            tokenEstimate: number;
+          }> = [];
+          let currentPair: {
+            user: any;
+            assistant?: any;
+            tokenEstimate: number;
+          } | null = null;
+
+          for (const msg of messages) {
+            if (msg.role === "user") {
+              // Start new pair
+              if (currentPair) pairs.push(currentPair);
+              currentPair = {
+                user: msg,
+                tokenEstimate: estimateTokens(getMessageText(msg)),
+              };
+            } else if (msg.role === "assistant" && currentPair) {
+              // Complete current pair
+              currentPair.assistant = msg;
+              currentPair.tokenEstimate += estimateTokens(getMessageText(msg));
+            }
+          }
+          if (currentPair) pairs.push(currentPair);
+
+          // If total estimated tokens are within limit, return all
+          const totalTokens = pairs.reduce(
+            (sum, pair) => sum + pair.tokenEstimate,
+            0
+          );
+          if (totalTokens <= OPTIMAL_CONTEXT_TOKENS) {
+            return messages;
+          }
+
+          // Use sliding window approach - prioritize recent context
+          const selectedPairs: typeof pairs = [];
+          let currentTokens = 0;
+
+          // Start from most recent and work backwards
+          for (let i = pairs.length - 1; i >= 0; i--) {
+            const pair = pairs[i];
+            const wouldExceedLimit =
+              currentTokens + pair.tokenEstimate > OPTIMAL_CONTEXT_TOKENS;
+            const hasMinimumRecent = selectedPairs.length >= MIN_RECENT_PAIRS;
+
+            if (wouldExceedLimit && hasMinimumRecent) {
+              break; // Stop adding older context
+            }
+
+            selectedPairs.unshift(pair); // Add to beginning
+            currentTokens += pair.tokenEstimate;
+
+            // Respect maximum recent pairs limit
+            if (selectedPairs.length >= MAX_RECENT_PAIRS) {
+              break;
+            }
+          }
+
+          // Convert back to messages
+          const optimizedMessages: any[] = [];
+          for (const pair of selectedPairs) {
+            optimizedMessages.push(pair.user);
+            if (pair.assistant) optimizedMessages.push(pair.assistant);
+          }
+
+          return optimizedMessages;
+        };
+
+        // Estimate token count (rough approximation: 4 chars = 1 token)
+        const estimateTokens = (text: string): number => {
+          return Math.ceil(text.length / 4);
+        };
+
+        // Extract text content from message
+        const getMessageText = (message: any): string => {
+          if (!message.parts) return "";
+          return message.parts
+            .filter((p: any) => p.type === "text")
+            .map((p: any) => p.text || "")
+            .join(" ");
+        };
 
         // Start processing all models in parallel
         const modelPromises = modelIds.map(async (modelId: string) => {
@@ -234,6 +390,12 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
 
             const model = getLanguageModel(modelId);
 
+            // Build model-specific context to avoid token waste
+            const modelSpecificMessages = buildModelSpecificContext(
+              modelId,
+              uiMessagesWithMetadata
+            );
+
             // Stream with no tools (plain text only for compare)
             const result = streamText({
               model,
@@ -241,14 +403,11 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 selectedModel: {
                   id: modelId,
                   supportsArtifacts: false, // Disabled for compare
-                  supportsReasoning: true, // Disabled for compare
+                  supportsReasoning: true,
                 },
                 requestHints,
               }),
-              messages: [
-                ...priorCoreMessages,
-                { role: "user", content: prompt },
-              ] as any,
+              messages: modelSpecificMessages, // Use filtered context
               abortSignal: abortController.signal,
               // No tools for compare mode
               tools: {},
@@ -380,6 +539,66 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             // Mark run as completed
             await completeCompareRun({ runId });
 
+            // Save assistant message to maintain conversation continuity
+            // This ensures follow-up messages have context from AI responses
+            try {
+              // Get completed compare run with results
+              const completedRun = await getCompareRun({ runId });
+
+              if (completedRun && completedRun.results.length > 0) {
+                // Create model-specific assistant messages for efficient context
+                // Each model's response is saved separately to avoid token waste
+                for (const result of completedRun.results) {
+                  if (result.status === "completed" && result.content) {
+                    const modelSpecificMessage = {
+                      id: generateUUID(),
+                      role: "assistant" as const,
+                      parts: [] as any[],
+                      metadata: {
+                        compareRunId: runId,
+                        modelId: result.modelId, // Track which model this came from
+                        createdAt: new Date().toISOString(),
+                      },
+                    };
+
+                    // Add reasoning if present
+                    if (result.reasoning) {
+                      modelSpecificMessage.parts.push({
+                        type: "reasoning" as const,
+                        text: result.reasoning,
+                      });
+                    }
+
+                    // Add main content without model attribution (since it's in metadata)
+                    modelSpecificMessage.parts.push({
+                      type: "text" as const,
+                      text: result.content,
+                    });
+
+                    // Save individual model response
+                    await saveMessages({
+                      messages: [
+                        {
+                          chatId,
+                          id: modelSpecificMessage.id,
+                          role: "assistant",
+                          parts: modelSpecificMessage.parts,
+                          attachments: [],
+                          createdAt: new Date(),
+                        },
+                      ],
+                    });
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn(
+                "Failed to save assistant message for conversation continuity:",
+                error
+              );
+              // Don't fail the entire request if this fails
+            }
+
             // Send run end event
             controller.enqueue(
               new TextEncoder().encode(
@@ -394,10 +613,8 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           })
           .catch(async (error) => {
             console.error("Compare run failed:", error);
-
             // Cancel the run in database
             await cancelCompareRun({ runId });
-
             controller.close();
           });
 
