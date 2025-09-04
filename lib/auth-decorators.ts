@@ -5,7 +5,7 @@
  * and provide consistent auth handling.
  */
 
-import { getUserType } from "@/lib/db/queries";
+import { createOAuthUserIfNotExists, getUserType } from "@/lib/db/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { AppUser, UserType } from "@/lib/supabase/types";
 import type { NextRequest } from "next/server";
@@ -145,7 +145,8 @@ export function authenticatedRoute(handler: AuthenticatedRouteHandler) {
         "User type determined"
       );
 
-      const user: AppUser & { userType: UserType } = {
+      // Create initial user object with Supabase data
+      let user: AppUser & { userType: UserType } = {
         id: supabaseUser.id,
         email: supabaseUser.email,
         user_metadata: {
@@ -157,6 +158,49 @@ export function authenticatedRoute(handler: AuthenticatedRouteHandler) {
         is_anonymous: supabaseUser.is_anonymous,
         userType, // Simplified user type
       };
+
+      // Handle OAuth user linking for non-anonymous users
+      if (!supabaseUser.is_anonymous && supabaseUser.email) {
+        authLogger.debug(
+          {
+            userId: user.id,
+            email: user.email,
+          },
+          "Ensuring OAuth user exists in database"
+        );
+
+        try {
+          const dbUser = await createOAuthUserIfNotExists(
+            supabaseUser.id,
+            supabaseUser.email
+          );
+
+          // Update user object with correct database user ID
+          user = {
+            ...user,
+            id: dbUser.id, // Use the correct user ID from database
+          };
+
+          authLogger.debug(
+            {
+              supabaseUserId: supabaseUser.id,
+              dbUserId: dbUser.id,
+              email: user.email,
+            },
+            "User object updated with correct database ID"
+          );
+        } catch (error) {
+          authLogger.error(
+            {
+              userId: supabaseUser.id,
+              email: supabaseUser.email,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            "Failed to create/link OAuth user in database"
+          );
+          // Continue with original user object to avoid breaking auth
+        }
+      }
 
       authLogger.debug(
         {

@@ -1,4 +1,4 @@
-import 'server-only';
+import "server-only";
 
 import {
   and,
@@ -13,17 +13,18 @@ import {
   or,
   sum,
   type SQL,
-} from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+} from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 
-import type { ArtifactKind } from '@/components/artifact';
-import type { VisibilityType } from '@/components/visibility-selector';
-import { entitlementsByUserType } from '@/lib/ai/entitlements';
+import type { ArtifactKind } from "@/components/artifact";
+import type { VisibilityType } from "@/components/visibility-selector";
+import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { dbLogger } from "@/lib/logger";
 
-import type { UserType } from '@/lib/supabase/types';
-import { sql } from 'drizzle-orm';
-import { ChatSDKError } from '../errors';
+import type { UserType } from "@/lib/supabase/types";
+import { sql } from "drizzle-orm";
+import { ChatSDKError } from "../errors";
 import {
   chat,
   compareResult,
@@ -48,8 +49,8 @@ import {
   type DBMessage,
   type Suggestion,
   type User,
-} from './schema';
-import { generateHashedPassword } from './utils';
+} from "./schema";
+import { generateHashedPassword } from "./utils";
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -64,8 +65,8 @@ export async function getUser(email: string): Promise<Array<User>> {
     return await db.select().from(user).where(eq(user.email, email));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user by email',
+      "bad_request:database",
+      "Failed to get user by email"
     );
   }
 }
@@ -75,7 +76,7 @@ export async function getUserById(id: string): Promise<User | null> {
     const users = await db.select().from(user).where(eq(user.id, id)).limit(1);
     return users[0] || null;
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to get user by ID');
+    throw new ChatSDKError("bad_request:database", "Failed to get user by ID");
   }
 }
 
@@ -85,52 +86,163 @@ export async function createUser(email: string, password: string) {
   try {
     return await db.insert(user).values({ email, password: hashedPassword });
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to create user');
+    throw new ChatSDKError("bad_request:database", "Failed to create user");
   }
 }
 
 // Ensure a user exists for Supabase OAuth sign-ins (using Supabase user ID)
 export async function createOAuthUserIfNotExists(
   supabaseUserId: string,
-  email: string,
+  email: string
 ) {
   try {
-    // First check if user exists by Supabase ID
-    const existingById = await db
+    // First check if user exists by Supabase ID (OAuth users)
+    const existingBySupabaseId = await db
+      .select()
+      .from(user)
+      .where(eq(user.supabaseId, supabaseUserId));
+    if (existingBySupabaseId.length > 0) {
+      dbLogger.info(
+        {
+          supabaseUserId,
+          email,
+          existingUserId: existingBySupabaseId[0].id,
+        },
+        "Found existing OAuth user by Supabase ID"
+      );
+      return existingBySupabaseId[0];
+    }
+
+    // Also check by primary key ID for backward compatibility (OAuth users created before supabaseId field)
+    const existingByPrimaryKey = await db
       .select()
       .from(user)
       .where(eq(user.id, supabaseUserId));
-    if (existingById.length > 0) return existingById[0];
+    if (existingByPrimaryKey.length > 0) {
+      dbLogger.info(
+        {
+          supabaseUserId,
+          email,
+          existingUserId: existingByPrimaryKey[0].id,
+        },
+        "Found existing OAuth user by primary key (backward compatibility)"
+      );
 
-    // Check if user exists by email (legacy users)
+      // Update the supabaseId field if it's missing
+      if (!existingByPrimaryKey[0].supabaseId) {
+        await db
+          .update(user)
+          .set({ supabaseId: supabaseUserId })
+          .where(eq(user.id, supabaseUserId));
+        dbLogger.info(
+          {
+            supabaseUserId,
+            userId: existingByPrimaryKey[0].id,
+          },
+          "Updated missing supabaseId field for backward compatibility"
+        );
+      }
+
+      return existingByPrimaryKey[0];
+    }
+
+    // Check if user exists by email (anonymous/legacy users)
     const existingByEmail = await db
       .select()
       .from(user)
       .where(eq(user.email, email));
+
     if (existingByEmail.length > 0) {
-      // Update existing user with Supabase ID
-      const updated = await db
-        .update(user)
-        .set({ id: supabaseUserId })
-        .where(eq(user.email, email))
-        .returning();
-      return updated[0];
+      // Check if this email user already has a Supabase ID
+      if (existingByEmail[0].supabaseId) {
+        // This email is already linked to a different Supabase user
+        dbLogger.warn(
+          {
+            supabaseUserId,
+            email,
+            existingSupabaseId: existingByEmail[0].supabaseId,
+            existingUserId: existingByEmail[0].id,
+          },
+          "Email already linked to different Supabase user"
+        );
+        // Create new OAuth user instead of linking
+        const inserted = await db
+          .insert(user)
+          .values({
+            id: supabaseUserId,
+            email,
+            supabaseId: supabaseUserId,
+          })
+          .returning();
+        dbLogger.info(
+          {
+            supabaseUserId,
+            email,
+            newUserId: inserted[0].id,
+          },
+          "Created new OAuth user (email conflict)"
+        );
+        return inserted[0];
+      } else {
+        // Anonymous user found - ALWAYS use linking approach for safety
+        dbLogger.info(
+          {
+            supabaseUserId,
+            email,
+            existingUserId: existingByEmail[0].id,
+          },
+          "Linking anonymous user to OAuth account (safe approach)"
+        );
+
+        // Update the existing user to link with Supabase ID
+        const updated = await db
+          .update(user)
+          .set({
+            supabaseId: supabaseUserId,
+            // Keep the existing database ID to preserve all relationships
+          })
+          .where(eq(user.id, existingByEmail[0].id))
+          .returning();
+
+        return updated[0];
+      }
     }
 
-    // Create new user with Supabase ID
+    // Create new OAuth user
     const inserted = await db
       .insert(user)
       .values({
-        id: supabaseUserId,
+        id: supabaseUserId, // Use Supabase ID as primary key for OAuth users
         email,
+        supabaseId: supabaseUserId,
       })
       .returning();
+
+    dbLogger.info(
+      {
+        supabaseUserId,
+        email,
+        newUserId: inserted[0].id,
+      },
+      "Created new OAuth user"
+    );
+
     return inserted[0];
   } catch (error) {
-    console.error('Error in createOAuthUserIfNotExists:', error);
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        supabaseUserId,
+        email,
+        error: parsedError.message,
+        stack: parsedError.stack,
+      },
+      "Error in createOAuthUserIfNotExists"
+    );
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to ensure OAuth user',
+      "bad_request:database",
+      "Failed to ensure OAuth user"
     );
   }
 }
@@ -145,20 +257,29 @@ export async function createAnonymousUserIfNotExists(supabaseUserId: string) {
       .where(eq(user.id, supabaseUserId));
     if (existingById.length > 0) return existingById[0];
 
-    // Create new anonymous user with Supabase ID (no email)
+    // Create new anonymous user with auto-generated ID (don't use Supabase ID as primary key for anonymous users)
     const inserted = await db
       .insert(user)
       .values({
-        id: supabaseUserId,
         email: `anonymous-${supabaseUserId}@temp.local`, // Temporary email to satisfy NOT NULL constraint
+        supabaseId: supabaseUserId, // Store Supabase ID for linking later
       })
       .returning();
     return inserted[0];
   } catch (error) {
-    console.error('Error in createAnonymousUserIfNotExists:', error);
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        supabaseUserId,
+        error: parsedError.message,
+        stack: parsedError.stack,
+      },
+      "Error in createAnonymousUserIfNotExists"
+    );
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to ensure anonymous user',
+      "bad_request:database",
+      "Failed to ensure anonymous user"
     );
   }
 }
@@ -183,7 +304,7 @@ export async function saveChat({
       visibility,
     });
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to save chat');
+    throw new ChatSDKError("bad_request:database", "Failed to save chat");
   }
 }
 
@@ -203,8 +324,8 @@ export async function deleteChatById({ id }: { id: string }) {
     return chatsDeleted;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to delete chat by id',
+      "bad_request:database",
+      "Failed to delete chat by id"
     );
   }
 }
@@ -230,7 +351,7 @@ export async function getChatsByUserId({
         .where(
           whereCondition
             ? and(whereCondition, eq(chat.userId, id))
-            : eq(chat.userId, id),
+            : eq(chat.userId, id)
         )
         .orderBy(desc(chat.createdAt))
         .limit(extendedLimit);
@@ -246,8 +367,8 @@ export async function getChatsByUserId({
 
       if (!selectedChat) {
         throw new ChatSDKError(
-          'not_found:database',
-          `Chat with id ${startingAfter} not found`,
+          "not_found:database",
+          `Chat with id ${startingAfter} not found`
         );
       }
 
@@ -261,8 +382,8 @@ export async function getChatsByUserId({
 
       if (!selectedChat) {
         throw new ChatSDKError(
-          'not_found:database',
-          `Chat with id ${endingBefore} not found`,
+          "not_found:database",
+          `Chat with id ${endingBefore} not found`
         );
       }
 
@@ -279,8 +400,8 @@ export async function getChatsByUserId({
     };
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get chats by user id',
+      "bad_request:database",
+      "Failed to get chats by user id"
     );
   }
 }
@@ -290,7 +411,7 @@ export async function getChatById({ id }: { id: string }) {
     const [selectedChat] = await db.select().from(chat).where(eq(chat.id, id));
     return selectedChat;
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to get chat by id');
+    throw new ChatSDKError("bad_request:database", "Failed to get chat by id");
   }
 }
 
@@ -302,7 +423,7 @@ export async function saveMessages({
   try {
     return await db.insert(message).values(messages);
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to save messages');
+    throw new ChatSDKError("bad_request:database", "Failed to save messages");
   }
 }
 
@@ -341,8 +462,8 @@ export async function getMessagesByChatId({
           .where(
             and(
               eq(message.chatId, id),
-              lt(message.createdAt, cursorMessage[0].createdAt),
-            ),
+              lt(message.createdAt, cursorMessage[0].createdAt)
+            )
           )
           .orderBy(desc(message.createdAt));
       }
@@ -366,15 +487,15 @@ export async function getMessagesByChatId({
         // These are the duplicate messages created by the context management system
         filteredMessages = messages.filter((message) => {
           // Keep all user messages
-          if (message.role === 'user') return true;
+          if (message.role === "user") return true;
 
           // For assistant messages, check if they have compare-related metadata
-          if (message.role === 'assistant') {
+          if (message.role === "assistant") {
             try {
               // Check for metadata part in the parts array
               const parts = Array.isArray(message.parts) ? message.parts : [];
               const metadataPart = parts.find(
-                (part: any) => part.type === 'metadata',
+                (part: any) => part.type === "metadata"
               );
 
               // Check if this message has compareRunId (indicates it's from compare mode)
@@ -383,7 +504,15 @@ export async function getMessagesByChatId({
 
               return shouldKeep;
             } catch (e) {
-              console.error(`Error parsing message ${message.id}:`, e);
+              const parsedError = e instanceof Error ? e : new Error(String(e));
+              dbLogger.warn(
+                {
+                  messageId: message.id,
+                  error: parsedError.message,
+                  stack: parsedError.stack,
+                },
+                "Error parsing message parts, keeping message"
+              );
               // If we can't parse parts, keep the message (safer default)
               return true;
             }
@@ -398,8 +527,8 @@ export async function getMessagesByChatId({
     return filteredMessages.reverse();
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get messages by chat id',
+      "bad_request:database",
+      "Failed to get messages by chat id"
     );
   }
 }
@@ -414,8 +543,8 @@ export async function getMessagesCount({ chatId }: { chatId: string }) {
     return result[0]?.count || 0;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get messages count',
+      "bad_request:database",
+      "Failed to get messages count"
     );
   }
 }
@@ -427,7 +556,7 @@ export async function voteMessage({
 }: {
   chatId: string;
   messageId: string;
-  type: 'up' | 'down';
+  type: "up" | "down";
 }) {
   try {
     const [existingVote] = await db
@@ -438,16 +567,16 @@ export async function voteMessage({
     if (existingVote) {
       return await db
         .update(vote)
-        .set({ isUpvoted: type === 'up' })
+        .set({ isUpvoted: type === "up" })
         .where(and(eq(vote.messageId, messageId), eq(vote.chatId, chatId)));
     }
     return await db.insert(vote).values({
       chatId,
       messageId,
-      isUpvoted: type === 'up',
+      isUpvoted: type === "up",
     });
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to vote message');
+    throw new ChatSDKError("bad_request:database", "Failed to vote message");
   }
 }
 
@@ -456,8 +585,8 @@ export async function getVotesByChatId({ id }: { id: string }) {
     return await db.select().from(vote).where(eq(vote.chatId, id));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get votes by chat id',
+      "bad_request:database",
+      "Failed to get votes by chat id"
     );
   }
 }
@@ -488,7 +617,7 @@ export async function saveDocument({
       })
       .returning();
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to save document');
+    throw new ChatSDKError("bad_request:database", "Failed to save document");
   }
 }
 
@@ -503,8 +632,8 @@ export async function getDocumentsById({ id }: { id: string }) {
     return documents;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get documents by id',
+      "bad_request:database",
+      "Failed to get documents by id"
     );
   }
 }
@@ -520,8 +649,8 @@ export async function getDocumentById({ id }: { id: string }) {
     return selectedDocument;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get document by id',
+      "bad_request:database",
+      "Failed to get document by id"
     );
   }
 }
@@ -539,8 +668,8 @@ export async function deleteDocumentsByIdAfterTimestamp({
       .where(
         and(
           eq(suggestion.documentId, id),
-          gt(suggestion.documentCreatedAt, timestamp),
-        ),
+          gt(suggestion.documentCreatedAt, timestamp)
+        )
       );
 
     return await db
@@ -549,8 +678,8 @@ export async function deleteDocumentsByIdAfterTimestamp({
       .returning();
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to delete documents by id after timestamp',
+      "bad_request:database",
+      "Failed to delete documents by id after timestamp"
     );
   }
 }
@@ -564,8 +693,8 @@ export async function saveSuggestions({
     return await db.insert(suggestion).values(suggestions);
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to save suggestions',
+      "bad_request:database",
+      "Failed to save suggestions"
     );
   }
 }
@@ -582,8 +711,8 @@ export async function getSuggestionsByDocumentId({
       .where(and(eq(suggestion.documentId, documentId)));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get suggestions by document id',
+      "bad_request:database",
+      "Failed to get suggestions by document id"
     );
   }
 }
@@ -593,8 +722,8 @@ export async function getMessageById({ id }: { id: string }) {
     return await db.select().from(message).where(eq(message.id, id));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get message by id',
+      "bad_request:database",
+      "Failed to get message by id"
     );
   }
 }
@@ -611,7 +740,7 @@ export async function deleteMessagesByChatIdAfterTimestamp({
       .select({ id: message.id })
       .from(message)
       .where(
-        and(eq(message.chatId, chatId), gte(message.createdAt, timestamp)),
+        and(eq(message.chatId, chatId), gte(message.createdAt, timestamp))
       );
 
     const messageIds = messagesToDelete.map((message) => message.id);
@@ -620,19 +749,19 @@ export async function deleteMessagesByChatIdAfterTimestamp({
       await db
         .delete(vote)
         .where(
-          and(eq(vote.chatId, chatId), inArray(vote.messageId, messageIds)),
+          and(eq(vote.chatId, chatId), inArray(vote.messageId, messageIds))
         );
 
       return await db
         .delete(message)
         .where(
-          and(eq(message.chatId, chatId), inArray(message.id, messageIds)),
+          and(eq(message.chatId, chatId), inArray(message.id, messageIds))
         );
     }
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to delete messages by chat id after timestamp',
+      "bad_request:database",
+      "Failed to delete messages by chat id after timestamp"
     );
   }
 }
@@ -642,14 +771,14 @@ export async function updateChatVisiblityById({
   visibility,
 }: {
   chatId: string;
-  visibility: 'private' | 'public';
+  visibility: "private" | "public";
 }) {
   try {
     return await db.update(chat).set({ visibility }).where(eq(chat.id, chatId));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to update chat visibility by id',
+      "bad_request:database",
+      "Failed to update chat visibility by id"
     );
   }
 }
@@ -663,7 +792,7 @@ export async function getMessageCountByUserId({
 }) {
   try {
     const twentyFourHoursAgo = new Date(
-      Date.now() - differenceInHours * 60 * 60 * 1000,
+      Date.now() - differenceInHours * 60 * 60 * 1000
     );
 
     const [stats] = await db
@@ -674,16 +803,16 @@ export async function getMessageCountByUserId({
         and(
           eq(chat.userId, id),
           gte(message.createdAt, twentyFourHoursAgo),
-          eq(message.role, 'user'),
-        ),
+          eq(message.role, "user")
+        )
       )
       .execute();
 
     return stats?.count ?? 0;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get message count by user id',
+      "bad_request:database",
+      "Failed to get message count by user id"
     );
   }
 }
@@ -701,8 +830,8 @@ export async function createStreamId({
       .values({ id: streamId, chatId, createdAt: new Date() });
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to create stream id',
+      "bad_request:database",
+      "Failed to create stream id"
     );
   }
 }
@@ -719,8 +848,8 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     return streamIds.map(({ id }) => id);
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get stream ids by chat id',
+      "bad_request:database",
+      "Failed to get stream ids by chat id"
     );
   }
 }
@@ -746,12 +875,12 @@ export async function createPaymentRecord({
         orderId,
         amountPaise,
         currency,
-        status: 'created',
+        status: "created",
         createdAt: new Date(),
       })
       .onConflictDoNothing({ target: payment.orderId });
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to create payment');
+    throw new ChatSDKError("bad_request:database", "Failed to create payment");
   }
 }
 
@@ -770,7 +899,7 @@ export async function updatePaymentFromWebhook({
       .set({ paymentId, status })
       .where(eq(payment.orderId, orderId));
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to update payment');
+    throw new ChatSDKError("bad_request:database", "Failed to update payment");
   }
 }
 
@@ -791,7 +920,7 @@ export async function addCredit({
       createdAt: new Date(),
     });
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to add credit');
+    throw new ChatSDKError("bad_request:database", "Failed to add credit");
   }
 }
 
@@ -809,16 +938,16 @@ export async function getRecentPurchaseCreditsCount({
       .where(
         and(
           eq(creditLedger.userId, userId),
-          eq(creditLedger.reason, 'purchase'),
-          gte(creditLedger.createdAt, since),
-        ),
+          eq(creditLedger.reason, "purchase"),
+          gte(creditLedger.createdAt, since)
+        )
       );
 
     return rows.length;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get recent purchase credits',
+      "bad_request:database",
+      "Failed to get recent purchase credits"
     );
   }
 }
@@ -838,18 +967,18 @@ export async function getRecentPaymentEventsCount({
         and(
           eq(paymentEvent.userId, userId),
           or(
-            eq(paymentEvent.eventType, 'captured'),
-            eq(paymentEvent.eventType, 'paid'),
+            eq(paymentEvent.eventType, "captured"),
+            eq(paymentEvent.eventType, "paid")
           ),
-          gte(paymentEvent.createdAt, since),
-        ),
+          gte(paymentEvent.createdAt, since)
+        )
       );
 
     return rows.length;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get recent payment events',
+      "bad_request:database",
+      "Failed to get recent payment events"
     );
   }
 }
@@ -862,7 +991,7 @@ export async function createPaymentEvent({
   eventType,
   status,
   amountPaise,
-  currency = 'INR',
+  currency = "INR",
   method,
   errorCode,
   errorDescription,
@@ -881,21 +1010,32 @@ export async function createPaymentEvent({
   metadata?: any;
 }) {
   try {
-    console.log('💾 Creating payment event record...');
-    console.log('📝 Inserting payment event with data:', {
-      paymentId,
-      orderId,
-      userId,
-      eventType,
-      status,
-      amountPaise,
-      currency,
-      method,
-      errorCode,
-      errorDescription,
-      metadataType: typeof metadata,
-      metadataKeys: metadata ? Object.keys(metadata) : [],
-    });
+    dbLogger.info(
+      {
+        paymentId,
+        orderId,
+        userId,
+        eventType,
+        status,
+        amountPaise,
+        currency,
+        method,
+      },
+      "Creating payment event record"
+    );
+
+    dbLogger.debug(
+      {
+        paymentId,
+        orderId,
+        userId,
+        eventType,
+        status,
+        amountPaise,
+        metadataKeys: metadata ? Object.keys(metadata) : [],
+      },
+      "Inserting payment event with data"
+    );
 
     await db.insert(paymentEvent).values({
       paymentId,
@@ -912,20 +1052,35 @@ export async function createPaymentEvent({
       createdAt: new Date(), // ✅ Fix: Explicitly set createdAt
     });
 
-    console.log('✅ Payment event created successfully');
+    dbLogger.info(
+      {
+        paymentId,
+        orderId,
+        userId,
+        eventType,
+      },
+      "Payment event created successfully"
+    );
   } catch (error) {
-    console.error('❌ Database error in createPaymentEvent:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      paymentId,
-      userId,
-    });
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        error: parsedError.message,
+        stack: parsedError.stack,
+        paymentId,
+        userId,
+        orderId,
+        eventType,
+      },
+      "Database error in createPaymentEvent"
+    );
 
     throw new ChatSDKError(
-      'bad_request:database',
+      "bad_request:database",
       `Failed to create payment event: ${
         error instanceof Error ? error.message : String(error)
-      }`,
+      }`
     );
   }
 }
@@ -936,7 +1091,7 @@ export async function createRefund({
   paymentId,
   userId,
   amountPaise,
-  currency = 'INR',
+  currency = "INR",
   status,
   reason,
   errorCode,
@@ -963,19 +1118,19 @@ export async function createRefund({
       reason,
       errorCode,
       razorpayCreatedAt,
-      processedAt: status === 'processed' ? new Date() : null,
+      processedAt: status === "processed" ? new Date() : null,
     });
 
     // If refund processed, reverse credits
-    if (status === 'processed') {
+    if (status === "processed") {
       await addCredit({
         userId,
         tokensDelta: -(amountPaise / 100) * 100, // Negative tokens
-        reason: 'refund',
+        reason: "refund",
       });
     }
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to create refund');
+    throw new ChatSDKError("bad_request:database", "Failed to create refund");
   }
 }
 
@@ -994,11 +1149,11 @@ export async function updateRefundStatus({
       .set({
         status,
         errorCode,
-        processedAt: status === 'processed' ? new Date() : null,
+        processedAt: status === "processed" ? new Date() : null,
       })
       .where(eq(refund.refundId, refundId));
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to update refund');
+    throw new ChatSDKError("bad_request:database", "Failed to update refund");
   }
 }
 
@@ -1046,8 +1201,8 @@ export async function upsertServiceDowntime({
       });
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to upsert service downtime',
+      "bad_request:database",
+      "Failed to upsert service downtime"
     );
   }
 }
@@ -1057,12 +1212,12 @@ export async function getActiveDowntimes() {
     return await db
       .select()
       .from(serviceDowntime)
-      .where(eq(serviceDowntime.status, 'started'))
+      .where(eq(serviceDowntime.status, "started"))
       .orderBy(desc(serviceDowntime.createdAt));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get active downtimes',
+      "bad_request:database",
+      "Failed to get active downtimes"
     );
   }
 }
@@ -1091,8 +1246,8 @@ export async function createUserNotification({
     });
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to create notification',
+      "bad_request:database",
+      "Failed to create notification"
     );
   }
 }
@@ -1120,8 +1275,8 @@ export async function getUserNotifications({
       .limit(limit);
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get notifications',
+      "bad_request:database",
+      "Failed to get notifications"
     );
   }
 }
@@ -1134,8 +1289,8 @@ export async function markNotificationAsRead(notificationId: string) {
       .where(eq(userNotification.id, notificationId));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to mark notification as read',
+      "bad_request:database",
+      "Failed to mark notification as read"
     );
   }
 }
@@ -1152,12 +1307,15 @@ export async function setSubscriptionPlan({
   currentPeriodEnd?: Date | null;
 }) {
   try {
-    console.log('💎 Setting subscription plan:', {
-      userId,
-      plan,
-      status,
-      currentPeriodEnd: currentPeriodEnd?.toISOString(),
-    });
+    dbLogger.info(
+      {
+        userId,
+        plan,
+        status,
+        currentPeriodEnd: currentPeriodEnd?.toISOString(),
+      },
+      "Setting subscription plan"
+    );
 
     // Check if a subscription already exists for this user
     const existing = await db
@@ -1187,20 +1345,33 @@ export async function setSubscriptionPlan({
       });
     }
 
-    console.log('✅ Subscription plan set successfully');
+    dbLogger.info(
+      {
+        userId,
+        plan,
+        status,
+      },
+      "Subscription plan set successfully"
+    );
   } catch (error) {
-    console.error('❌ Database error in setSubscriptionPlan:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      userId,
-      plan,
-    });
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        error: parsedError.message,
+        stack: parsedError.stack,
+        userId,
+        plan,
+        status,
+      },
+      "Database error in setSubscriptionPlan"
+    );
 
     throw new ChatSDKError(
-      'bad_request:database',
+      "bad_request:database",
       `Failed to set subscription plan: ${
         error instanceof Error ? error.message : String(error)
-      }`,
+      }`
     );
   }
 }
@@ -1223,8 +1394,8 @@ export async function upsertDailyUsage({
   const d = day ? new Date(day) : new Date();
   const dayOnly = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
     2,
-    '0',
-  )}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    "0"
+  )}-${String(d.getUTCDate()).padStart(2, "0")}`;
 
   try {
     await db
@@ -1248,7 +1419,7 @@ export async function upsertDailyUsage({
         },
       });
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to upsert usage');
+    throw new ChatSDKError("bad_request:database", "Failed to upsert usage");
   }
 }
 
@@ -1263,8 +1434,8 @@ export async function upsertMonthlyUsage({
 }) {
   const d = month ? new Date(month) : new Date();
   const monthOnly = `${d.getUTCFullYear()}-${String(
-    d.getUTCMonth() + 1,
-  ).padStart(2, '0')}-01`;
+    d.getUTCMonth() + 1
+  ).padStart(2, "0")}-01`;
 
   try {
     await db
@@ -1284,8 +1455,8 @@ export async function upsertMonthlyUsage({
       });
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to upsert monthly usage',
+      "bad_request:database",
+      "Failed to upsert monthly usage"
     );
   }
 }
@@ -1301,18 +1472,18 @@ export async function getUserUsageAndLimits({
   try {
     const entitlements = entitlementsByUserType[userType];
 
-    if (userType === 'anonymous') {
+    if (userType === "anonymous") {
       // Anonymous users: daily limits (same as free but different quota)
       const today = new Date();
       const todayString = `${today.getUTCFullYear()}-${String(
-        today.getUTCMonth() + 1,
-      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+        today.getUTCMonth() + 1
+      ).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
 
       const [dailyUsage] = await db
         .select({ totalMessages: sum(usageDaily.messages) })
         .from(usageDaily)
         .where(
-          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString)),
+          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString))
         );
 
       const used = Number(dailyUsage?.totalMessages) || 0;
@@ -1323,21 +1494,21 @@ export async function getUserUsageAndLimits({
         quota,
         remaining: Math.max(0, quota - used),
         isOverLimit: used >= quota,
-        type: 'daily' as const,
-        resetInfo: 'tomorrow at 5:29 AM',
+        type: "daily" as const,
+        resetInfo: "tomorrow at 5:29 AM",
       };
-    } else if (userType === 'free') {
+    } else if (userType === "free") {
       // Free users: daily limits
       const today = new Date();
       const todayString = `${today.getUTCFullYear()}-${String(
-        today.getUTCMonth() + 1,
-      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+        today.getUTCMonth() + 1
+      ).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
 
       const [dailyUsage] = await db
         .select({ totalMessages: sum(usageDaily.messages) })
         .from(usageDaily)
         .where(
-          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString)),
+          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString))
         );
 
       const used = Number(dailyUsage?.totalMessages) || 0;
@@ -1348,15 +1519,15 @@ export async function getUserUsageAndLimits({
         quota,
         remaining: Math.max(0, quota - used),
         isOverLimit: used >= quota,
-        type: 'daily' as const,
-        resetInfo: 'tomorrow at 5:29 AM',
+        type: "daily" as const,
+        resetInfo: "tomorrow at 5:29 AM",
       };
     } else {
       // Pro users: monthly limits
       const now = new Date();
       const monthStart = `${now.getUTCFullYear()}-${String(
-        now.getUTCMonth() + 1,
-      ).padStart(2, '0')}-01`;
+        now.getUTCMonth() + 1
+      ).padStart(2, "0")}-01`;
 
       const [monthlyUsage] = await db
         .select({ totalMessages: sum(usageMonthly.messages) })
@@ -1364,8 +1535,8 @@ export async function getUserUsageAndLimits({
         .where(
           and(
             eq(usageMonthly.userId, userId),
-            eq(usageMonthly.month, monthStart),
-          ),
+            eq(usageMonthly.month, monthStart)
+          )
         );
 
       const used = Number(monthlyUsage?.totalMessages) || 0;
@@ -1376,14 +1547,14 @@ export async function getUserUsageAndLimits({
         quota,
         remaining: Math.max(0, quota - used),
         isOverLimit: used >= quota,
-        type: 'monthly' as const,
-        resetInfo: 'monthly at 5:29 AM',
+        type: "monthly" as const,
+        resetInfo: "monthly at 5:29 AM",
       };
     }
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user usage and limits',
+      "bad_request:database",
+      "Failed to get user usage and limits"
     );
   }
 }
@@ -1400,15 +1571,15 @@ export async function getUserSettings(userId: string) {
     return settings;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user settings',
+      "bad_request:database",
+      "Failed to get user settings"
     );
   }
 }
 
 export async function upsertUserSettings(
   userId: string,
-  settings: Record<string, any>,
+  settings: Record<string, any>
 ) {
   try {
     await db
@@ -1429,8 +1600,8 @@ export async function upsertUserSettings(
     return { success: true };
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to upsert user settings',
+      "bad_request:database",
+      "Failed to upsert user settings"
     );
   }
 }
@@ -1438,7 +1609,7 @@ export async function upsertUserSettings(
 export async function updateUserSetting(
   userId: string,
   key: string,
-  value: any,
+  value: any
 ) {
   try {
     // Get current settings
@@ -1451,34 +1622,34 @@ export async function updateUserSetting(
     return await upsertUserSettings(userId, updatedSettings);
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to update user setting',
+      "bad_request:database",
+      "Failed to update user setting"
     );
   }
 }
 
 // Multi-model settings functions
 export async function getUserDefaultModel(
-  userId: string,
+  userId: string
 ): Promise<string | null> {
   try {
     const settings = await getUserSettings(userId);
     return (settings?.settings as any)?.defaultModel || null;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user default model',
+      "bad_request:database",
+      "Failed to get user default model"
     );
   }
 }
 
 export async function setUserDefaultModel(userId: string, modelId: string) {
   try {
-    return await updateUserSetting(userId, 'defaultModel', modelId);
+    return await updateUserSetting(userId, "defaultModel", modelId);
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to set user default model',
+      "bad_request:database",
+      "Failed to set user default model"
     );
   }
 }
@@ -1489,69 +1660,69 @@ export async function getUserCompareModels(userId: string): Promise<string[]> {
     return (settings?.settings as any)?.compareModels || [];
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user compare models',
+      "bad_request:database",
+      "Failed to get user compare models"
     );
   }
 }
 
 export async function setUserCompareModels(userId: string, modelIds: string[]) {
   try {
-    return await updateUserSetting(userId, 'compareModels', modelIds);
+    return await updateUserSetting(userId, "compareModels", modelIds);
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to set user compare models',
+      "bad_request:database",
+      "Failed to set user compare models"
     );
   }
 }
 
 export async function getUserMode(
-  userId: string,
-): Promise<'single' | 'compare'> {
+  userId: string
+): Promise<"single" | "compare"> {
   try {
     const settings = await getUserSettings(userId);
-    return (settings?.settings as any)?.mode || 'single';
+    return (settings?.settings as any)?.mode || "single";
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to get user mode');
+    throw new ChatSDKError("bad_request:database", "Failed to get user mode");
   }
 }
 
-export async function setUserMode(userId: string, mode: 'single' | 'compare') {
+export async function setUserMode(userId: string, mode: "single" | "compare") {
   try {
-    return await updateUserSetting(userId, 'mode', mode);
+    return await updateUserSetting(userId, "mode", mode);
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to set user mode');
+    throw new ChatSDKError("bad_request:database", "Failed to set user mode");
   }
 }
 
 // Convenience function to update both mode and models at once
 export async function setUserModelSelection(
   userId: string,
-  mode: 'single' | 'compare',
-  modelIdOrIds: string | string[],
+  mode: "single" | "compare",
+  modelIdOrIds: string | string[]
 ) {
   try {
     const settings: Record<string, any> = { mode };
 
-    if (mode === 'single' && typeof modelIdOrIds === 'string') {
+    if (mode === "single" && typeof modelIdOrIds === "string") {
       settings.defaultModel = modelIdOrIds;
       settings.compareModels = []; // Clear compare models when switching to single mode
-    } else if (mode === 'compare' && Array.isArray(modelIdOrIds)) {
+    } else if (mode === "compare" && Array.isArray(modelIdOrIds)) {
       settings.compareModels = modelIdOrIds;
       settings.defaultModel = null; // Clear default model when switching to compare mode
     } else {
       throw new ChatSDKError(
-        'bad_request:api',
-        'Invalid mode or model selection combination',
+        "bad_request:api",
+        "Invalid mode or model selection combination"
       );
     }
 
     return await upsertUserSettings(userId, settings);
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to set user model selection',
+      "bad_request:database",
+      "Failed to set user model selection"
     );
   }
 }
@@ -1559,12 +1730,12 @@ export async function setUserModelSelection(
 // Helper function to check if user has active subscription
 export async function getUserType(
   userId: string,
-  isAnonymous?: boolean,
+  isAnonymous?: boolean
 ): Promise<UserType> {
   try {
     // Anonymous users always get 'anonymous' type
     if (isAnonymous) {
-      return 'anonymous';
+      return "anonymous";
     }
 
     const [userSubscription] = await db
@@ -1575,15 +1746,15 @@ export async function getUserType(
 
     // Check if user has an active pro subscription
     if (
-      userSubscription?.plan === 'pro' &&
-      userSubscription?.status === 'active'
+      userSubscription?.plan === "pro" &&
+      userSubscription?.status === "active"
     ) {
       // Also check if subscription hasn't expired
       if (
         userSubscription.currentPeriodEnd &&
         userSubscription.currentPeriodEnd > new Date()
       ) {
-        return 'pro';
+        return "pro";
       }
       // If expired, we should update the subscription status
       if (
@@ -1592,15 +1763,24 @@ export async function getUserType(
       ) {
         await db
           .update(subscription)
-          .set({ status: 'past_due' })
+          .set({ status: "past_due" })
           .where(eq(subscription.userId, userId));
       }
     }
 
-    return 'free';
+    return "free";
   } catch (error) {
-    console.error('Error checking subscription status:', error);
-    return 'free'; // Default to free on error
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        userId,
+        error: parsedError.message,
+        stack: parsedError.stack,
+      },
+      "Error checking subscription status"
+    );
+    return "free"; // Default to free on error
   }
 }
 
@@ -1616,8 +1796,8 @@ export async function getUserSubscription(userId: string) {
     return userSubscription;
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user subscription',
+      "bad_request:database",
+      "Failed to get user subscription"
     );
   }
 }
@@ -1628,23 +1808,20 @@ export async function getUsageHistory(userId: string) {
     const now = new Date();
     const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const startDateString = `${start.getUTCFullYear()}-${String(
-      start.getUTCMonth() + 1,
-    ).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`;
+      start.getUTCMonth() + 1
+    ).padStart(2, "0")}-${String(start.getUTCDate()).padStart(2, "0")}`;
 
     return await db
       .select()
       .from(usageDaily)
       .where(
-        and(
-          eq(usageDaily.userId, userId),
-          gte(usageDaily.day, startDateString),
-        ),
+        and(eq(usageDaily.userId, userId), gte(usageDaily.day, startDateString))
       )
       .orderBy(desc(usageDaily.day));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get usage history',
+      "bad_request:database",
+      "Failed to get usage history"
     );
   }
 }
@@ -1661,16 +1838,16 @@ export async function getUserUsageSummary(userId: string) {
     ]);
 
     const isProUser =
-      userSubscription?.plan === 'pro' && userSubscription?.status === 'active';
+      userSubscription?.plan === "pro" && userSubscription?.status === "active";
 
     // Use the same logic as getUserUsageAndLimits for consistency
     const usageInfo = await getUserUsageAndLimits({ userId, userType });
 
-    let planName = 'Free';
-    if (userType === 'anonymous') {
-      planName = 'Guest';
+    let planName = "Free";
+    if (userType === "anonymous") {
+      planName = "Guest";
     } else if (isProUser) {
-      planName = 'Pro';
+      planName = "Pro";
     }
 
     return {
@@ -1685,8 +1862,8 @@ export async function getUserUsageSummary(userId: string) {
     };
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user usage summary',
+      "bad_request:database",
+      "Failed to get user usage summary"
     );
   }
 }
@@ -1715,7 +1892,7 @@ export async function createCompareRun({
         chatId,
         prompt,
         modelIds,
-        status: 'running',
+        status: "running",
       })
       .returning();
 
@@ -1726,17 +1903,17 @@ export async function createCompareRun({
         modelIds.map((modelId) => ({
           runId: run.id,
           modelId,
-          status: 'running' as const,
-          content: '',
-        })),
+          status: "running" as const,
+          content: "",
+        }))
       )
       .returning();
 
     return { run, results };
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to create compare run',
+      "bad_request:database",
+      "Failed to create compare run"
     );
   }
 }
@@ -1756,28 +1933,28 @@ export async function appendCompareResultContent({
       .select({ content: compareResult.content })
       .from(compareResult)
       .where(
-        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId))
       );
 
     if (!result) {
-      throw new ChatSDKError('not_found:compare', 'Compare result not found');
+      throw new ChatSDKError("not_found:compare", "Compare result not found");
     }
 
-    const newContent = (result.content || '') + delta;
+    const newContent = (result.content || "") + delta;
 
     await db
       .update(compareResult)
       .set({ content: newContent })
       .where(
-        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId))
       );
 
     return newContent;
   } catch (error) {
     if (error instanceof ChatSDKError) throw error;
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to append compare result content',
+      "bad_request:database",
+      "Failed to append compare result content"
     );
   }
 }
@@ -1793,16 +1970,16 @@ export async function startCompareResultInference({
     await db
       .update(compareResult)
       .set({
-        status: 'running',
+        status: "running",
         serverStartedAt: new Date(),
       })
       .where(
-        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId))
       );
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to start compare result inference',
+      "bad_request:database",
+      "Failed to start compare result inference"
     );
   }
 }
@@ -1830,7 +2007,7 @@ export async function completeCompareResult({
     await db
       .update(compareResult)
       .set({
-        status: 'completed',
+        status: "completed",
         content,
         reasoning,
         usage,
@@ -1840,12 +2017,12 @@ export async function completeCompareResult({
         inferenceTimeMs,
       })
       .where(
-        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId))
       );
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to complete compare result',
+      "bad_request:database",
+      "Failed to complete compare result"
     );
   }
 }
@@ -1863,17 +2040,17 @@ export async function failCompareResult({
     await db
       .update(compareResult)
       .set({
-        status: 'failed',
+        status: "failed",
         error: errorMessage,
         completedAt: new Date(),
       })
       .where(
-        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId))
       );
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to fail compare result',
+      "bad_request:database",
+      "Failed to fail compare result"
     );
   }
 }
@@ -1889,16 +2066,16 @@ export async function cancelCompareResult({
     await db
       .update(compareResult)
       .set({
-        status: 'canceled',
+        status: "canceled",
         completedAt: new Date(),
       })
       .where(
-        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId))
       );
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to cancel compare result',
+      "bad_request:database",
+      "Failed to cancel compare result"
     );
   }
 }
@@ -1908,14 +2085,14 @@ export async function completeCompareRun({ runId }: { runId: string }) {
     await db
       .update(compareRun)
       .set({
-        status: 'completed',
+        status: "completed",
         updatedAt: new Date(),
       })
       .where(eq(compareRun.id, runId));
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to complete compare run',
+      "bad_request:database",
+      "Failed to complete compare run"
     );
   }
 }
@@ -1926,7 +2103,7 @@ export async function cancelCompareRun({ runId }: { runId: string }) {
     await db
       .update(compareRun)
       .set({
-        status: 'canceled',
+        status: "canceled",
         updatedAt: new Date(),
       })
       .where(eq(compareRun.id, runId));
@@ -1935,19 +2112,16 @@ export async function cancelCompareRun({ runId }: { runId: string }) {
     await db
       .update(compareResult)
       .set({
-        status: 'canceled',
+        status: "canceled",
         completedAt: new Date(),
       })
       .where(
-        and(
-          eq(compareResult.runId, runId),
-          eq(compareResult.status, 'running'),
-        ),
+        and(eq(compareResult.runId, runId), eq(compareResult.status, "running"))
       );
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to cancel compare run',
+      "bad_request:database",
+      "Failed to cancel compare run"
     );
   }
 }
@@ -1960,7 +2134,7 @@ export async function getCompareRun({ runId }: { runId: string }) {
       .where(eq(compareRun.id, runId));
 
     if (!run) {
-      throw new ChatSDKError('not_found:compare', 'Compare run not found');
+      throw new ChatSDKError("not_found:compare", "Compare run not found");
     }
 
     const results = await db
@@ -1972,7 +2146,7 @@ export async function getCompareRun({ runId }: { runId: string }) {
     return { run, results };
   } catch (error) {
     if (error instanceof ChatSDKError) throw error;
-    throw new ChatSDKError('bad_request:database', 'Failed to get compare run');
+    throw new ChatSDKError("bad_request:database", "Failed to get compare run");
   }
 }
 
@@ -2018,7 +2192,7 @@ export async function listCompareRunsByChat({
           ...run,
           results,
         };
-      }),
+      })
     );
 
     return {
@@ -2028,8 +2202,8 @@ export async function listCompareRunsByChat({
     };
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to list compare runs',
+      "bad_request:database",
+      "Failed to list compare runs"
     );
   }
 }
@@ -2070,8 +2244,8 @@ export async function listCompareRunsByUser({
     };
   } catch (error) {
     throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to list compare runs by user',
+      "bad_request:database",
+      "Failed to list compare runs by user"
     );
   }
 }

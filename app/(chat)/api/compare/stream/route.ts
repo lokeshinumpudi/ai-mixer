@@ -13,7 +13,6 @@ import {
   completeCompareRun,
   createAnonymousUserIfNotExists,
   createCompareRun,
-  createOAuthUserIfNotExists,
   failCompareResult,
   getChatById,
   getCompareRun,
@@ -297,7 +296,6 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         },
         "Creating OAuth user"
       );
-      await createOAuthUserIfNotExists(user.id, user.email);
     }
 
     // Validate chat access - create chat if it doesn't exist (same logic as regular chat API)

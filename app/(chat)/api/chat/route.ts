@@ -14,7 +14,6 @@ import { apiLogger } from "@/lib/logger";
 import { isProductionEnvironment } from "@/lib/constants";
 import {
   createAnonymousUserIfNotExists,
-  createOAuthUserIfNotExists,
   createStreamId,
   deleteChatById,
   getChatById,
@@ -159,7 +158,6 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
     if (user.is_anonymous) {
       await createAnonymousUserIfNotExists(user.id);
     } else if (user.email) {
-      await createOAuthUserIfNotExists(user.id, user.email);
     }
 
     const chat = await getChatById({ id });
