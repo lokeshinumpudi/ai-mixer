@@ -1,8 +1,8 @@
-import { protectedRoute } from '@/lib/auth-decorators';
+import { authenticatedRoute } from '@/lib/auth-decorators';
 import { getChatById, getVotesByChatId, voteMessage } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
-export const GET = protectedRoute(async (request, context, user) => {
+export const GET = authenticatedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const chatId = searchParams.get('chatId');
 
@@ -28,7 +28,7 @@ export const GET = protectedRoute(async (request, context, user) => {
   return Response.json(votes, { status: 200 });
 });
 
-export const PATCH = protectedRoute(async (request, context, user) => {
+export const PATCH = authenticatedRoute(async (request, context, user) => {
   const {
     chatId,
     messageId,

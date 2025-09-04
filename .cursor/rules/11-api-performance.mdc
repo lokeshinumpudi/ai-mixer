@@ -28,6 +28,8 @@ The `/api/models` endpoint fetches all necessary data in parallel on the server-
 
 The user upgrade flow has been optimized by removing the intermediate `/pricing` page. All "Upgrade" CTAs now link directly to the Razorpay payment page, reducing user friction and simplifying the funnel.
 
+Note: Some code paths still reference `/api/models/public` as a protected endpoint for broader model discovery. Keep consolidated data on `/api/models` authoritative for client state.
+
 ## Caching Strategy
 
 SWR is configured with appropriate caching strategies to reduce redundant requests:

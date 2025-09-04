@@ -1,0 +1,61 @@
+---
+globs: app/(chat)/api/**/*.ts
+description: "Guidelines for auth on chat APIs: guest-safe reads, protected writes, and ownership checks."
+---
+
+# Chat API Authentication Guidelines
+
+## Summary
+
+Chat endpoints follow a guest-safe read, protected write model:
+
+- Use `authenticatedRoute` for read-only chat endpoints that should work for anonymous users.
+- Use `protectedRoute` for endpoints that mutate data or expose user-sensitive information.
+- Always enforce ownership/visibility checks server-side.
+
+## Required Patterns
+
+- Reads (anonymous allowed):
+
+  - `GET /api/chat/[id]`
+  - `GET /api/chat/[id]/messages`
+  - `GET /api/chat/[id]/stream`
+  - `GET /api/compare`
+  - `GET /api/compare/[runId]`
+  - Decorator: `authenticatedRoute`
+  - Must validate: if `chat.visibility === "private"`, then `chat.userId === user.id`.
+
+- Writes (registered only):
+  - `POST /api/chat` and any `PATCH`/`DELETE` variants
+  - `POST /api/compare/stream`
+  - `POST /api/compare/cancel`
+  - Decorator: `protectedRoute` or `authenticatedRoute` with explicit anonymous quotas/entitlements
+  - Must validate: resource ownership and model entitlements via `getAllowedModelIdsForUser` and `validateModelAccess`.
+
+## Error Handling & Security
+
+- Return standardized errors via `ChatSDKError`; never leak raw DB errors.
+- Keep per-resource checks in place even for anonymous users.
+- Rate limit reads/writes differently for anonymous vs registered users where applicable.
+
+## Examples
+
+```typescript
+// Read-only, guest-safe
+export const GET = authenticatedRoute(async (request, context, user) => {
+  const { id: chatId } = await context.params;
+  const chat = await getChatById({ id: chatId });
+  if (!chat) return new ChatSDKError("not_found:chat").toResponse();
+  if (chat.visibility === "private" && chat.userId !== user.id) {
+    return new ChatSDKError("forbidden:chat").toResponse();
+  }
+  return Response.json(chat);
+});
+```
+
+```typescript
+// Write/mutate, registered users only (or with explicit anonymous checks)
+export const POST = authenticatedRoute(async (request, _context, user) => {
+  // Quotas + entitlements enforced here; anonymous may be allowed with limits
+});
+```

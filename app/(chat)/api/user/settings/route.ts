@@ -1,4 +1,5 @@
 import { authenticatedRoute } from '@/lib/auth-decorators';
+import { COMPARE_MAX_MODELS } from '@/lib/constants';
 import {
   createOAuthUserIfNotExists,
   getUserSettings,
@@ -43,6 +44,34 @@ export const PUT = authenticatedRoute(async (request, context, user) => {
       ).toResponse();
     }
 
+    // Validate multi-model settings if provided
+    if (settingsUpdate.compareModels) {
+      if (!Array.isArray(settingsUpdate.compareModels)) {
+        return new ChatSDKError(
+          'bad_request:api',
+          'compareModels must be an array of strings',
+        ).toResponse();
+      }
+
+      // Validate each model ID is a string
+      if (
+        !settingsUpdate.compareModels.every((id: any) => typeof id === 'string')
+      ) {
+        return new ChatSDKError(
+          'bad_request:api',
+          'All model IDs in compareModels must be strings',
+        ).toResponse();
+      }
+
+      // Validate max models limit
+      if (settingsUpdate.compareModels.length > COMPARE_MAX_MODELS) {
+        return new ChatSDKError(
+          'bad_request:api',
+          `Cannot select more than ${COMPARE_MAX_MODELS} models for comparison`,
+        ).toResponse();
+      }
+    }
+
     await upsertUserSettings(user.id, settingsUpdate);
 
     return Response.json({ success: true }, { status: 200 });
@@ -70,6 +99,34 @@ export const PATCH = authenticatedRoute(async (request, context, user) => {
         'bad_request:api',
         'Settings update must be an object',
       ).toResponse();
+    }
+
+    // Validate multi-model settings if provided
+    if (settingsUpdate.compareModels) {
+      if (!Array.isArray(settingsUpdate.compareModels)) {
+        return new ChatSDKError(
+          'bad_request:api',
+          'compareModels must be an array of strings',
+        ).toResponse();
+      }
+
+      // Validate each model ID is a string
+      if (
+        !settingsUpdate.compareModels.every((id: any) => typeof id === 'string')
+      ) {
+        return new ChatSDKError(
+          'bad_request:api',
+          'All model IDs in compareModels must be strings',
+        ).toResponse();
+      }
+
+      // Validate max models limit
+      if (settingsUpdate.compareModels.length > COMPARE_MAX_MODELS) {
+        return new ChatSDKError(
+          'bad_request:api',
+          `Cannot select more than ${COMPARE_MAX_MODELS} models for comparison`,
+        ).toResponse();
+      }
     }
 
     // Get current settings and merge with updates

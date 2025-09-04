@@ -1,11 +1,13 @@
 'use client';
 
+import { getChatHistoryPaginationKey } from '@/components/sidebar-history';
 import { createClient } from '@/lib/supabase/client';
 import type { AppUser, UserType } from '@/lib/supabase/types';
 import type { User } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { mutate } from 'swr';
+import { unstable_serialize } from 'swr/infinite';
 
 export function useSupabaseAuth() {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -18,7 +20,22 @@ export function useSupabaseAuth() {
     mutate(() => true, undefined, { revalidate: false });
 
     // Specifically clear chat history and user-related caches
-    mutate('/api/history', undefined, { revalidate: false });
+    // Clear SWR Infinite cache for chat history pages
+    try {
+      mutate(unstable_serialize(getChatHistoryPaginationKey), undefined, {
+        revalidate: false,
+      });
+    } catch (_) {
+      // no-op: fallback to pattern-based clear below
+    }
+    // Also clear any direct history keys as a safety net
+    mutate(
+      (key) => typeof key === 'string' && key.startsWith('/api/history'),
+      undefined,
+      {
+        revalidate: false,
+      },
+    );
     mutate('/api/usage/summary', undefined, { revalidate: false });
     mutate('/api/models', undefined, { revalidate: false });
     mutate('/api/user/settings', undefined, { revalidate: false });
@@ -29,6 +46,8 @@ export function useSupabaseAuth() {
       'user-model-selection',
       'sidebar-state',
       'chat-input-draft',
+      // Also clear artifact UI caches which may reveal content
+      'artifact',
     ];
 
     keysToRemove.forEach((key) => {
@@ -47,7 +66,8 @@ export function useSupabaseAuth() {
         (key) =>
           key.startsWith('chat-') ||
           key.startsWith('user-') ||
-          key.startsWith('swr-'),
+          key.startsWith('swr-') ||
+          key.startsWith('artifact-'),
       );
 
       userSpecificKeys.forEach((key) => {

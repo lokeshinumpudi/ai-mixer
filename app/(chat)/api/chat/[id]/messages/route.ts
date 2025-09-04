@@ -1,9 +1,9 @@
-import { protectedRoute } from '@/lib/auth-decorators';
+import { authenticatedRoute } from '@/lib/auth-decorators';
 import { getMessagesByChatId } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 import { convertToUIMessages } from '@/lib/utils';
 
-export const GET = protectedRoute(async (request, context, user) => {
+export const GET = authenticatedRoute(async (request, context, user) => {
   if (!context.params) {
     return new ChatSDKError(
       'bad_request:api',

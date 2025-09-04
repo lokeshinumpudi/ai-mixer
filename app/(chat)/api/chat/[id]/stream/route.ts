@@ -1,4 +1,4 @@
-import { protectedRoute } from '@/lib/auth-decorators';
+import { authenticatedRoute } from '@/lib/auth-decorators';
 import {
   getChatById,
   getMessagesByChatId,
@@ -11,7 +11,7 @@ import { createUIMessageStream, JsonToSseTransformStream } from 'ai';
 import { differenceInSeconds } from 'date-fns';
 import { getStreamContext } from '../../route';
 
-export const GET = protectedRoute(async (_: Request, context, user) => {
+export const GET = authenticatedRoute(async (_: Request, context, user) => {
   if (!context.params) {
     return new ChatSDKError('bad_request:api').toResponse();
   }

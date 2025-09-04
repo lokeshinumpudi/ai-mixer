@@ -26,6 +26,8 @@ import { sql } from 'drizzle-orm';
 import { ChatSDKError } from '../errors';
 import {
   chat,
+  compareResult,
+  compareRun,
   creditLedger,
   document,
   message,
@@ -187,9 +189,12 @@ export async function saveChat({
 
 export async function deleteChatById({ id }: { id: string }) {
   try {
+    // Delete in correct order due to foreign key constraints
     await db.delete(vote).where(eq(vote.chatId, id));
     await db.delete(message).where(eq(message.chatId, id));
     await db.delete(stream).where(eq(stream.chatId, id));
+    // Delete compare runs (compareResult will be cascade deleted automatically)
+    await db.delete(compareRun).where(eq(compareRun.chatId, id));
 
     const [chatsDeleted] = await db
       .delete(chat)
@@ -1353,6 +1358,105 @@ export async function updateUserSetting(
   }
 }
 
+// Multi-model settings functions
+export async function getUserDefaultModel(
+  userId: string,
+): Promise<string | null> {
+  try {
+    const settings = await getUserSettings(userId);
+    return (settings?.settings as any)?.defaultModel || null;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user default model',
+    );
+  }
+}
+
+export async function setUserDefaultModel(userId: string, modelId: string) {
+  try {
+    return await updateUserSetting(userId, 'defaultModel', modelId);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set user default model',
+    );
+  }
+}
+
+export async function getUserCompareModels(userId: string): Promise<string[]> {
+  try {
+    const settings = await getUserSettings(userId);
+    return (settings?.settings as any)?.compareModels || [];
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user compare models',
+    );
+  }
+}
+
+export async function setUserCompareModels(userId: string, modelIds: string[]) {
+  try {
+    return await updateUserSetting(userId, 'compareModels', modelIds);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set user compare models',
+    );
+  }
+}
+
+export async function getUserMode(
+  userId: string,
+): Promise<'single' | 'compare'> {
+  try {
+    const settings = await getUserSettings(userId);
+    return (settings?.settings as any)?.mode || 'single';
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get user mode');
+  }
+}
+
+export async function setUserMode(userId: string, mode: 'single' | 'compare') {
+  try {
+    return await updateUserSetting(userId, 'mode', mode);
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to set user mode');
+  }
+}
+
+// Convenience function to update both mode and models at once
+export async function setUserModelSelection(
+  userId: string,
+  mode: 'single' | 'compare',
+  modelIdOrIds: string | string[],
+) {
+  try {
+    const settings: Record<string, any> = { mode };
+
+    if (mode === 'single' && typeof modelIdOrIds === 'string') {
+      settings.defaultModel = modelIdOrIds;
+      settings.compareModels = []; // Clear compare models when switching to single mode
+    } else if (mode === 'compare' && Array.isArray(modelIdOrIds)) {
+      settings.compareModels = modelIdOrIds;
+      settings.defaultModel = null; // Clear default model when switching to compare mode
+    } else {
+      throw new ChatSDKError(
+        'bad_request:api',
+        'Invalid mode or model selection combination',
+      );
+    }
+
+    return await upsertUserSettings(userId, settings);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set user model selection',
+    );
+  }
+}
+
 // Helper function to check if user has active subscription
 export async function getUserType(
   userId: string,
@@ -1484,6 +1588,388 @@ export async function getUserUsageSummary(userId: string) {
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get user usage summary',
+    );
+  }
+}
+
+// ============================================================================
+// AI Compare Run Queries
+// ============================================================================
+
+export async function createCompareRun({
+  userId,
+  chatId,
+  prompt,
+  modelIds,
+}: {
+  userId: string;
+  chatId: string;
+  prompt: string;
+  modelIds: string[];
+}) {
+  try {
+    // Create the compare run
+    const [run] = await db
+      .insert(compareRun)
+      .values({
+        userId,
+        chatId,
+        prompt,
+        modelIds,
+        status: 'running',
+      })
+      .returning();
+
+    // Create result entries for each model
+    const results = await db
+      .insert(compareResult)
+      .values(
+        modelIds.map((modelId) => ({
+          runId: run.id,
+          modelId,
+          status: 'running' as const,
+          content: '',
+        })),
+      )
+      .returning();
+
+    return { run, results };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create compare run',
+    );
+  }
+}
+
+export async function appendCompareResultContent({
+  runId,
+  modelId,
+  delta,
+}: {
+  runId: string;
+  modelId: string;
+  delta: string;
+}) {
+  try {
+    // Get current content and append delta
+    const [result] = await db
+      .select({ content: compareResult.content })
+      .from(compareResult)
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+
+    if (!result) {
+      throw new ChatSDKError('not_found:compare', 'Compare result not found');
+    }
+
+    const newContent = (result.content || '') + delta;
+
+    await db
+      .update(compareResult)
+      .set({ content: newContent })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+
+    return newContent;
+  } catch (error) {
+    if (error instanceof ChatSDKError) throw error;
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to append compare result content',
+    );
+  }
+}
+
+export async function startCompareResultInference({
+  runId,
+  modelId,
+}: {
+  runId: string;
+  modelId: string;
+}) {
+  try {
+    await db
+      .update(compareResult)
+      .set({
+        status: 'running',
+        serverStartedAt: new Date(),
+      })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to start compare result inference',
+    );
+  }
+}
+
+export async function completeCompareResult({
+  runId,
+  modelId,
+  content,
+  usage,
+  serverStartedAt,
+  serverCompletedAt,
+  inferenceTimeMs,
+}: {
+  runId: string;
+  modelId: string;
+  content: string;
+  usage?: any;
+  serverStartedAt?: Date;
+  serverCompletedAt?: Date;
+  inferenceTimeMs?: number;
+}) {
+  try {
+    await db
+      .update(compareResult)
+      .set({
+        status: 'completed',
+        content,
+        usage,
+        completedAt: new Date(),
+        serverStartedAt,
+        serverCompletedAt,
+        inferenceTimeMs,
+      })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to complete compare result',
+    );
+  }
+}
+
+export async function failCompareResult({
+  runId,
+  modelId,
+  error: errorMessage,
+}: {
+  runId: string;
+  modelId: string;
+  error: string;
+}) {
+  try {
+    await db
+      .update(compareResult)
+      .set({
+        status: 'failed',
+        error: errorMessage,
+        completedAt: new Date(),
+      })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to fail compare result',
+    );
+  }
+}
+
+export async function cancelCompareResult({
+  runId,
+  modelId,
+}: {
+  runId: string;
+  modelId: string;
+}) {
+  try {
+    await db
+      .update(compareResult)
+      .set({
+        status: 'canceled',
+        completedAt: new Date(),
+      })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to cancel compare result',
+    );
+  }
+}
+
+export async function completeCompareRun({ runId }: { runId: string }) {
+  try {
+    await db
+      .update(compareRun)
+      .set({
+        status: 'completed',
+        updatedAt: new Date(),
+      })
+      .where(eq(compareRun.id, runId));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to complete compare run',
+    );
+  }
+}
+
+export async function cancelCompareRun({ runId }: { runId: string }) {
+  try {
+    // Cancel the run
+    await db
+      .update(compareRun)
+      .set({
+        status: 'canceled',
+        updatedAt: new Date(),
+      })
+      .where(eq(compareRun.id, runId));
+
+    // Cancel all running results
+    await db
+      .update(compareResult)
+      .set({
+        status: 'canceled',
+        completedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(compareResult.runId, runId),
+          eq(compareResult.status, 'running'),
+        ),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to cancel compare run',
+    );
+  }
+}
+
+export async function getCompareRun({ runId }: { runId: string }) {
+  try {
+    const [run] = await db
+      .select()
+      .from(compareRun)
+      .where(eq(compareRun.id, runId));
+
+    if (!run) {
+      throw new ChatSDKError('not_found:compare', 'Compare run not found');
+    }
+
+    const results = await db
+      .select()
+      .from(compareResult)
+      .where(eq(compareResult.runId, runId))
+      .orderBy(asc(compareResult.createdAt));
+
+    return { run, results };
+  } catch (error) {
+    if (error instanceof ChatSDKError) throw error;
+    throw new ChatSDKError('bad_request:database', 'Failed to get compare run');
+  }
+}
+
+export async function listCompareRunsByChat({
+  chatId,
+  limit = 50,
+  cursor,
+}: {
+  chatId: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  try {
+    const conditions = [eq(compareRun.chatId, chatId)];
+
+    if (cursor) {
+      conditions.push(gt(compareRun.createdAt, new Date(cursor)));
+    }
+
+    const runs = await db
+      .select()
+      .from(compareRun)
+      .where(and(...conditions))
+      .orderBy(asc(compareRun.createdAt))
+      .limit(limit + 1); // Get one extra to check if there are more
+
+    const hasMore = runs.length > limit;
+    const items = hasMore ? runs.slice(0, -1) : runs;
+    const nextCursor = hasMore
+      ? items[items.length - 1]?.createdAt.toISOString()
+      : null;
+
+    // Load results for each run
+    const itemsWithResults = await Promise.all(
+      items.map(async (run) => {
+        const results = await db
+          .select()
+          .from(compareResult)
+          .where(eq(compareResult.runId, run.id))
+          .orderBy(asc(compareResult.createdAt));
+
+        return {
+          ...run,
+          results,
+        };
+      }),
+    );
+
+    return {
+      items: itemsWithResults,
+      nextCursor,
+      hasMore,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to list compare runs',
+    );
+  }
+}
+
+export async function listCompareRunsByUser({
+  userId,
+  limit = 50,
+  cursor,
+}: {
+  userId: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  try {
+    const conditions = [eq(compareRun.userId, userId)];
+
+    if (cursor) {
+      conditions.push(gt(compareRun.createdAt, new Date(cursor)));
+    }
+
+    const runs = await db
+      .select()
+      .from(compareRun)
+      .where(and(...conditions))
+      .orderBy(asc(compareRun.createdAt))
+      .limit(limit + 1);
+
+    const hasMore = runs.length > limit;
+    const items = hasMore ? runs.slice(0, -1) : runs;
+    const nextCursor = hasMore
+      ? items[items.length - 1]?.createdAt.toISOString()
+      : null;
+
+    return {
+      items,
+      nextCursor,
+      hasMore,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to list compare runs by user',
     );
   }
 }

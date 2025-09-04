@@ -11,10 +11,6 @@ import type { AppUser, UserType } from '@/lib/supabase/types';
 import type { NextRequest } from 'next/server';
 import { ChatSDKError } from './errors';
 
-interface AuthOptions {
-  allowAnonymous?: boolean;
-}
-
 export type RouteHandler = (
   request: NextRequest,
   context?: { params?: Promise<Record<string, string>> },
@@ -34,72 +30,6 @@ export function publicRoute(handler: RouteHandler) {
       return await handler(request, context);
     } catch (error) {
       console.error('Public route error:', error);
-      if (error instanceof ChatSDKError) {
-        return error.toResponse();
-      }
-      return new ChatSDKError(
-        'bad_request:api',
-        'Internal server error',
-      ).toResponse();
-    }
-  };
-}
-
-/**
- * Decorator for protected API routes that require authentication (non-anonymous users only)
- */
-export function protectedRoute(handler: AuthenticatedRouteHandler) {
-  return async (request: NextRequest, context?: any) => {
-    try {
-      const supabase = await createClient();
-
-      // Support Authorization: Bearer <token> for mobile clients
-      const authHeader = request.headers.get('authorization');
-      const bearer = authHeader?.startsWith('Bearer ')
-        ? authHeader.slice(7)
-        : undefined;
-
-      const {
-        data: { user: supabaseUser },
-        error: authError,
-      } = bearer
-        ? await supabase.auth.getUser(bearer)
-        : await supabase.auth.getUser();
-
-      // Log error details for debugging
-      if (authError) {
-        console.error('Supabase auth error:', authError);
-      }
-
-      if (!supabaseUser || supabaseUser.is_anonymous) {
-        return new ChatSDKError(
-          'unauthorized:api',
-          'Authentication required',
-        ).toResponse();
-      }
-
-      // Get user type from database with robust error handling
-      const userType = await getUserType(
-        supabaseUser.id,
-        supabaseUser.is_anonymous,
-      );
-
-      const user: AppUser & { userType: UserType } = {
-        id: supabaseUser.id,
-        email: supabaseUser.email,
-        user_metadata: {
-          user_type: userType, // Keep for backward compatibility
-          created_via:
-            supabaseUser.user_metadata?.created_via ||
-            (supabaseUser.is_anonymous ? 'anonymous' : 'google'),
-        },
-        is_anonymous: supabaseUser.is_anonymous,
-        userType, // Simplified user type
-      };
-
-      return await handler(request, context, user);
-    } catch (error) {
-      console.error('Protected route error:', error);
       if (error instanceof ChatSDKError) {
         return error.toResponse();
       }

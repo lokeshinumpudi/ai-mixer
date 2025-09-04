@@ -7,7 +7,13 @@ import useSWR from 'swr';
 interface ModelsResponse {
   models: ChatModel[];
   userType: 'free' | 'pro';
-  userSettings?: Record<string, any>;
+  userSettings?: {
+    defaultModel?: string;
+    compareModels?: string[];
+    mode?: 'single' | 'compare';
+    theme?: string;
+    [key: string]: any;
+  };
 }
 
 export function useModels() {
@@ -30,6 +36,10 @@ export function useModels() {
     models: data?.models ?? [],
     userType: data?.userType ?? 'free',
     userSettings: data?.userSettings ?? {},
+    // Extract specific settings for convenience
+    defaultModel: data?.userSettings?.defaultModel,
+    compareModels: data?.userSettings?.compareModels ?? [],
+    mode: data?.userSettings?.mode ?? 'single',
     isLoading,
     error,
     mutate,

@@ -15,7 +15,9 @@ export type Surface =
   | 'history'
   | 'vote'
   | 'document'
-  | 'suggestions';
+  | 'suggestions'
+  | 'compare'
+  | 'model';
 
 export type ErrorCode = `${ErrorType}:${Surface}`;
 
@@ -31,6 +33,8 @@ export const visibilityBySurface: Record<Surface, ErrorVisibility> = {
   vote: 'response',
   document: 'response',
   suggestions: 'response',
+  compare: 'response',
+  model: 'response',
 };
 
 export class ChatSDKError extends Error {

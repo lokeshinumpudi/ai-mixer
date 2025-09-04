@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
 
+import { useModels } from '@/hooks/use-models';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import { useUsage } from '@/hooks/use-usage';
 import type { AppUser } from '@/lib/supabase/types';
@@ -23,14 +24,39 @@ import type { Attachment, ChatMessage } from '@/lib/types';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import equal from 'fast-deep-equal';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, GitCompare, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from './icons';
 import { ModelPicker } from './model-picker';
 import { PreviewAttachment } from './preview-attachment';
 import { SuggestedActions } from './suggested-actions';
+import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
+
+// Provider-based color mapping for model chips
+function getModelChipColor(modelId: string): string {
+  const provider = modelId.split('/')[0]?.toLowerCase();
+
+  switch (provider) {
+    case 'openai':
+      return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
+    case 'anthropic':
+      return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800';
+    case 'google':
+      return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
+    case 'meta':
+      return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
+    case 'mistral':
+      return 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800';
+    case 'cohere':
+      return 'bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800';
+    case 'perplexity':
+      return 'bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800';
+    default:
+      return 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-800';
+  }
+}
 
 function PureMultimodalInput({
   chatId,
@@ -47,6 +73,14 @@ function PureMultimodalInput({
   selectedVisibilityType,
   user,
   selectedModelId,
+  isCompareMode = false,
+  onCompareModeChange,
+  selectedModelIds = [],
+  onSelectedModelIdsChange,
+  onStartCompare,
+  compareRuns = [],
+  activeCompareMessage = false,
+  isModelsLoading = false,
 }: {
   chatId: string;
   input: string;
@@ -62,10 +96,19 @@ function PureMultimodalInput({
   selectedVisibilityType: 'private' | 'public';
   user: AppUser | null;
   selectedModelId: string;
+  isCompareMode?: boolean;
+  onCompareModeChange?: (enabled: boolean) => void;
+  selectedModelIds?: string[];
+  onSelectedModelIdsChange?: (modelIds: string[]) => void;
+  onStartCompare?: (prompt: string, modelIds: string[]) => void;
+  compareRuns?: any[];
+  activeCompareMessage?: boolean;
+  isModelsLoading?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const { usage } = useUsage();
+  const { userType } = useModels();
   const { width } = useWindowSize();
 
   useEffect(() => {
@@ -145,21 +188,28 @@ function PureMultimodalInput({
 
     window.history.replaceState({}, '', `/chat/${chatId}`);
 
-    sendMessage({
-      role: 'user',
-      parts: [
-        ...attachments.map((attachment) => ({
-          type: 'file' as const,
-          url: attachment.url,
-          name: attachment.name,
-          mediaType: attachment.contentType,
-        })),
-        {
-          type: 'text',
-          text: input,
-        },
-      ],
-    });
+    // Handle compare mode vs regular chat
+    if (isCompareMode && selectedModelIds.length > 0 && onStartCompare) {
+      // Start with selected models (1, 2, or 3)
+      onStartCompare(input.trim(), selectedModelIds);
+    } else {
+      // Fallback to regular single-model chat
+      sendMessage({
+        role: 'user',
+        parts: [
+          ...attachments.map((attachment) => ({
+            type: 'file' as const,
+            url: attachment.url,
+            name: attachment.name,
+            mediaType: attachment.contentType,
+          })),
+          {
+            type: 'text',
+            text: input,
+          },
+        ],
+      });
+    }
 
     setAttachments([]);
     setLocalStorageInput('');
@@ -180,12 +230,15 @@ function PureMultimodalInput({
     chatId,
     usage,
     router,
+    isCompareMode,
+    selectedModelIds,
+    onStartCompare,
   ]);
 
   const uploadFile = useCallback(
     async (file: File) => {
       // Gate uploads for free users
-      if (user?.user_metadata?.user_type !== 'pro') {
+      if (userType !== 'pro') {
         toast.error(
           'File uploads are a Pro feature. Upgrade to enable uploads.',
         );
@@ -227,7 +280,7 @@ function PureMultimodalInput({
         toast.error('Failed to upload file, please try again!');
       }
     },
-    [user?.user_metadata?.user_type, router],
+    [userType, router],
   );
 
   const handleFileChange = useCallback(
@@ -292,12 +345,17 @@ function PureMultimodalInput({
       </AnimatePresence>
 
       {messages.length === 0 &&
+        compareRuns.length === 0 &&
+        !activeCompareMessage &&
         attachments.length === 0 &&
         uploadQueue.length === 0 && (
           <SuggestedActions
             sendMessage={sendMessage}
             chatId={chatId}
             selectedVisibilityType={selectedVisibilityType}
+            isCompareMode={isCompareMode}
+            selectedModelIds={selectedModelIds}
+            onStartCompare={onStartCompare}
           />
         )}
 
@@ -334,13 +392,59 @@ function PureMultimodalInput({
       )}
 
       <div className={cx('relative luxury-input glass rounded-3xl', className)}>
+        {/* Model chips display when in compare mode */}
+        {isCompareMode && (
+          <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
+            {isModelsLoading ? (
+              // Loading state - show skeleton chips
+              <div className="flex gap-2">
+                <div className="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse" />
+                <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse" />
+              </div>
+            ) : selectedModelIds.length > 0 ? (
+              // Loaded state - show actual model chips
+              selectedModelIds.map((modelId) => (
+                <Badge
+                  key={modelId}
+                  variant="outline"
+                  className={`flex items-center gap-1 text-xs font-medium border ${getModelChipColor(
+                    modelId,
+                  )}`}
+                >
+                  {modelId.split('/').pop()}
+                  {onSelectedModelIdsChange && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectedModelIdsChange(
+                          selectedModelIds.filter((id) => id !== modelId),
+                        );
+                      }}
+                      className="ml-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </Badge>
+              ))
+            ) : null}
+          </div>
+        )}
+
         <Textarea
           data-testid="multimodal-input"
           ref={textareaRef}
-          placeholder="Send a message..."
+          placeholder={
+            isCompareMode && selectedModelIds.length > 1
+              ? `Compare with ${selectedModelIds.length} models...`
+              : 'Send a message...'
+          }
           value={input}
           onChange={handleInput}
-          className="min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none text-base bg-transparent pb-12 pt-4 px-4 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 focus:shadow-none"
+          className={cx(
+            'min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none text-base bg-transparent pb-12 px-4 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 focus:shadow-none',
+            isCompareMode && selectedModelIds.length > 0 ? 'pt-2' : 'pt-4',
+          )}
           rows={2}
           autoFocus
           onKeyDown={(event) => {
@@ -365,11 +469,37 @@ function PureMultimodalInput({
 
       <div className="absolute bottom-0 left-0 p-3 w-fit flex flex-row justify-start items-center gap-2">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
+
+        {/* Compare Mode Toggle */}
+        {user && !user.is_anonymous && onCompareModeChange && (
+          <Button
+            type="button"
+            variant={isCompareMode ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => onCompareModeChange(!isCompareMode)}
+            disabled={status !== 'ready'}
+            className="gap-1.5 h-8 px-2"
+            title={
+              isCompareMode
+                ? 'Switch to single model'
+                : 'Compare multiple models'
+            }
+          >
+            <GitCompare className="h-3.5 w-3.5" />
+            {isCompareMode && selectedModelIds.length > 1 && (
+              <span className="text-xs">{selectedModelIds.length}</span>
+            )}
+          </Button>
+        )}
+
         <ModelPicker
           user={user}
           selectedModelId={selectedModelId}
           disabled={status !== 'ready'}
           compact={true}
+          isCompareMode={isCompareMode}
+          selectedModelIds={selectedModelIds}
+          onSelectedModelIdsChange={onSelectedModelIdsChange}
         />
       </div>
 
@@ -397,6 +527,9 @@ export const MultimodalInput = memo(
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
     if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
+    if (prevProps.isCompareMode !== nextProps.isCompareMode) return false;
+    if (!equal(prevProps.selectedModelIds, nextProps.selectedModelIds))
+      return false;
 
     return true;
   },

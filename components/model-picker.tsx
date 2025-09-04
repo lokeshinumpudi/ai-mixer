@@ -25,6 +25,7 @@ import { isModelEnabled, useModels } from '@/hooks/use-models';
 import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import type { ChatModel } from '@/lib/ai/models';
 import { getDefaultModelForUser } from '@/lib/ai/models';
+import { COMPARE_MAX_MODELS } from '@/lib/constants';
 import type { AppUser } from '@/lib/supabase/types';
 import { cn } from '@/lib/utils';
 import {
@@ -303,6 +304,9 @@ interface ModelPickerProps {
   className?: string;
   compact?: boolean;
   disabled?: boolean;
+  isCompareMode?: boolean;
+  selectedModelIds?: string[];
+  onSelectedModelIdsChange?: (modelIds: string[]) => void;
 }
 
 export function ModelPicker({
@@ -311,6 +315,9 @@ export function ModelPicker({
   className,
   compact = false,
   disabled = false,
+  isCompareMode = false,
+  selectedModelIds = [],
+  onSelectedModelIdsChange,
 }: ModelPickerProps) {
   const router = useRouter();
   const { user: authUser } = useSupabaseAuth();
@@ -332,11 +339,14 @@ export function ModelPicker({
     models: allModels,
     userSettings,
     userType,
+    defaultModel,
+    compareModels,
+    mode,
     mutate: mutateModels,
   } = useModels();
 
   // Extract the selected model from user settings
-  const serverModel = userSettings?.defaultModel;
+  const serverModel = defaultModel;
 
   // Get localStorage model as immediate fallback
   const [localModel, setLocalModel] = useState<string | null>(() =>
@@ -357,7 +367,7 @@ export function ModelPicker({
     }
   }, [serverModel, localModel]);
 
-  // Determine the effective model to use:
+  // Determine the effective model to use for single mode:
   // 1. Props selectedModelId (if provided) - for backward compatibility
   // 2. Server settings model (authoritative once loaded)
   // 3. localStorage model (immediate persistence when server not available)
@@ -392,6 +402,29 @@ export function ModelPicker({
     allModels,
     planBasedDefaultModel,
   ]);
+
+  // Determine the effective compare models to use:
+  // 1. Props selectedModelIds (if provided) - for backward compatibility
+  // 2. Server settings compare models (authoritative once loaded)
+  // 3. Empty array as fallback
+  const effectiveCompareModelIds = useMemo(() => {
+    // If selectedModelIds prop is provided, use it (for backward compatibility)
+    if (selectedModelIds && selectedModelIds.length > 0) {
+      return selectedModelIds.filter((modelId) =>
+        allModels.some((model) => model.id === modelId),
+      );
+    }
+
+    // Use server compare models (authoritative)
+    if (compareModels && compareModels.length > 0) {
+      return compareModels.filter((modelId) =>
+        allModels.some((model) => model.id === modelId),
+      );
+    }
+
+    // Fallback to empty array
+    return [];
+  }, [selectedModelIds, compareModels, allModels]);
 
   const selectedModel = useMemo(
     () => allModels.find((model) => model.id === effectiveModelId),
@@ -460,6 +493,53 @@ export function ModelPicker({
   }, [favoriteModels, topModels, favorites]);
 
   const handleModelSelect = async (modelId: string) => {
+    if (isCompareMode && onSelectedModelIdsChange) {
+      // Handle multi-selection for compare mode
+      const currentlySelected = selectedModelIds.includes(modelId);
+      let newSelection: string[];
+
+      if (currentlySelected) {
+        // Remove model from selection
+        newSelection = selectedModelIds.filter((id) => id !== modelId);
+      } else {
+        // Add model to selection (up to max limit)
+        if (selectedModelIds.length < COMPARE_MAX_MODELS) {
+          newSelection = [...selectedModelIds, modelId];
+        } else {
+          // Replace the last model if at limit
+          newSelection = [...selectedModelIds.slice(0, -1), modelId];
+        }
+      }
+
+      onSelectedModelIdsChange(newSelection);
+
+      // Save compare models to settings if user is authenticated
+      if (user && !user.is_anonymous && newSelection.length > 0) {
+        try {
+          const response = await fetch('/api/user/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              compareModels: newSelection,
+              mode: 'compare',
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to update settings');
+          }
+
+          // Refresh models data to get updated user settings from server
+          await mutateModels();
+        } catch (error) {
+          console.error('Failed to save compare models to server:', error);
+        }
+      }
+
+      return; // Don't close dialog in compare mode
+    }
+
+    // Regular single-model selection
     setOpen(false);
 
     // Immediate localStorage update for instant UI feedback
@@ -476,7 +556,10 @@ export function ModelPicker({
       const response = await fetch('/api/user/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ defaultModel: modelId }),
+        body: JSON.stringify({
+          defaultModel: modelId,
+          mode: 'single',
+        }),
       });
 
       if (!response.ok) {
@@ -523,7 +606,9 @@ export function ModelPicker({
             {compact ? (
               <>
                 <span className="truncate text-xs">
-                  {selectedModel?.name || 'Select Model'}
+                  {isCompareMode && effectiveCompareModelIds.length > 0
+                    ? `${effectiveCompareModelIds.length} models`
+                    : selectedModel?.name || 'Select Model'}
                 </span>
                 <SearchIcon size={12} />
               </>
@@ -558,8 +643,22 @@ export function ModelPicker({
         >
           <DialogHeader className="space-y-3">
             <DialogTitle>
-              <span>Choose a Model</span>
+              <span>
+                {isCompareMode ? 'Select Models to Compare' : 'Choose a Model'}
+              </span>
             </DialogTitle>
+
+            {isCompareMode && (
+              <div className="text-sm text-muted-foreground">
+                Select up to {COMPARE_MAX_MODELS} models to compare responses
+                side-by-side.
+                {effectiveCompareModelIds.length > 0 && (
+                  <span className="ml-1 font-medium text-primary">
+                    ({effectiveCompareModelIds.length} selected)
+                  </span>
+                )}
+              </div>
+            )}
             {userType === 'free' && (
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-3 rounded-lg border border-amber-200/50 dark:border-amber-800/30">
                 <div className="flex items-center justify-between">
@@ -713,7 +812,9 @@ export function ModelPicker({
                     const enabled =
                       isModelEnabled(model) &&
                       allModels.some((m) => m.id === model.id);
-                    const isSelected = model.id === effectiveModelId;
+                    const isSelected = isCompareMode
+                      ? effectiveCompareModelIds.includes(model.id)
+                      : model.id === effectiveModelId;
                     const providerIcon = getProviderIcon(model.provider);
 
                     // Determine capabilities
@@ -906,7 +1007,11 @@ export function ModelPicker({
                         <ModelCard
                           key={model.id}
                           model={model}
-                          isSelected={model.id === effectiveModelId}
+                          isSelected={
+                            isCompareMode
+                              ? effectiveCompareModelIds.includes(model.id)
+                              : model.id === effectiveModelId
+                          }
                           isFavorite={true}
                           onSelect={() => handleModelSelect(model.id)}
                           onToggleFavorite={() => toggleFavorite(model.id)}
@@ -927,7 +1032,11 @@ export function ModelPicker({
                         <ModelCard
                           key={model.id}
                           model={model}
-                          isSelected={model.id === effectiveModelId}
+                          isSelected={
+                            isCompareMode
+                              ? effectiveCompareModelIds.includes(model.id)
+                              : model.id === effectiveModelId
+                          }
                           isFavorite={false}
                           onSelect={() => handleModelSelect(model.id)}
                           onToggleFavorite={() => toggleFavorite(model.id)}

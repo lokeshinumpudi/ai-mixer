@@ -45,6 +45,10 @@ export const ROUTE_CONFIG: RouteConfig = {
     '/api/chat',
     '/api/chat/**',
 
+    // AI Compare functionality - requires authentication
+    '/api/compare',
+    '/api/compare/**',
+
     // Models - works for both user types but with different access levels
     '/api/models',
     '/api/models/public',

@@ -11,12 +11,19 @@ interface SuggestedActionsProps {
   chatId: string;
   sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
   selectedVisibilityType: VisibilityType;
+  // Compare mode props
+  isCompareMode?: boolean;
+  selectedModelIds?: string[];
+  onStartCompare?: (prompt: string, modelIds: string[]) => void;
 }
 
 function PureSuggestedActions({
   chatId,
   sendMessage,
   selectedVisibilityType,
+  isCompareMode = false,
+  selectedModelIds = [],
+  onStartCompare,
 }: SuggestedActionsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -63,10 +70,20 @@ function PureSuggestedActions({
             onClick={async () => {
               window.history.replaceState({}, '', `/chat/${chatId}`);
 
-              sendMessage({
-                role: 'user',
-                parts: [{ type: 'text', text: suggestedAction.action }],
-              });
+              // Use compare mode logic if available and multiple models selected
+              if (
+                isCompareMode &&
+                selectedModelIds.length > 1 &&
+                onStartCompare
+              ) {
+                onStartCompare(suggestedAction.action, selectedModelIds);
+              } else {
+                // Single model or no compare mode - use regular chat
+                sendMessage({
+                  role: 'user',
+                  parts: [{ type: 'text', text: suggestedAction.action }],
+                });
+              }
             }}
             className="luxury-button text-left border border-border/50 rounded-2xl px-5 py-4 text-sm flex-1 gap-2 sm:flex-col w-full h-auto justify-start items-start hover:border-border hover:shadow-sm"
           >
@@ -86,6 +103,11 @@ export const SuggestedActions = memo(
   (prevProps, nextProps) => {
     if (prevProps.chatId !== nextProps.chatId) return false;
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
+      return false;
+    if (prevProps.isCompareMode !== nextProps.isCompareMode) return false;
+    if (
+      prevProps.selectedModelIds?.length !== nextProps.selectedModelIds?.length
+    )
       return false;
 
     return true;

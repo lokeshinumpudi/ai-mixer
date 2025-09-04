@@ -93,9 +93,33 @@ export function getChatHistoryPaginationKey(
   return `/api/history?ending_before=${firstChatFromPage.id}&limit=${PAGE_SIZE}`;
 }
 
+// User-scoped key generator to avoid cache leakage across sessions
+export function getChatHistoryPaginationKeyForUser(userId?: string) {
+  return (pageIndex: number, previousPageData: ChatHistory) => {
+    if (previousPageData && previousPageData.hasMore === false) {
+      return null;
+    }
+
+    const uid = userId ?? 'anonymous';
+
+    if (pageIndex === 0) return `/api/history?limit=${PAGE_SIZE}&uid=${uid}`;
+
+    const firstChatFromPage = previousPageData.chats.at(-1);
+
+    if (!firstChatFromPage) return null;
+
+    return `/api/history?ending_before=${firstChatFromPage.id}&limit=${PAGE_SIZE}&uid=${uid}`;
+  };
+}
+
 export function SidebarHistory({ user }: { user: AppUser | null }) {
   const { setOpenMobile } = useSidebar();
   const { id } = useParams();
+
+  const getKey =
+    user && !user.is_anonymous
+      ? getChatHistoryPaginationKeyForUser(user.id)
+      : () => null as any;
 
   const {
     data: paginatedChatHistories,
@@ -103,7 +127,7 @@ export function SidebarHistory({ user }: { user: AppUser | null }) {
     isValidating,
     isLoading,
     mutate,
-  } = useSWRInfinite<ChatHistory>(getChatHistoryPaginationKey, fetcher, {
+  } = useSWRInfinite<ChatHistory>(getKey, fetcher, {
     fallbackData: [],
   });
 
@@ -148,7 +172,7 @@ export function SidebarHistory({ user }: { user: AppUser | null }) {
     }
   };
 
-  if (!user) {
+  if (!user || user.is_anonymous) {
     return (
       <SidebarGroup>
         <SidebarGroupContent>

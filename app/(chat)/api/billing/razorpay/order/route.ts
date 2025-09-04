@@ -1,10 +1,10 @@
-import { protectedRoute } from '@/lib/auth-decorators';
+import { authenticatedRoute } from '@/lib/auth-decorators';
 import { createPaymentRecord } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
-export const POST = protectedRoute(async (request, context, user) => {
+export const POST = authenticatedRoute(async (request, context, user) => {
   let body: {
     amountPaise: number;
     currency?: string;

@@ -1,14 +1,10 @@
 'use client';
 
 import { updateChatVisibility } from '@/app/(chat)/actions';
-import {
-  getChatHistoryPaginationKey,
-  type ChatHistory,
-} from '@/components/sidebar-history';
+import type { ChatHistory } from '@/components/sidebar-history';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { useMemo } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
-import { unstable_serialize } from 'swr/infinite';
 
 export function useChatVisibility({
   chatId,
@@ -18,7 +14,19 @@ export function useChatVisibility({
   initialVisibilityType: VisibilityType;
 }) {
   const { mutate, cache } = useSWRConfig();
-  const history: ChatHistory = cache.get('/api/history')?.data;
+  // Find any first history page in cache (keys are user-scoped)
+  let history: ChatHistory | undefined;
+  try {
+    for (const key of (cache as any).keys?.() || []) {
+      if (typeof key === 'string' && key.startsWith('/api/history')) {
+        const entry = (cache as any).get(key);
+        history = entry?.data as ChatHistory | undefined;
+        if (history) break;
+      }
+    }
+  } catch {
+    // no-op
+  }
 
   const { data: localVisibility, mutate: setLocalVisibility } = useSWR(
     `${chatId}-visibility`,
@@ -37,7 +45,12 @@ export function useChatVisibility({
 
   const setVisibilityType = (updatedVisibilityType: VisibilityType) => {
     setLocalVisibility(updatedVisibilityType);
-    mutate(unstable_serialize(getChatHistoryPaginationKey));
+    // Revalidate all history keys regardless of user scope
+    mutate(
+      (key) => typeof key === 'string' && key.startsWith('/api/history'),
+      undefined,
+      { revalidate: true },
+    );
 
     updateChatVisibility({
       chatId: chatId,

@@ -1,10 +1,10 @@
-import { protectedRoute } from '@/lib/auth-decorators';
+import { authenticatedRoute } from '@/lib/auth-decorators';
 import { getRecentPaymentEventsCount } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = protectedRoute(async (request, context, user) => {
+export const GET = authenticatedRoute(async (request, context, user) => {
   const url = new URL(request.url);
   const lookbackSeconds = Number(
     url.searchParams.get('lookbackSeconds') ?? '120',

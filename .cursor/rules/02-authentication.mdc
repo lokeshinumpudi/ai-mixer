@@ -48,4 +48,4 @@ The application provides a seamless experience for anonymous (guest) users.
 - **Identification**: The `user` object from auth decorators includes an `is_anonymous` flag.
 - **Limitations**: Anonymous users have different entitlements, such as lower message quotas and access to fewer AI models, which are enforced server-side.
 - **Data Migration**: When an anonymous user signs up, their data (e.g., chat history) should be migrated and associated with their new authenticated user account.
-- **No Local Records for Guests**: To keep the database clean, we do not create a user record in our local DB for anonymous users. Their identity is managed solely by Supabase Auth for the session.
+- **Current Implementation Note**: Anonymous sessions are persisted to the local DB for usage/rate-limiting by calling `createAnonymousUserIfNotExists(user.id)` in `app/(chat)/api/chat/route.ts`. This creates a `User` row with a placeholder email. If we decide to avoid local records for guests in the future, we must first relax the `User.email` NOT NULL constraint and refactor usage tracking to be solely session-based.

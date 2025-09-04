@@ -1,0 +1,215 @@
+---
+description: "Upgrade CTA patterns and rate limiting UX for Pro plan conversion"
+---
+
+# 18: Upgrade CTA Patterns
+
+## Overview
+
+Consistent upgrade call-to-action patterns throughout the application to convert free users to Pro subscriptions while maintaining a good user experience.
+
+## Core Upgrade Toast Pattern
+
+Use `upgradeToast` for rate limiting and feature restriction scenarios:
+
+```typescript
+// components/toast.tsx
+upgradeToast({
+  title: "Feature/Limit Title",
+  description: "Descriptive message explaining the limitation and Pro benefits",
+  actionText: "Upgrade to Pro",
+});
+```
+
+## Rate Limiting Scenarios
+
+### Chat Message Limits
+
+```typescript
+// components/chat.tsx - onError handler
+if (error.type === "rate_limit") {
+  upgradeToast({
+    title: "Message limit reached",
+    description: error.message,
+    actionText: "Upgrade to Pro",
+  });
+}
+```
+
+### Compare Feature Limits
+
+```typescript
+// components/chat.tsx - handleStartCompare
+if (error.message.includes("429")) {
+  upgradeToast({
+    title: "Compare limit reached",
+    description:
+      "Upgrade to Pro for unlimited model comparisons and 1000 messages per month.",
+    actionText: "Upgrade to Pro",
+  });
+}
+```
+
+### File Upload Restrictions
+
+```typescript
+// components/multimodal-input.tsx - uploadFile
+if (user?.user_metadata?.user_type !== "pro") {
+  toast.error("File uploads are a Pro feature. Upgrade to enable uploads.");
+  // Direct redirect to payment page
+  window.open(process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL, "_blank");
+}
+```
+
+## Anonymous User Prompts
+
+### Progressive Disclosure
+
+Show login prompts before hitting hard limits:
+
+```typescript
+// components/chat.tsx - Google Login CTA
+{
+  shouldShowLoginPrompt && authUser?.is_anonymous !== false && (
+    <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
+      <h3>You're almost at your message limit!</h3>
+      <p>
+        {messageCount >= 10
+          ? "Sign in with Google to continue chatting with unlimited messages."
+          : `${
+              10 - messageCount
+            } messages remaining. Sign in for unlimited access to all models.`}
+      </p>
+      <GoogleLoginCTA />
+    </div>
+  );
+}
+```
+
+## Plan Comparison Context
+
+### Entitlements Display
+
+Show clear plan differences in upgrade contexts:
+
+```typescript
+// lib/ai/entitlements.ts
+export const entitlementsByUserType = {
+  anonymous: { maxMessagesPerDay: 5 },
+  free: { maxMessagesPerDay: 5 },
+  pro: { maxMessagesPerMonth: 1000 },
+};
+```
+
+### Usage Tracking
+
+Display current usage to create urgency:
+
+```typescript
+// Rate limit debug logs show current usage
+[RATE_LIMIT_DEBUG] User {userId} (free): 4/5 messages, isOverLimit: false
+[COMPARE_RATE_LIMIT] User {userId} needs 2 but only has 0 remaining
+```
+
+## Payment Flow Integration
+
+### Direct Payment Links
+
+Streamlined upgrade flow bypassing intermediate pages:
+
+```typescript
+// Upgrade CTAs link directly to Razorpay payment page
+const paymentUrl = process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL;
+if (paymentUrl) {
+  window.open(paymentUrl, "_blank");
+}
+```
+
+### Settings Page Integration
+
+Show upgrade options prominently in settings:
+
+```typescript
+// app/(chat)/settings/page.tsx
+// Usage tracking with prominent upgrade CTA for free users
+// Pro badge display for existing Pro users
+```
+
+## Error Message Patterns
+
+### Rate Limit Errors
+
+```typescript
+// Consistent error messaging
+"Message limit reached" - for daily chat limits
+"Compare limit reached" - for multi-model comparison limits
+"Upload limit reached" - for file upload restrictions
+```
+
+### Feature Restrictions
+
+```typescript
+// Clear feature gating messages
+"File uploads are a Pro feature";
+"Advanced models require Pro subscription";
+"Unlimited comparisons available with Pro";
+```
+
+## UX Best Practices
+
+### Non-Intrusive Approach
+
+1. **Progressive Disclosure**: Show limits before hitting them
+2. **Contextual CTAs**: Upgrade prompts appear when relevant features are accessed
+3. **Value Proposition**: Always explain Pro benefits, not just restrictions
+4. **Multiple Touchpoints**: Various upgrade entry points throughout the app
+
+### Upgrade CTA Placement
+
+1. **Settings Page**: Primary upgrade location with usage tracking
+2. **Rate Limit Errors**: Contextual upgrade when limits are hit
+3. **Feature Gates**: When accessing Pro-only features
+4. **Anonymous Prompts**: Before requiring authentication
+
+## Measurement & Analytics
+
+### Conversion Tracking
+
+Track upgrade CTA interactions:
+
+```typescript
+// Future enhancement: Analytics events
+analytics.track("upgrade_cta_shown", {
+  context: "rate_limit",
+  feature: "compare",
+});
+analytics.track("upgrade_cta_clicked", { source: "settings_page" });
+```
+
+### Usage Patterns
+
+Monitor usage to optimize upgrade timing:
+
+```typescript
+// Server-side logging for usage analysis
+console.log(
+  `[RATE_LIMIT_DEBUG] User ${userId} (${userType}): ${used}/${quota} messages`
+);
+```
+
+## Configuration
+
+### Environment Variables
+
+```typescript
+// Required for upgrade flow
+NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL=https://payment-link
+```
+
+### Feature Flags
+
+```typescript
+// Future: Feature flag for upgrade CTA variations
+SHOW_UPGRADE_CTA = true;
+UPGRADE_CTA_VARIANT = direct_payment;
+```

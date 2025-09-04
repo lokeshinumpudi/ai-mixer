@@ -19,6 +19,9 @@ The database schema is defined in `lib/db/schema.ts`.
 - **Type Inference**: Use Drizzle's `InferSelectModel` to automatically generate TypeScript types from your table schemas.
 - **Foreign Keys**: Enforce data integrity by using foreign key constraints to link related tables (e.g., `chat.userId` references `user.id`).
 - **User-Scoped Data**: Nearly all tables should have a `userId` column to ensure data is properly associated with a user.
+- **Current Implementation Notes**:
+  - `User.id` currently uses `defaultRandom()` in the schema but is always overridden with the Supabase user ID in queries (`createOAuthUserIfNotExists`). Consider removing the default to avoid confusion, or document this override clearly in migrations and code comments.
+  - Anonymous users are currently persisted with a placeholder email to satisfy `User.email NOT NULL`. If moving away from local anonymous records, plan a migration to relax constraints and refactor usage tracking.
 
 ```typescript
 // lib/db/schema.ts
@@ -66,6 +69,58 @@ export const GET = protectedRoute(async (req, context, user) => {
   const chats = await db.select().from(chat).where(eq(chat.userId, user.id));
   return Response.json(chats);
 });
+```
+
+## Foreign Key Constraints & Deletion Order
+
+When deleting records with foreign key relationships, deletion order is critical:
+
+```typescript
+// lib/db/queries.ts - deleteChatById
+export async function deleteChatById({ id }: { id: string }) {
+  try {
+    // Delete in correct order due to foreign key constraints
+    await db.delete(vote).where(eq(vote.chatId, id));
+    await db.delete(message).where(eq(message.chatId, id));
+    await db.delete(stream).where(eq(stream.chatId, id));
+    // Delete compare runs (compareResult will be cascade deleted automatically)
+    await db.delete(compareRun).where(eq(compareRun.chatId, id));
+    const [chatsDeleted] = await db
+      .delete(chat)
+      .where(eq(chat.id, id))
+      .returning();
+    return chatsDeleted;
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to delete chat by id"
+    );
+  }
+}
+```
+
+**CRITICAL**: Always delete child records before parent records to avoid foreign key constraint violations.
+
+## Related Data Loading
+
+When displaying complex objects, always load related data explicitly:
+
+```typescript
+// ❌ BAD: Only loading parent records
+const runs = await db.select().from(compareRun);
+
+// ✅ GOOD: Loading parent records with related data
+const itemsWithResults = await Promise.all(
+  items.map(async (run) => {
+    const results = await db
+      .select()
+      .from(compareResult)
+      .where(eq(compareResult.runId, run.id))
+      .orderBy(asc(compareResult.createdAt));
+
+    return { ...run, results };
+  })
+);
 ```
 
 ## Migrations

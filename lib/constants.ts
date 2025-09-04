@@ -34,7 +34,7 @@ export const PRICING = {
 export const FREE_MODELS = [
   'openai/gpt-5-nano',
   'openai/gpt-oss-20b',
-  'google/gemini-2.0-flash',
+  'google/gemini-2.5-flash-lite',
 ] as const;
 
 // Pro models (require paid subscription)
@@ -51,7 +51,7 @@ export const PRO_MODELS = [
 
 // Unified model configuration - single source of truth
 export const SUPPORTED_MODELS = {
-  'google/gemini-2.0-flash': {
+  'gemini-2.5-flash-lite': {
     supportsReasoning: true,
     supportsArtifacts: true,
     supportsVision: true,
@@ -158,3 +158,26 @@ export function isModelSupported(modelId: string): boolean {
 
 // Backward compatibility alias (deprecated - use SUPPORTED_MODELS directly)
 export const MODEL_CAPABILITIES = SUPPORTED_MODELS;
+
+// AI Compare feature configuration
+export const COMPARE_MAX_MODELS = 3;
+
+// Curated compare presets for quick selection
+export const COMPARE_PRESETS = {
+  'Fast Reasoning Trio': [
+    'google/gemini-2.0-flash',
+    'openai/gpt-5-nano',
+    'xai/grok-code-fast-1',
+  ],
+  'Vision Models': [
+    'google/gemini-2.0-flash',
+    'openai/gpt-5-mini',
+    'openai/gpt-oss-120b',
+  ],
+  'Code Specialists': [
+    'xai/grok-code-fast-1',
+    'openai/gpt-5-mini',
+    'alibaba/qwen-3-32b',
+  ],
+  'Balanced Duo': ['google/gemini-2.0-flash', 'openai/gpt-4o-mini'],
+} as const;

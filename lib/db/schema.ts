@@ -336,3 +336,47 @@ export const userNotification = pgTable('UserNotification', {
 });
 
 export type UserNotification = InferSelectModel<typeof userNotification>;
+
+// AI Compare feature tables
+export const compareRun = pgTable('CompareRun', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  chatId: uuid('chatId')
+    .notNull()
+    .references(() => chat.id),
+  prompt: text('prompt').notNull(),
+  modelIds: json('modelIds').$type<string[]>().notNull(),
+  status: varchar('status', { length: 32 }).notNull().default('running'), // running|completed|canceled|failed
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type CompareRun = InferSelectModel<typeof compareRun>;
+
+export const compareResult = pgTable(
+  'CompareResult',
+  {
+    id: uuid('id').notNull().defaultRandom(),
+    runId: uuid('runId')
+      .notNull()
+      .references(() => compareRun.id, { onDelete: 'cascade' }),
+    modelId: varchar('modelId', { length: 64 }).notNull(),
+    status: varchar('status', { length: 32 }).notNull().default('running'), // running|completed|canceled|failed
+    content: text('content').default(''),
+    usage: json('usage'),
+    error: text('error'),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    completedAt: timestamp('completedAt'),
+    // Server-side timing fields
+    serverStartedAt: timestamp('serverStartedAt'),
+    serverCompletedAt: timestamp('serverCompletedAt'),
+    inferenceTimeMs: integer('inferenceTimeMs'), // Pure inference time in milliseconds
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.runId, table.modelId] }),
+  }),
+);
+
+export type CompareResult = InferSelectModel<typeof compareResult>;

@@ -5,6 +5,7 @@ import { useWindowSize } from 'usehooks-ts';
 
 import { SidebarToggle } from '@/components/sidebar-toggle';
 import { Button } from '@/components/ui/button';
+import { useModels } from '@/hooks/use-models';
 import type { AppUser } from '@/lib/supabase/types';
 import { memo, useEffect, useRef } from 'react';
 import { DiamondIcon, PlusIcon } from './icons';
@@ -25,6 +26,7 @@ function PureChatHeader({
   isReadonly: boolean;
   user?: AppUser | null;
 }) {
+  const { mutate: mutateModels, userType } = useModels();
   const router = useRouter();
   const { open } = useSidebar();
 
@@ -74,7 +76,16 @@ function PureChatHeader({
             <Button
               variant="outline"
               className="order-2 md:order-1 md:px-2 px-2 md:h-fit ml-auto md:ml-0"
-              onClick={() => {
+              onClick={async () => {
+                // Force revalidation of models data for fresh user settings
+                console.log(
+                  '🔄 Header: Clicking New Chat, triggering mutateModels...',
+                );
+                const freshData = await mutateModels();
+                console.log(
+                  '✅ Header: Fresh models data received:',
+                  freshData,
+                );
                 router.push('/');
                 router.refresh();
               }}
@@ -90,7 +101,7 @@ function PureChatHeader({
       {/* Visibility selector temporarily removed from UI */}
 
       {/* Upgrade button for free users */}
-      {user?.user_metadata?.user_type === 'free' && (
+      {userType === 'free' && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
