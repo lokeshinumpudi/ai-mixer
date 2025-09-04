@@ -1,0 +1,394 @@
+---
+alwaysApply: false
+description: "Best practices for message ordering, layout management, and preventing layout shifts"
+globs: components/messages.tsx,components/message.tsx,components/compare-message.tsx,hooks/use-messages.tsx
+---
+
+# Message Ordering and Layout Patterns
+
+## Overview
+
+Proper message ordering and layout management is crucial for maintaining natural conversation flow and preventing jarring layout shifts during streaming and state transitions.
+
+## Core Principles
+
+### 1. Chronological Order
+
+**Always maintain chronological order** from top to bottom:
+
+```
+[Oldest Message]     ← Top
+[Older Message]
+[Recent Message]
+[Latest Message]     ← Bottom (active)
+```
+
+### 2. Message Hierarchy
+
+```tsx
+// Correct ordering in Messages component:
+{messages.map(/* Regular messages - oldest to newest */)}
+{compareRuns.map(/* Historical compare runs - oldest to newest */)}
+{activeCompareMessage && /* Active compare run - most recent */}
+{status === "submitted" && /* Thinking indicator */}
+```
+
+## Layout Shift Prevention
+
+### Problem Patterns
+
+#### ❌ Wrong: Adding to Beginning
+
+```tsx
+// This causes jump to top!
+items: [newItem, ...existingItems];
+```
+
+#### ✅ Correct: Adding to End
+
+```tsx
+// Natural chronological flow
+items: [...existingItems, newItem];
+```
+
+### Progressive Loading Patterns
+
+#### Latest-First Database Strategy
+
+```tsx
+// Database query: Latest first for efficient pagination
+export async function getMessagesByChatId({
+  id,
+  limit,
+  before,
+}: {
+  id: string;
+  limit?: number;
+  before?: string;
+}) {
+  let query = db
+    .select()
+    .from(message)
+    .where(eq(message.chatId, id))
+    .orderBy(desc(message.createdAt)); // Latest first
+
+  // Cursor-based pagination
+  if (before) {
+    const cursorMessage = await db
+      .select()
+      .from(message)
+      .where(eq(message.id, before))
+      .limit(1);
+
+    if (cursorMessage.length > 0) {
+      query = query.where(
+        and(
+          eq(message.chatId, id),
+          lt(message.createdAt, cursorMessage[0].createdAt)
+        )
+      );
+    }
+  }
+
+  const messages = await (limit ? query.limit(limit) : query);
+  return messages.reverse(); // Chronological order for UI
+}
+```
+
+#### Smart Loading State Management
+
+```tsx
+// Differentiate loading contexts
+const isLoadingInitial = isLoading && messagesData?.length === 0;
+const isLoadingMore = size > (messagesData?.length ?? 0);
+const hasMore = messagesData?.[messagesData.length - 1]?.hasMore ?? false;
+
+// Contextual UI feedback
+{
+  isLoadingInitial && <FullPageSkeleton />;
+}
+{
+  isLoadingMore && <LoadMoreSpinner />;
+}
+{
+  hasMore && <ScrollUpIndicator />;
+}
+```
+
+### Streaming Layout Stability
+
+#### Active Message Positioning
+
+```tsx
+// Active compare message should appear at bottom
+{
+  activeCompareMessage && (
+    <motion.div
+      key={activeCompareMessage.id}
+      initial={{ y: 8, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      className="w-full mx-auto max-w-5xl px-4"
+    >
+      <CompareMessage data={activeCompareMessage} />
+    </motion.div>
+  );
+}
+```
+
+#### Smooth Transitions
+
+```tsx
+// Use Framer Motion for smooth state transitions
+<motion.div
+  initial={{ opacity: 0, y: 8 }}
+  animate={{ opacity: 1, y: 0 }}
+  exit={{ opacity: 0, y: -8 }}
+  transition={{ duration: 0.3, ease: "easeOut" }}
+>
+```
+
+## Scroll Management
+
+### Smart Scroll Behavior
+
+```tsx
+// Only scroll when truly needed
+useEffect(() => {
+  if (activeCompareMessage && activeCompareMessage.status === "running") {
+    // Scroll to active message when it starts
+    setTimeout(() => scrollToBottom("smooth"), 100);
+  }
+}, [activeCompareMessage?.status, scrollToBottom]);
+```
+
+### Prevent Unnecessary Scrolling
+
+```tsx
+// Don't scroll after completion - let user stay where they are
+useEffect(() => {
+  // Only scroll on new message creation, not completion
+  if (newMessageCreated) {
+    scrollToBottom("smooth");
+  }
+}, [newMessageCreated, scrollToBottom]);
+```
+
+## Component Architecture
+
+### Message Container Structure
+
+```tsx
+<div
+  ref={messagesContainerRef}
+  className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-4"
+>
+  {/* Messages in correct order */}
+  <div className="space-y-4">
+    {messages.map((message, index) => (
+      <Message
+        key={message.id}
+        message={message}
+        requiresScrollPadding={index === messages.length - 1}
+      />
+    ))}
+  </div>
+
+  {/* Scroll anchor */}
+  <motion.div
+    ref={messagesEndRef}
+    className="shrink-0 min-w-[24px] min-h-[24px]"
+    onViewportLeave={onViewportLeave}
+    onViewportEnter={onViewportEnter}
+  />
+</div>
+```
+
+## Loading State Management
+
+### Prevent Flashing Content
+
+```tsx
+// Don't show suggestions during loading
+{
+  !isLoadingRuns &&
+    !activeCompareMessage &&
+    messages.length === 0 &&
+    compareRuns.length === 0 && <SuggestedActions />;
+}
+```
+
+### Smooth Loading Transitions
+
+```tsx
+// Use skeleton states for better UX
+{
+  isLoading ? <MessageSkeleton /> : <MessageContent />;
+}
+```
+
+## Animation Patterns
+
+### Consistent Timing
+
+```tsx
+const ANIMATION_CONFIG = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+  transition: {
+    duration: 0.3,
+    ease: [0.25, 0.46, 0.45, 0.94], // Custom easing
+  },
+};
+```
+
+### Staggered Animations
+
+```tsx
+// For multiple items appearing together
+{
+  messages.map((message, index) => (
+    <motion.div
+      key={message.id}
+      {...ANIMATION_CONFIG}
+      transition={{
+        ...ANIMATION_CONFIG.transition,
+        delay: index * 0.1, // Stagger by 100ms
+      }}
+    >
+      <Message message={message} />
+    </motion.div>
+  ));
+}
+```
+
+## Performance Considerations
+
+### Virtual Scrolling for Large Lists
+
+```tsx
+// For very long conversations
+import { FixedSizeList as List } from "react-window";
+
+<List height={400} itemCount={messages.length} itemSize={120} width="100%">
+  {({ index, style }) => (
+    <div style={style}>
+      <Message message={messages[index]} />
+    </div>
+  )}
+</List>;
+```
+
+### Memoization
+
+```tsx
+// Prevent unnecessary re-renders
+const MemoizedMessage = memo(Message, (prevProps, nextProps) => {
+  // Custom comparison logic
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.isLoading === nextProps.isLoading
+  );
+});
+```
+
+## Responsive Design
+
+### Mobile Layout Adjustments
+
+```tsx
+// Adjust spacing and sizing for mobile
+<div
+  className={cn("flex flex-col gap-4 md:gap-8", "px-4 md:px-0", "pb-4 md:pb-6")}
+>
+  {messages.map((message) => (
+    <div key={message.id} className="w-full max-w-4xl mx-auto">
+      <Message message={message} />
+    </div>
+  ))}
+</div>
+```
+
+### Touch-Friendly Interactions
+
+```tsx
+// Ensure touch targets are adequate
+<button className="min-h-[44px] min-w-[44px] p-2" onClick={handleInteraction}>
+  <Icon size={20} />
+</button>
+```
+
+## Testing Layout Stability
+
+### Layout Shift Detection
+
+```tsx
+// Use Playwright to detect layout shifts
+test("no layout shifts during streaming", async ({ page }) => {
+  const messageElement = page.locator("[data-testid='message']");
+
+  // Get initial position
+  const initialBox = await messageElement.boundingBox();
+
+  // Trigger streaming
+  await page.click("[data-testid='send-button']");
+
+  // Wait for completion
+  await page.waitForSelector("[data-testid='completed']");
+
+  // Check position hasn't changed dramatically
+  const finalBox = await messageElement.boundingBox();
+  expect(Math.abs(finalBox.y - initialBox.y)).toBeLessThan(10);
+});
+```
+
+### Scroll Position Preservation
+
+```tsx
+test("scroll position maintained", async ({ page }) => {
+  // Scroll to middle of conversation
+  await page.evaluate(() => {
+    window.scrollTo(0, document.body.scrollHeight / 2);
+  });
+
+  const initialScroll = await page.evaluate(() => window.scrollY);
+
+  // Add new message
+  await page.fill("[data-testid='input']", "Test message");
+  await page.click("[data-testid='send-button']");
+
+  // Wait for message to appear
+  await page.waitForSelector("[data-testid='new-message']");
+
+  // Scroll position should be similar (allowing for small adjustments)
+  const finalScroll = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(finalScroll - initialScroll)).toBeLessThan(100);
+});
+```
+
+## Best Practices Summary
+
+### ✅ Do
+
+- Maintain chronological message order (oldest to newest)
+- Use optimistic updates to prevent layout shifts
+- Implement smooth animations with consistent timing
+- Handle loading states to prevent content flashing
+- Test for layout stability across different screen sizes
+- Use proper memoization to prevent unnecessary re-renders
+
+### ❌ Don't
+
+- Add new messages to the beginning of lists
+- Trigger unnecessary scrolling during state transitions
+- Show loading states that cause content to flash
+- Use inconsistent animation timing or easing
+- Forget to handle edge cases (empty states, errors)
+- Ignore mobile responsiveness in layout decisions
+
+### Key Metrics to Monitor
+
+- **Layout Shift Score**: Use Cumulative Layout Shift (CLS) metrics
+- **Animation Performance**: Monitor frame drops during transitions
+- **Scroll Performance**: Ensure smooth scrolling on all devices
+- **Loading Performance**: Minimize time to interactive content

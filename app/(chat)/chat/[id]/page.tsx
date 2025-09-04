@@ -15,7 +15,8 @@ export default function Page() {
   const { user, loading } = useSupabaseAuth();
   const id = params.id as string;
 
-  const { chat, messages, isLoading, error } = useChatData(id);
+  const { chat, messages, isLoading, error, hasMore, loadMore, isLoadingMore } =
+    useChatData(id);
   const {
     hasAccess,
     isLoading: accessLoading,
@@ -74,6 +75,9 @@ export default function Page() {
         isReadonly={isReadonly}
         user={user}
         autoResume={true}
+        hasMore={hasMore}
+        loadMore={loadMore}
+        isLoadingMore={isLoadingMore}
       />
       <DataStreamHandler />
     </>

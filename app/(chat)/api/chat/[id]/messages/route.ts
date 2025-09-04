@@ -12,6 +12,9 @@ export const GET = authenticatedRoute(async (request, context, user) => {
   }
 
   const { id: chatId } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const limit = Number.parseInt(searchParams.get('limit') || '20');
+  const before = searchParams.get('before'); // Cursor for pagination
 
   if (!chatId) {
     return new ChatSDKError(
@@ -33,10 +36,24 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       return new ChatSDKError('forbidden:chat', 'Access denied').toResponse();
     }
 
-    const messagesFromDb = await getMessagesByChatId({ id: chatId });
+    const messagesFromDb = await getMessagesByChatId({
+      id: chatId,
+      limit,
+      before: before || undefined,
+    });
     const uiMessages = convertToUIMessages(messagesFromDb);
 
-    return Response.json({ messages: uiMessages });
+    // Check if there are more messages
+    const { getMessagesCount } = await import('@/lib/db/queries');
+    const totalMessages = await getMessagesCount({ chatId });
+    const hasMore =
+      messagesFromDb.length === limit && uiMessages.length < totalMessages;
+
+    return Response.json({
+      messages: uiMessages,
+      hasMore,
+      nextCursor: hasMore && uiMessages.length > 0 ? uiMessages[0].id : null,
+    });
   } catch (error) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();

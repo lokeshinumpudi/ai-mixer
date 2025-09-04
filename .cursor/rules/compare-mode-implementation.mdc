@@ -1,0 +1,160 @@
+---
+alwaysApply: false
+description: "Patterns and best practices for implementing compare mode functionality"
+globs: hooks/use-compare-run.ts,components/compare-message.tsx,components/messages.tsx,components/chat.tsx
+---
+
+# Compare Mode Implementation Patterns
+
+## Overview
+
+Compare mode enables side-by-side model comparison with real-time streaming, optimistic updates, and smooth UX transitions.
+
+## Core Architecture
+
+### State Management (`useCompareRun` hook)
+
+```tsx
+interface CompareRunState {
+  runId: string | null;
+  prompt: string;
+  modelIds: string[];
+  status: "idle" | "running" | "completed" | "canceled" | "failed";
+  byModelId: Record<string, CompareModelState>;
+  isRunning: boolean;
+}
+```
+
+### Key Components
+
+- **`useCompareRun`**: Manages compare state, streaming, and optimistic updates
+- **`CompareMessage`**: Renders individual model responses in grid layout
+- **`Messages`**: Orchestrates regular messages + compare runs
+
+## Implementation Patterns
+
+### 1. Message Positioning
+
+```tsx
+// In Messages component - correct order for natural flow
+{messages.map(/* regular messages */)}
+{compareRuns.map(/* historical compare runs */)}
+{activeCompareMessage && /* active compare run */}
+```
+
+**Critical**: Active compare messages must appear at bottom, historical runs in middle, regular messages at top.
+
+### 2. Optimistic Updates Pattern
+
+```tsx
+// Instead of API refresh, update cache optimistically
+mutateCompareRuns(
+  (currentData) => ({
+    ...currentData,
+    items: [...currentData.items, completedRun], // Add to END
+  }),
+  false // Don't revalidate from server
+);
+```
+
+**Why**: Prevents layout shifts and provides instant feedback.
+
+### 3. Loading State Management
+
+```tsx
+// Prevent inappropriate suggestions during loading
+{
+  messages.length === 0 &&
+    compareRuns.length === 0 &&
+    !activeCompareMessage &&
+    !isLoadingRuns && <SuggestedActions />; // ← Critical: Check loading state
+}
+```
+
+**Why**: Prevents suggestions from flashing during page loads.
+
+## Streaming Events
+
+### Event Types
+
+- `"run_start"`: Compare run initiated
+- `"model_start"`: Individual model begins processing
+- `"delta"`: Content chunks from model
+- `"reasoning_delta"`: Reasoning content chunks
+- `"model_end"`: Individual model completes
+- `"run_end"`: All models complete
+
+### State Updates
+
+```tsx
+case "run_end": {
+  // Capture final state for optimistic updates
+  const completedRun = createCompletedRunObject(capturedState);
+
+  // Optimistic cache update
+  mutateCompareRuns(cache => ({
+    ...cache,
+    items: [...cache.items, completedRun]
+  }), false);
+
+  // Clear active state after delay
+  setTimeout(() => clearActiveState(), 500);
+}
+```
+
+## Best Practices
+
+### ✅ Do
+
+- Use optimistic updates to prevent layout shifts
+- Add new runs to END of list (chronological order)
+- Handle loading states to prevent UI flashing
+- Maintain proper message positioning hierarchy
+- Use proper TypeScript types for state management
+
+### ❌ Don't
+
+- Refresh data from API after every stream completion
+- Add new messages to beginning of list
+- Show suggestions during loading states
+- Mix message positioning order
+- Use non-null assertions without proper checks
+
+## Performance Considerations
+
+### Memory Management
+
+- Clear completed states after optimistic updates
+- Use proper cleanup in useEffect returns
+- Handle stream cancellations gracefully
+
+### Network Efficiency
+
+- Prefer optimistic updates over API refreshes
+- Use selective revalidation when needed
+- Cache streaming data locally
+
+## Error Handling
+
+```tsx
+case "model_error": {
+  setState(prev => ({
+    ...prev,
+    byModelId: {
+      ...prev.byModelId,
+      [event.modelId]: {
+        ...prev.byModelId[event.modelId],
+        status: "failed",
+        error: event.error,
+      },
+    },
+  }));
+}
+```
+
+## Testing Considerations
+
+- Test optimistic updates don't break on network failures
+- Verify loading states prevent inappropriate UI changes
+- Ensure proper cleanup on component unmount
+- Test error states and recovery flows

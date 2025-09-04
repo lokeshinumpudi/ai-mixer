@@ -17,15 +17,13 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import useSWR, { useSWRConfig } from 'swr';
-import { unstable_serialize } from 'swr/infinite';
+import useSWR from 'swr';
 import { useModels } from '../hooks/use-models';
 import { Artifact } from './artifact';
 import { useDataStream } from './data-stream-provider';
 import { GoogleLoginCTA } from './google-login-cta';
 import { Messages } from './messages';
 import { MultimodalInput } from './multimodal-input';
-import { getChatHistoryPaginationKey } from './sidebar-history';
 import { toast, upgradeToast } from './toast';
 type VisibilityType = 'private' | 'public';
 
@@ -37,6 +35,9 @@ export function Chat({
   isReadonly,
   user,
   autoResume,
+  hasMore,
+  loadMore,
+  isLoadingMore,
 }: {
   id: string;
   initialMessages: ChatMessage[];
@@ -45,6 +46,9 @@ export function Chat({
   isReadonly: boolean;
   user: AppUser | null;
   autoResume: boolean;
+  hasMore?: boolean;
+  loadMore?: () => Promise<void>;
+  isLoadingMore?: boolean;
 }) {
   const { visibilityType } = useChatVisibility({
     chatId: id,
@@ -58,7 +62,6 @@ export function Chat({
     user: authUser,
   } = useAnonymousAuth();
 
-  const { mutate } = useSWRConfig();
   const { setDataStream } = useDataStream();
 
   // Use integrated models API that includes user settings
@@ -151,7 +154,8 @@ export function Chat({
       setDataStream((ds) => (ds ? [...ds, dataPart] : []));
     },
     onFinish: () => {
-      mutate(unstable_serialize(getChatHistoryPaginationKey));
+      // Note: Removed the history mutation to prevent layout shifts
+      // The chat history will be updated naturally through navigation
       // Increment message count for anonymous users
       if (authUser?.is_anonymous !== false) {
         incrementMessageCount();
@@ -339,6 +343,15 @@ export function Chat({
           cancelModel={cancelModel}
           cancelAll={cancelAll}
           startCompare={startCompare}
+          isLoadingRuns={isLoadingRuns}
+          hasMore={hasMore}
+          loadMore={loadMore}
+          isLoadingMore={isLoadingMore}
+          sendMessage={sendMessage}
+          selectedVisibilityType={visibilityType}
+          isCompareMode={isCompareMode}
+          selectedModelIds={selectedModelIds}
+          onStartCompare={handleStartCompare}
         />
 
         {/* Google Login Prompt for Anonymous Users */}
@@ -368,7 +381,9 @@ export function Chat({
           </div>
         )}
 
-        <form className="flex mx-auto px-6 bg-background/95 backdrop-blur-sm pb-6 md:pb-8 gap-2 w-full md:max-w-3xl border-t border-border/30">
+        <form className="absolute bottom-0 left-0 right-0 flex mx-auto px-6 pb-1 md:pb-6 gap-2 w-full md:max-w-3xl">
+          {/* Backdrop blur background only behind the input area */}
+          <div className="absolute inset-x-6 inset-y-0 bg-background/95 backdrop-blur-sm border-t border-border/30 rounded-t-lg -z-10" />
           {!isReadonly && messageCount < 10 && (
             <MultimodalInput
               chatId={id}
@@ -392,6 +407,7 @@ export function Chat({
               compareRuns={compareRuns}
               activeCompareMessage={compareState.status !== 'idle'}
               isModelsLoading={isModelsLoading}
+              isLoadingRuns={isLoadingRuns}
             />
           )}
           {!isReadonly &&

@@ -7,6 +7,11 @@ import cx from 'classnames';
 import equal from 'fast-deep-equal';
 import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useState } from 'react';
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from './ai-elements/reasoning';
 import { useDataStream } from './data-stream-provider';
 import { DocumentToolCall, DocumentToolResult } from './document';
 import { DocumentPreview } from './document-preview';
@@ -14,7 +19,6 @@ import { PencilEditIcon, SparklesIcon } from './icons';
 import { Markdown } from './markdown';
 import { MessageActions } from './message-actions';
 import { MessageEditor } from './message-editor';
-import { MessageReasoning } from './message-reasoning';
 import { PreviewAttachment } from './preview-attachment';
 import { Button } from './ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -113,11 +117,14 @@ const PurePreviewMessage = ({
 
               if (type === 'reasoning' && part.text?.trim().length > 0) {
                 return (
-                  <MessageReasoning
+                  <Reasoning
                     key={key}
-                    isLoading={isLoading}
-                    reasoning={part.text}
-                  />
+                    isStreaming={isLoading}
+                    className="w-full"
+                  >
+                    <ReasoningTrigger />
+                    <ReasoningContent>{part.text}</ReasoningContent>
+                  </Reasoning>
                 );
               }
 

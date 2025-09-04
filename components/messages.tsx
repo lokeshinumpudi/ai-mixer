@@ -4,11 +4,12 @@ import type { ChatMessage } from '@/lib/types';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import equal from 'fast-deep-equal';
 import { motion } from 'framer-motion';
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { CompareMessage, type CompareMessageData } from './compare-message';
 import { useDataStream } from './data-stream-provider';
 import { Greeting } from './greeting';
 import { PreviewMessage, ThinkingMessage } from './message';
+import { SuggestedActions } from './suggested-actions';
 
 interface MessagesProps {
   chatId: string;
@@ -27,13 +28,30 @@ interface MessagesProps {
     modelIds: string[];
     byModelId: Record<
       string,
-      { status: string; content: string; usage?: any; error?: string }
+      {
+        status: string;
+        content: string;
+        reasoning?: string;
+        usage?: any;
+        error?: string;
+      }
     >;
   };
   compareRuns: any[];
   cancelModel: (modelId: string) => void;
   cancelAll: () => void;
   startCompare: (params: { prompt: string; modelIds: string[] }) => void;
+  isLoadingRuns?: boolean;
+  // Progressive loading props
+  hasMore?: boolean;
+  loadMore?: () => Promise<void>;
+  isLoadingMore?: boolean;
+  // SuggestedActions props
+  sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
+  selectedVisibilityType: 'private' | 'public';
+  isCompareMode?: boolean;
+  selectedModelIds?: string[];
+  onStartCompare?: (prompt: string, modelIds: string[]) => void;
 }
 
 function PureMessages({
@@ -49,6 +67,15 @@ function PureMessages({
   cancelModel,
   cancelAll,
   startCompare,
+  isLoadingRuns = false,
+  hasMore = false,
+  loadMore,
+  isLoadingMore = false,
+  sendMessage,
+  selectedVisibilityType,
+  isCompareMode = false,
+  selectedModelIds = [],
+  onStartCompare,
 }: MessagesProps) {
   const {
     containerRef: messagesContainerRef,
@@ -65,15 +92,6 @@ function PureMessages({
   // Compare state is now passed from parent Chat component
 
   useDataStream();
-
-  // Scroll to bottom when compare runs are updated (after completion)
-  useEffect(() => {
-    if (compareRuns.length > 0) {
-      // Small delay to ensure DOM is updated
-      setTimeout(() => scrollToBottom('smooth'), 100);
-    }
-  }, [compareRuns.length, scrollToBottom]);
-
   // Create compare message data from active compare state
   const activeCompareMessage: CompareMessageData | null =
     compareState.status !== 'idle'
@@ -86,15 +104,87 @@ function PureMessages({
         }
       : null;
 
+  // Smart scroll management for compare messages
+  const prevActiveMessageRef = useRef<CompareMessageData | null>(null);
+
+  useEffect(() => {
+    // Scroll to active compare message when it first appears or when it starts running
+    if (activeCompareMessage && !prevActiveMessageRef.current) {
+      // New active compare message appeared - scroll to it
+      setTimeout(() => scrollToBottom('smooth'), 100);
+    } else if (
+      activeCompareMessage &&
+      prevActiveMessageRef.current &&
+      activeCompareMessage.status === 'running' &&
+      prevActiveMessageRef.current.status !== 'running'
+    ) {
+      // Compare message transitioned to running state - scroll to it
+      setTimeout(() => scrollToBottom('smooth'), 100);
+    }
+
+    // Update ref for next comparison
+    prevActiveMessageRef.current = activeCompareMessage;
+  }, [activeCompareMessage, scrollToBottom]);
+
+  // Progressive loading: Load more messages when scrolling to top
+  const topRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!hasMore || !loadMore || isLoadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    if (topRef.current) {
+      observer.observe(topRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, isLoadingMore]);
+
+  // Don't auto-scroll when historical compare runs are loaded
+  // This prevents jarring behavior after compare completion
+
   return (
     <div
       ref={messagesContainerRef}
-      className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-4 relative"
+      className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-24 md:pb-28 relative"
     >
+      {/* Invisible element at top for scroll detection */}
+      {hasMore && (
+        <div ref={topRef} className="h-4 flex items-center justify-center">
+          {isLoadingMore && (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900" />
+          )}
+        </div>
+      )}
+
       {messages.length === 0 &&
         compareRuns.length === 0 &&
-        !activeCompareMessage && <Greeting />}
+        !activeCompareMessage &&
+        !isLoadingRuns && (
+          <div className="flex flex-col items-center gap-8 py-8">
+            <Greeting />
+            <div className="w-full max-w-2xl px-4">
+              <SuggestedActions
+                sendMessage={sendMessage}
+                chatId={chatId}
+                selectedVisibilityType={selectedVisibilityType}
+                isCompareMode={isCompareMode}
+                selectedModelIds={selectedModelIds}
+                onStartCompare={onStartCompare}
+              />
+            </div>
+          </div>
+        )}
 
+      {/* Regular messages */}
       {messages.map((message, index) => (
         <PreviewMessage
           key={message.id}
@@ -115,36 +205,7 @@ function PureMessages({
         />
       ))}
 
-      {/* Active compare run */}
-      {activeCompareMessage && (
-        <motion.div
-          initial={{ y: 8, opacity: 0, scale: 0.98 }}
-          animate={{
-            y: 0,
-            opacity: 1,
-            scale: 1,
-            transition: {
-              duration: 0.5,
-              ease: [0.25, 0.46, 0.45, 0.94],
-            },
-          }}
-          className="w-full mx-auto max-w-5xl px-4"
-        >
-          <CompareMessage
-            data={activeCompareMessage}
-            onCancelModel={cancelModel}
-            onCancelAll={cancelAll}
-            onRetry={() =>
-              startCompare({
-                prompt: activeCompareMessage.prompt,
-                modelIds: activeCompareMessage.modelIds,
-              })
-            }
-          />
-        </motion.div>
-      )}
-
-      {/* Historical compare runs */}
+      {/* Historical compare runs (older first) */}
       {compareRuns.map((run) => (
         <motion.div
           key={run.id}
@@ -172,6 +233,7 @@ function PureMessages({
                     acc[result.modelId] = {
                       status: result.status,
                       content: result.content || '',
+                      reasoning: result.reasoning || '',
                       usage: result.usage,
                       error: result.error,
                       serverStartedAt: result.serverStartedAt,
@@ -186,6 +248,35 @@ function PureMessages({
           />
         </motion.div>
       ))}
+
+      {/* Active compare run (always at bottom) */}
+      {activeCompareMessage && (
+        <motion.div
+          initial={{ y: 8, opacity: 0, scale: 0.98 }}
+          animate={{
+            y: 0,
+            opacity: 1,
+            scale: 1,
+            transition: {
+              duration: 0.5,
+              ease: [0.25, 0.46, 0.45, 0.94],
+            },
+          }}
+          className="w-full mx-auto max-w-5xl px-4"
+        >
+          <CompareMessage
+            data={activeCompareMessage}
+            onCancelModel={cancelModel}
+            onCancelAll={cancelAll}
+            onRetry={() =>
+              startCompare({
+                prompt: activeCompareMessage.prompt,
+                modelIds: activeCompareMessage.modelIds,
+              })
+            }
+          />
+        </motion.div>
+      )}
 
       {status === 'submitted' &&
         messages.length > 0 &&

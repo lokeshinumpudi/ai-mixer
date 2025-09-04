@@ -306,17 +306,71 @@ export async function saveMessages({
   }
 }
 
-export async function getMessagesByChatId({ id }: { id: string }) {
+export async function getMessagesByChatId({
+  id,
+  limit,
+  before,
+}: {
+  id: string;
+  limit?: number;
+  before?: string;
+}) {
   try {
-    return await db
+    // Build the base query
+    let query = db
       .select()
       .from(message)
       .where(eq(message.chatId, id))
-      .orderBy(asc(message.createdAt));
+      .orderBy(desc(message.createdAt)); // Latest first for pagination
+
+    // Add cursor-based pagination if before is provided
+    if (before) {
+      const cursorMessage = await db
+        .select()
+        .from(message)
+        .where(eq(message.id, before))
+        .limit(1);
+
+      if (cursorMessage.length > 0) {
+        // Create new query with cursor condition
+        query = db
+          .select()
+          .from(message)
+          .where(
+            and(
+              eq(message.chatId, id),
+              lt(message.createdAt, cursorMessage[0].createdAt),
+            ),
+          )
+          .orderBy(desc(message.createdAt));
+      }
+    }
+
+    // Apply limit and execute query
+    const messages = await (limit ? query.limit(limit) : query);
+
+    // Reverse to chronological order for UI
+    return messages.reverse();
   } catch (error) {
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get messages by chat id',
+    );
+  }
+}
+
+export async function getMessagesCount({ chatId }: { chatId: string }) {
+  try {
+    const result = await db
+      .select({ count: count() })
+      .from(message)
+      .where(eq(message.chatId, chatId));
+
+    return result[0]?.count || 0;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get messages count',
     );
   }
 }
@@ -1712,6 +1766,7 @@ export async function completeCompareResult({
   runId,
   modelId,
   content,
+  reasoning,
   usage,
   serverStartedAt,
   serverCompletedAt,
@@ -1720,6 +1775,7 @@ export async function completeCompareResult({
   runId: string;
   modelId: string;
   content: string;
+  reasoning?: string;
   usage?: any;
   serverStartedAt?: Date;
   serverCompletedAt?: Date;
@@ -1731,6 +1787,7 @@ export async function completeCompareResult({
       .set({
         status: 'completed',
         content,
+        reasoning,
         usage,
         completedAt: new Date(),
         serverStartedAt,

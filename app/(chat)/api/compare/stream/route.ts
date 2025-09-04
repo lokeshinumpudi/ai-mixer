@@ -36,6 +36,7 @@ interface CompareSSEEvent {
     | 'run_start'
     | 'model_start'
     | 'delta'
+    | 'reasoning_delta'
     | 'model_end'
     | 'model_error'
     | 'run_end'
@@ -45,6 +46,7 @@ interface CompareSSEEvent {
   modelId?: string;
   models?: string[];
   textDelta?: string;
+  reasoningDelta?: string;
   usage?: any;
   error?: string;
   status?: string;
@@ -230,7 +232,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 selectedModel: {
                   id: modelId,
                   supportsArtifacts: false, // Disabled for compare
-                  supportsReasoning: false, // Disabled for compare
+                  supportsReasoning: true, // Disabled for compare
                 },
                 requestHints,
               }),
@@ -244,24 +246,41 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             });
 
             let fullContent = '';
+            let reasoningContent = '';
 
-            // Stream the text deltas
-            for await (const delta of result.textStream) {
+            // Stream the full result to capture both text and reasoning
+            for await (const part of result.fullStream) {
               if (abortController.signal.aborted) break;
 
-              fullContent += delta;
+              if (part.type === 'text') {
+                fullContent += part.text;
 
-              // Send delta to client
-              controller.enqueue(
-                new TextEncoder().encode(
-                  createSSEMessage({
-                    type: 'delta',
-                    runId,
-                    modelId,
-                    textDelta: delta,
-                  }),
-                ),
-              );
+                // Send text delta to client
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    createSSEMessage({
+                      type: 'delta',
+                      runId,
+                      modelId,
+                      textDelta: part.text,
+                    }),
+                  ),
+                );
+              } else if (part.type === 'reasoning') {
+                reasoningContent += part.text;
+
+                // Send reasoning delta to client
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    createSSEMessage({
+                      type: 'reasoning_delta',
+                      runId,
+                      modelId,
+                      reasoningDelta: part.text,
+                    }),
+                  ),
+                );
+              }
 
               // Optionally append to database (for reliability)
               // await appendCompareResultContent({ runId: runId!, modelId, delta });
@@ -279,6 +298,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 runId,
                 modelId,
                 content: fullContent,
+                reasoning: reasoningContent,
                 usage,
                 serverStartedAt,
                 serverCompletedAt,

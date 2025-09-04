@@ -1,24 +1,29 @@
 'use client';
 
-import { Badge } from '@/components/ui/badge';
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from '@/components/ai-elements/reasoning';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { getModelCapabilities } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import {
   CheckCircle,
   Loader2,
+  Maximize2,
   RotateCcw,
   StopCircle,
   X,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Markdown } from './markdown';
+import { ExpandableModal } from './ui/expandable-modal';
+import { MobileScrollContainer } from './ui/mobile-scroll-container';
 
-// Provider-based color mapping for model chips
-function getModelChipColor(modelId: string): string {
+// Provider-based color mapping for model chips - memoized for performance
+const getModelChipColor = (modelId: string): string => {
   const provider = modelId.split('/')[0]?.toLowerCase();
 
   switch (provider) {
@@ -39,7 +44,19 @@ function getModelChipColor(modelId: string): string {
     default:
       return 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950/50 dark:text-slate-400 dark:border-slate-800';
   }
-}
+};
+
+// Memoized utility functions for performance
+const getModelDisplayName = (modelId: string): string => {
+  const parts = modelId.split('/');
+  if (parts.length === 2) {
+    const [provider, model] = parts;
+    const capitalizedProvider =
+      provider.charAt(0).toUpperCase() + provider.slice(1);
+    return `${capitalizedProvider} ${model}`;
+  }
+  return modelId;
+};
 
 export interface CompareMessageData {
   id: string;
@@ -50,6 +67,7 @@ export interface CompareMessageData {
     [modelId: string]: {
       status: 'pending' | 'running' | 'completed' | 'canceled' | 'failed';
       content: string;
+      reasoning?: string; // AI reasoning/thinking content
       usage?: any;
       error?: string;
       // Server-side timing (authoritative)
@@ -66,17 +84,6 @@ interface CompareMessageProps {
   onCancelAll?: () => void;
   onRetry?: () => void;
   className?: string;
-}
-
-function getModelDisplayName(modelId: string): string {
-  const parts = modelId.split('/');
-  if (parts.length === 2) {
-    const [provider, model] = parts;
-    const capitalizedProvider =
-      provider.charAt(0).toUpperCase() + provider.slice(1);
-    return `${capitalizedProvider} ${model}`;
-  }
-  return modelId;
 }
 
 function getStatusIcon(
@@ -117,19 +124,20 @@ function getStatusColor(
   }
 }
 
-function CompareResultCard({
+const CompareResultCard = memo(function CompareResultCard({
   modelId,
   result,
   onCancel,
+  onExpand,
   className,
 }: {
   modelId: string;
   result: CompareMessageData['results'][string];
   onCancel?: () => void;
+  onExpand?: () => void;
   className?: string;
 }) {
-  const modelName = getModelDisplayName(modelId);
-  const capabilities = getModelCapabilities(modelId);
+  const modelName = useMemo(() => getModelDisplayName(modelId), [modelId]);
   const canCancel = result.status === 'running' && onCancel;
 
   function resolveTokenCounts(usage: any | undefined): {
@@ -148,36 +156,60 @@ function CompareResultCard({
   }
 
   return (
-    <Card className={cn('flex h-full flex-col', className)}>
-      <CardHeader className="flex-shrink-0 pb-3">
+    <Card className={cn('flex h-full flex-col overflow-hidden', className)}>
+      {/* Clean header with model info, status icon, and timing */}
+      <CardHeader className="flex-shrink-0 px-4 py-3 border-b border-border/30">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={`text-xs font-medium border ${getModelChipColor(
-                modelId,
-              )}`}
-            >
-              {modelName}
-            </Badge>
-            <Badge
-              className={cn('text-xs', getStatusColor(result.status))}
-              variant="secondary"
-            >
-              <div className="flex items-center gap-1">
+          <div className="flex items-center gap-3">
+            {/* Model name and status icon */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">
+                {modelName}
+              </span>
+              <div className="flex items-center">
                 {getStatusIcon(result.status)}
-                <span className="capitalize">{result.status}</span>
               </div>
-            </Badge>
+            </div>
+
+            {/* Time indicator - only show for running or completed states */}
+            {((result.status === 'completed' && result.inferenceTimeMs) ||
+              (result.status === 'running' && result.serverStartedAt)) && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground ml-2">
+                <span className="font-mono">
+                  {result.status === 'running' && result.serverStartedAt ? (
+                    <LiveTimer startTime={result.serverStartedAt} />
+                  ) : result.inferenceTimeMs ? (
+                    `${(result.inferenceTimeMs / 1000).toFixed(2)}s`
+                  ) : (
+                    '0.00s'
+                  )}
+                </span>
+              </div>
+            )}
           </div>
 
+          {/* Action buttons on the right */}
           <div className="flex items-center gap-1">
+            {/* Expand button */}
+            {onExpand && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onExpand}
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                title="Expand for better readability"
+              >
+                <Maximize2 className="h-3 w-3" />
+              </Button>
+            )}
+
+            {/* Cancel button */}
             {canCancel && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onCancel}
-                className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
                 title="Cancel this model"
               >
                 <X className="h-3 w-3" />
@@ -185,36 +217,36 @@ function CompareResultCard({
             )}
           </div>
         </div>
-
-        {/* Model capabilities */}
-        {/* {capabilities && (
-          <div className="flex items-center gap-1 mt-1">
-            {capabilities.supportsReasoning && (
-              <Badge variant="outline" className="text-xs">
-                Reasoning
-              </Badge>
-            )}
-            {capabilities.supportsArtifacts && (
-              <Badge variant="outline" className="text-xs">
-                Artifacts
-              </Badge>
-            )}
-          </div>
-        )} */}
       </CardHeader>
 
-      <Separator />
-
-      <CardContent className="flex-1 p-4 overflow-hidden">
-        <div className="h-full overflow-y-auto">
+      <CardContent className="flex-1 p-0 overflow-hidden flex flex-col">
+        {/* Main content area */}
+        <div className="flex-1 overflow-y-auto p-4">
           {result.status === 'failed' && result.error ? (
             <div className="text-red-600 text-sm">
-              <p className="font-medium">Error:</p>
-              <p>{result.error}</p>
+              <p className="font-medium mb-1">Error:</p>
+              <p className="text-red-500">{result.error}</p>
             </div>
-          ) : result.content ? (
-            <div className="prose prose-sm max-w-none dark:prose-invert">
-              <Markdown>{result.content}</Markdown>
+          ) : result.content || result.reasoning ? (
+            <div className="space-y-3">
+              {/* Reasoning section - collapsible using AI Elements */}
+              {result.reasoning && (
+                <Reasoning
+                  isStreaming={result.status === 'running'}
+                  className="w-full"
+                  variant="grey"
+                >
+                  <ReasoningTrigger />
+                  <ReasoningContent>{result.reasoning}</ReasoningContent>
+                </Reasoning>
+              )}
+
+              {/* Main content */}
+              {result.content && (
+                <div className="prose prose-sm max-w-none dark:prose-invert">
+                  <Markdown>{result.content}</Markdown>
+                </div>
+              )}
             </div>
           ) : result.status === 'running' ? (
             <div className="text-muted-foreground text-sm">
@@ -226,55 +258,158 @@ function CompareResultCard({
             </div>
           )}
         </div>
-
-        {/* Usage and timing info - show whenever we have data */}
-        {(result.usage ||
-          result.inferenceTimeMs != null ||
-          result.serverStartedAt) && (
-          <div className="mt-3 pt-3 border-t text-xs text-muted-foreground space-y-1">
-            {(() => {
-              const { inTokens, outTokens } = resolveTokenCounts(result.usage);
-              if (inTokens == null && outTokens == null) return null;
-              return (
-                <div className="flex items-center justify-between">
-                  <span>Tokens:</span>
-                  <span>
-                    {inTokens ?? 0} in, {outTokens ?? 0} out
-                  </span>
-                </div>
-              );
-            })()}
-            {result.status === 'completed' && result.inferenceTimeMs && (
-              <div className="flex items-center justify-between">
-                <span>Inference time:</span>
-                <span>{(result.inferenceTimeMs / 1000).toFixed(2)}s</span>
-              </div>
-            )}
-            {result.status === 'running' && result.serverStartedAt && (
-              <div className="flex items-center justify-between">
-                <span>Running for:</span>
-                <LiveTimer startTime={result.serverStartedAt} />
-              </div>
-            )}
-            {result.status === 'completed' &&
-              result.inferenceTimeMs &&
-              (() => {
-                const { outTokens } = resolveTokenCounts(result.usage);
-                if (outTokens == null) return null;
-                const speed = outTokens / (result.inferenceTimeMs / 1000);
-                return (
-                  <div className="flex items-center justify-between font-medium">
-                    <span>Speed:</span>
-                    <span>{speed.toFixed(1)} tok/s</span>
-                  </div>
-                );
-              })()}
-          </div>
-        )}
       </CardContent>
     </Card>
   );
-}
+});
+
+// Component for modal header content with timing and usage info
+const ModalHeaderContent = memo(function ModalHeaderContent({
+  result,
+  onCancel,
+}: {
+  result: CompareMessageData['results'][string];
+  onCancel?: () => void;
+}) {
+  const tokenCounts = useMemo(() => {
+    if (!result.usage) return { inTokens: null, outTokens: null };
+    const inTokens =
+      result.usage.promptTokens ??
+      result.usage.inputTokens ??
+      result.usage.prompt_tokens ??
+      null;
+    const outTokens =
+      result.usage.completionTokens ??
+      result.usage.outputTokens ??
+      result.usage.completion_tokens ??
+      null;
+    return { inTokens, outTokens };
+  }, [result.usage]);
+
+  const canCancel = result.status === 'running' && onCancel;
+
+  return (
+    <div className="flex items-center gap-4">
+      {/* Status icon */}
+      <div className="flex items-center">{getStatusIcon(result.status)}</div>
+
+      {/* Time indicator */}
+      {((result.status === 'completed' && result.inferenceTimeMs) ||
+        (result.status === 'running' && result.serverStartedAt)) && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">
+            {result.status === 'running' ? 'Running for' : 'Time'}
+          </span>
+          <span className="font-mono font-medium">
+            {result.status === 'running' && result.serverStartedAt ? (
+              <LiveTimer startTime={result.serverStartedAt} />
+            ) : result.inferenceTimeMs ? (
+              `${(result.inferenceTimeMs / 1000).toFixed(2)}s`
+            ) : (
+              '0.00s'
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Usage info if available */}
+      {result.usage && (
+        <div className="flex items-center gap-2 text-sm">
+          {tokenCounts.inTokens && (
+            <span className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">↑</span>
+              <span className="font-mono">
+                {tokenCounts.inTokens.toLocaleString()}
+              </span>
+            </span>
+          )}
+          {tokenCounts.outTokens && (
+            <span className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">↓</span>
+              <span className="font-mono">
+                {tokenCounts.outTokens.toLocaleString()}
+              </span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Cancel button in header */}
+      {canCancel && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onCancel}
+          className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 ml-2"
+        >
+          <X className="h-4 w-4" />
+          Cancel
+        </Button>
+      )}
+    </div>
+  );
+});
+
+// Memoized expanded version of the compare result for modal view
+const ExpandedCompareResult = memo(function ExpandedCompareResult({
+  modelId,
+  result,
+  onCancel,
+}: {
+  modelId: string;
+  result: CompareMessageData['results'][string];
+  onCancel?: () => void;
+}) {
+  return (
+    <div className="h-full flex flex-col">
+      {/* Content area without the header (moved to modal) */}
+      <div className="flex-1 overflow-y-auto p-6">
+        {result.status === 'failed' && result.error ? (
+          <div className="text-red-600">
+            <p className="font-medium mb-3 text-lg">Error occurred:</p>
+            <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <p className="text-red-700 dark:text-red-300">{result.error}</p>
+            </div>
+          </div>
+        ) : result.content || result.reasoning ? (
+          <div className="space-y-6">
+            {/* Reasoning section - more prominent in expanded view */}
+            {result.reasoning && (
+              <Reasoning
+                isStreaming={result.status === 'running'}
+                className="w-full"
+                variant="grey"
+              >
+                <ReasoningTrigger />
+                <ReasoningContent>{result.reasoning}</ReasoningContent>
+              </Reasoning>
+            )}
+
+            {/* Main content with enhanced typography */}
+            {result.content && (
+              <div className="prose prose-base max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground">
+                <Markdown>{result.content}</Markdown>
+              </div>
+            )}
+          </div>
+        ) : result.status === 'running' ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+              <p className="text-muted-foreground text-lg">
+                Generating response...
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center py-12">
+            <p className="text-muted-foreground text-lg">Waiting to start...</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
 
 function LiveTimer({ startTime }: { startTime: string }) {
   const [elapsed, setElapsed] = useState(0);
@@ -300,7 +435,7 @@ function LiveTimer({ startTime }: { startTime: string }) {
   return <span>{(elapsed / 1000).toFixed(1)}s</span>;
 }
 
-export function CompareMessage({
+export const CompareMessage = memo(function CompareMessage({
   data,
   onCancelModel,
   onCancelAll,
@@ -308,19 +443,36 @@ export function CompareMessage({
   className,
 }: CompareMessageProps) {
   const { modelIds, status, results, prompt } = data;
+  const [expandedModelId, setExpandedModelId] = useState<string | null>(null);
 
   const isRunning = status === 'running';
   const canCancelAll = isRunning && onCancelAll;
   const canRetry = (status === 'failed' || status === 'canceled') && onRetry;
 
-  const completedResults = modelIds.filter(
-    (modelId) => results[modelId]?.status === 'completed',
-  );
+  const handleExpandCard = useCallback((modelId: string) => {
+    setExpandedModelId(modelId);
+  }, []);
+
+  const handleCloseExpanded = useCallback(() => {
+    setExpandedModelId(null);
+  }, []);
+
+  // Memoize the expanded model display name to avoid recalculation
+  const expandedModelDisplayName = useMemo(() => {
+    return expandedModelId ? getModelDisplayName(expandedModelId) : '';
+  }, [expandedModelId]);
+
+  // Memoize the expanded result to prevent unnecessary re-renders
+  const expandedResult = useMemo(() => {
+    return expandedModelId && results[expandedModelId]
+      ? results[expandedModelId]
+      : null;
+  }, [expandedModelId, results]);
 
   return (
-    <div className={cn('w-full mx-auto max-w-5xl', className)}>
+    <div className={cn('w-full mx-auto max-w-5xl overflow-hidden', className)}>
       {/* User Query Display */}
-      <div className="mb-6 flex justify-end">
+      <div className="mb-6 flex justify-end px-4 md:px-0">
         <div className="bg-primary text-primary-foreground px-4 py-3 rounded-2xl shadow-sm max-w-2xl">
           <div className="text-sm">{prompt}</div>
         </div>
@@ -328,7 +480,7 @@ export function CompareMessage({
 
       {/* Action buttons */}
       {(canRetry || canCancelAll) && (
-        <div className="mb-4 flex justify-end gap-2">
+        <div className="mb-4 flex justify-end gap-2 px-4 md:px-0">
           {canRetry && (
             <Button
               variant="outline"
@@ -355,31 +507,93 @@ export function CompareMessage({
         </div>
       )}
 
-      {/* Results Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {modelIds.map((modelId) => {
-          const result = results[modelId];
-          if (!result) return null;
+      {/* Results Grid - Mobile horizontal scroll, Desktop grid */}
+      <div className="relative">
+        {/* Mobile: Enhanced horizontal scrollable cards */}
+        <div className="md:hidden">
+          <MobileScrollContainer
+            itemCount={modelIds.length}
+            itemIds={modelIds}
+            showIndicators={modelIds.length > 1}
+          >
+            {modelIds.map((modelId) => {
+              const result = results[modelId];
+              if (!result) return null;
 
-          return (
-            <CompareResultCard
-              key={modelId}
-              modelId={modelId}
-              result={result}
-              onCancel={
-                onCancelModel ? () => onCancelModel(modelId) : undefined
-              }
-              className="min-h-[300px]"
-            />
-          );
-        })}
+              return (
+                <CompareResultCard
+                  key={modelId}
+                  modelId={modelId}
+                  result={result}
+                  onCancel={
+                    onCancelModel ? () => onCancelModel(modelId) : undefined
+                  }
+                  onExpand={() => handleExpandCard(modelId)}
+                  className="min-h-[400px] w-[80vw] max-w-[320px] flex-shrink-0 snap-start"
+                />
+              );
+            })}
+          </MobileScrollContainer>
+        </div>
+
+        {/* Desktop: Grid layout */}
+        <div className="hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {modelIds.map((modelId) => {
+            const result = results[modelId];
+            if (!result) return null;
+
+            return (
+              <CompareResultCard
+                key={modelId}
+                modelId={modelId}
+                result={result}
+                onCancel={
+                  onCancelModel ? () => onCancelModel(modelId) : undefined
+                }
+                onExpand={() => handleExpandCard(modelId)}
+                className="min-h-[300px]"
+              />
+            );
+          })}
+        </div>
       </div>
 
       {modelIds.length === 1 && (
-        <div className="mt-4 text-center text-sm text-muted-foreground">
+        <div className="mt-4 text-center text-sm text-muted-foreground px-4 md:px-0">
           Add more models to compare responses side-by-side
         </div>
       )}
+
+      {/* Expandable Modal - Only render when needed */}
+      {expandedModelId && (
+        <ExpandableModal
+          isOpen={true}
+          onClose={handleCloseExpanded}
+          title={expandedModelDisplayName}
+          headerContent={
+            expandedResult && (
+              <ModalHeaderContent
+                result={expandedResult}
+                onCancel={
+                  onCancelModel
+                    ? () => onCancelModel(expandedModelId)
+                    : undefined
+                }
+              />
+            )
+          }
+        >
+          {expandedResult && (
+            <ExpandedCompareResult
+              modelId={expandedModelId}
+              result={expandedResult}
+              onCancel={
+                onCancelModel ? () => onCancelModel(expandedModelId) : undefined
+              }
+            />
+          )}
+        </ExpandableModal>
+      )}
     </div>
   );
-}
+});

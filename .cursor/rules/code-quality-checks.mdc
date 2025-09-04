@@ -1,0 +1,72 @@
+---
+alwaysApply: true
+description: "Code quality checks and build commands for development workflow"
+---
+
+# Code Quality Checks & Build Commands
+
+## Development Workflow Commands
+
+### Quick Quality Checks (Run Frequently)
+
+```bash
+pnpm lint:check    # ESLint + Biome linting and formatting checks
+pnpm type-check    # TypeScript type checking (noEmit)
+```
+
+### Full Build (Run Before Deploy)
+
+```bash
+pnpm build         # Database migration + Next.js build
+```
+
+### Automated Pre-commit Checks
+
+```bash
+pnpm pre-commit    # Runs format + type-check + lint:check (used by husky)
+```
+
+## When to Run Each Command
+
+### `pnpm lint:check` - Daily Development
+
+- **When**: After making code changes, before commits
+- **Purpose**: Catches style issues, potential bugs, and code quality problems
+- **Includes**: ESLint rules + Biome formatting/linting checks
+- **Blocks**: Pre-commit hooks will fail if this doesn't pass
+
+### `pnpm type-check` - Type Safety
+
+- **When**: After changing TypeScript interfaces, database schemas, or API contracts
+- **Purpose**: Ensures type safety across the entire codebase
+- **Includes**: Full TypeScript compilation check without emitting files
+- **Blocks**: Pre-commit hooks will fail if this doesn't pass
+
+### `pnpm build` - Production Readiness
+
+- **When**: Before deployment, after major changes, or when troubleshooting build issues
+- **Purpose**: Ensures the application builds successfully for production
+- **Includes**: Database migrations + Next.js production build
+- **Note**: This is more expensive to run, so use judiciously during development
+
+## Best Practices
+
+1. **Run quality checks frequently** during development to catch issues early
+2. **Fix linting errors immediately** - they're designed to prevent bugs and maintain consistency
+3. **Run type checks after schema changes** to ensure type safety
+4. **Only run full builds** when necessary - it's the most expensive operation
+5. **Use pre-commit hooks** to automate quality gates for all commits
+
+## Troubleshooting
+
+- If `pnpm lint:check` fails: Run `pnpm lint:fix` to auto-fix many issues
+- If `pnpm type-check` fails: Check for missing imports, incorrect types, or schema mismatches
+- If `pnpm build` fails: Ensure database is accessible and all dependencies are installed
+
+## Integration with Development Workflow
+
+These commands are integrated into:
+
+- **Pre-commit hooks**: Automatic quality checks on every commit
+- **CI/CD pipeline**: Automated checks on pull requests
+- **Local development**: Quick feedback during coding sessions

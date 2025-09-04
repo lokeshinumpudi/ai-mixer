@@ -7,6 +7,7 @@ import useSWR from 'swr';
 export interface CompareModelState {
   status: 'pending' | 'running' | 'completed' | 'canceled' | 'failed';
   content: string;
+  reasoning?: string; // AI reasoning/thinking content
   usage?: any;
   error?: string;
   // Server-side timing (authoritative)
@@ -33,6 +34,7 @@ interface CompareRunsListResponse {
 const initialModelState: CompareModelState = {
   status: 'pending',
   content: '',
+  reasoning: '',
 };
 
 export function useCompareRun(chatId: string) {
@@ -189,6 +191,24 @@ export function useCompareRun(chatId: string) {
           });
           break;
 
+        case 'reasoning_delta':
+          setState((prev) => {
+            const newReasoning =
+              (prev.byModelId[event.modelId]?.reasoning || '') +
+              event.reasoningDelta;
+            return {
+              ...prev,
+              byModelId: {
+                ...prev.byModelId,
+                [event.modelId]: {
+                  ...prev.byModelId[event.modelId],
+                  reasoning: newReasoning,
+                },
+              },
+            };
+          });
+          break;
+
         case 'model_end':
           setState((prev) => {
             const modelState = prev.byModelId[event.modelId];
@@ -223,16 +243,63 @@ export function useCompareRun(chatId: string) {
           }));
           break;
 
-        case 'run_end':
-          setState((prev) => ({
-            ...prev,
-            status: 'completed',
-            isRunning: false,
-          }));
-          // Refresh the runs list and clear active state after a short delay
-          // This allows the completed state to be visible briefly before transitioning to historical
+        case 'run_end': {
+          // Capture the current state for optimistic updates
+          let capturedState: CompareRunState | null = null;
+          setState((prev) => {
+            capturedState = {
+              ...prev,
+              status: 'completed',
+              isRunning: false,
+            };
+            return capturedState;
+          });
+
+          // Optimistically add the completed run to the list instead of refreshing
+          // This prevents layout shifts and provides smooth transitions
           setTimeout(() => {
-            mutateCompareRuns();
+            if (!capturedState) return;
+
+            // Create the completed run object from captured state
+            const completedRun = {
+              id: capturedState.runId,
+              prompt: capturedState.prompt,
+              modelIds: capturedState.modelIds,
+              status: 'completed' as const,
+              createdAt: new Date().toISOString(),
+              results: Object.entries(capturedState.byModelId).map(
+                ([modelId, modelState]) => ({
+                  modelId,
+                  status: (modelState as CompareModelState).status,
+                  content: (modelState as CompareModelState).content,
+                  reasoning: (modelState as CompareModelState).reasoning,
+                  usage: (modelState as CompareModelState).usage,
+                  error: (modelState as CompareModelState).error,
+                  serverStartedAt: (modelState as CompareModelState)
+                    .serverStartedAt,
+                  serverCompletedAt: (modelState as CompareModelState)
+                    .serverCompletedAt,
+                  inferenceTimeMs: (modelState as CompareModelState)
+                    .inferenceTimeMs,
+                }),
+              ),
+            };
+
+            // Optimistically update the compareRuns cache
+            mutateCompareRuns(
+              (currentData: CompareRunsListResponse | undefined) => {
+                if (!currentData) return currentData;
+
+                // Add the new completed run to the end of the list (chronological order)
+                return {
+                  ...currentData,
+                  items: [...currentData.items, completedRun],
+                };
+              },
+              false, // Don't revalidate from server
+            );
+
+            // Clear the active state
             setState({
               runId: null,
               prompt: '',
@@ -243,6 +310,7 @@ export function useCompareRun(chatId: string) {
             });
           }, 500);
           break;
+        }
 
         case 'heartbeat':
           // Keep-alive, no action needed
@@ -327,6 +395,7 @@ export function useCompareRun(chatId: string) {
           acc[result.modelId] = {
             status: result.status,
             content: result.content || '',
+            reasoning: result.reasoning || '',
             usage: result.usage,
             error: result.error,
             serverStartedAt: result.serverStartedAt,

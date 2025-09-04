@@ -365,6 +365,7 @@ export const compareResult = pgTable(
     modelId: varchar('modelId', { length: 64 }).notNull(),
     status: varchar('status', { length: 32 }).notNull().default('running'), // running|completed|canceled|failed
     content: text('content').default(''),
+    reasoning: text('reasoning').default(''), // AI reasoning/thinking content
     usage: json('usage'),
     error: text('error'),
     createdAt: timestamp('createdAt').notNull().defaultNow(),

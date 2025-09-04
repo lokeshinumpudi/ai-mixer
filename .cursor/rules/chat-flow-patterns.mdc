@@ -1,0 +1,571 @@
+---
+alwaysApply: false
+description: "Overall patterns for chat flow, state management, and user experience consistency"
+globs: components/chat.tsx,app/(chat)/api/chat/route.ts,app/(chat)/api/compare/stream/route.ts,hooks/use-chat.ts
+---
+
+# Chat Flow Patterns
+
+## Overview
+
+Consistent chat flow patterns ensure smooth user experiences across regular chat, compare mode, and streaming interactions. This rule covers the end-to-end patterns for managing chat state, streaming, and user interactions.
+
+## Core Chat Architecture
+
+### Progressive Loading Architecture
+
+#### Latest-First Loading Strategy
+
+```tsx
+// 1. Load latest 20 messages immediately
+const initialLoad = `/api/chat/${chatId}/messages?limit=20`;
+
+// 2. Load older messages on scroll
+const loadMore = (cursor: string) =>
+  `/api/chat/${chatId}/messages?limit=20&before=${cursor}`;
+
+// 3. Automatic scroll to latest messages
+useEffect(() => {
+  if (chatId) {
+    scrollToBottom("instant"); // Show latest first
+  }
+}, [chatId]);
+```
+
+### Enhanced Message Flow Hierarchy
+
+```
+┌─────────────────────────────────────┐
+│       Latest Messages (Page 1)      │ ← Most recent 20 messages
+│       (Immediate load)              │
+├─────────────────────────────────────┤
+│     Older Messages (Page 2+)        │ ← Progressive loading
+│     (Load on scroll up)             │
+├─────────────────────────────────────┤
+│       Historical Compare Runs       │ ← Chronological order
+│       (Optimistic updates)          │
+├─────────────────────────────────────┤
+│        Active Compare Run           │ ← Currently streaming
+│        (Real-time updates)          │
+├─────────────────────────────────────┤
+│         Thinking Indicator          │ ← When submitting
+│         (UI feedback only)          │
+└─────────────────────────────────────┘
+```
+
+### State Management Layers
+
+#### 1. Message State (`useChat`)
+
+```tsx
+interface ChatState {
+  messages: ChatMessage[];
+  status: "ready" | "streaming" | "submitted" | "error";
+  isLoading: boolean;
+}
+```
+
+#### 2. Compare State (`useCompareRun`)
+
+```tsx
+interface CompareState {
+  runId: string | null;
+  prompt: string;
+  modelIds: string[];
+  status: "idle" | "running" | "completed";
+  byModelId: Record<string, ModelState>;
+}
+```
+
+#### 3. UI State (Component Level)
+
+```tsx
+interface UIState {
+  isCompareMode: boolean;
+  selectedModelIds: string[];
+  isLoadingRuns: boolean;
+  showSuggestions: boolean;
+}
+```
+
+## Streaming Patterns
+
+### Regular Chat Streaming
+
+```tsx
+const { messages, sendMessage, status } = useChat({
+  id: chatId,
+  messages: initialMessages,
+  transport: new DefaultChatTransport({
+    api: "/api/chat",
+    prepareSendMessagesRequest: ({ messages, id }) => ({
+      body: {
+        id,
+        message: messages.at(-1), // Last message is new user input
+        selectedChatModel: currentModel,
+      },
+    }),
+  }),
+  onFinish: () => {
+    // Handle completion - no layout shifts
+    incrementMessageCount();
+  },
+});
+```
+
+### Compare Mode Streaming
+
+```tsx
+// 1. Start compare run
+await startCompare({ prompt, modelIds });
+
+// 2. Handle streaming events
+handleSSEEvent = (event) => {
+  switch (event.type) {
+    case "run_start":
+    // Initialize run state
+    case "model_start":
+    // Start individual model
+    case "delta":
+    // Update content progressively
+    case "model_end":
+    // Complete individual model
+    case "run_end":
+    // Complete run with optimistic updates
+  }
+};
+```
+
+## User Interaction Patterns
+
+### Message Submission
+
+```tsx
+const handleSubmit = async (input: string, attachments: File[]) => {
+  if (selectedModelIds.length > 1) {
+    // Compare mode
+    await handleStartCompare(input, selectedModelIds);
+  } else {
+    // Regular chat
+    sendMessage({
+      role: "user",
+      parts: [
+        ...attachments.map(file => ({ type: "file", ... })),
+        { type: "text", text: input },
+      ],
+    });
+  }
+
+  // Clear input and scroll appropriately
+  setInput("");
+  scrollToBottom("smooth");
+};
+```
+
+### Mode Switching
+
+```tsx
+const handleCompareModeChange = (enabled: boolean) => {
+  setIsCompareMode(enabled);
+  if (enabled) {
+    // Ensure at least current model is selected
+    setSelectedModelIds((prev) =>
+      prev.includes(currentModel) ? prev : [...prev, currentModel]
+    );
+  } else {
+    // Keep only current model for regular chat
+    setSelectedModelIds([currentModel]);
+  }
+};
+```
+
+## Error Handling Patterns
+
+### Chat Errors
+
+```tsx
+onError: (error) => {
+  if (error.type === "rate_limit") {
+    upgradeToast({
+      title: "Rate limit reached",
+      description: error.message,
+      actionText: "Upgrade to Pro",
+    });
+  } else {
+    toast({
+      type: "error",
+      description: error.message,
+    });
+  }
+};
+```
+
+### Compare Mode Errors
+
+```tsx
+case "model_error":
+  setState(prev => ({
+    ...prev,
+    byModelId: {
+      ...prev.byModelId,
+      [event.modelId]: {
+        ...prev.byModelId[event.modelId],
+        status: "failed",
+        error: event.error,
+      },
+    },
+  }));
+  break;
+```
+
+## Loading State Management
+
+### Progressive Loading
+
+```tsx
+// Show content as it becomes available
+const [visibleContent, setVisibleContent] = useState("");
+
+useEffect(() => {
+  if (streamingContent) {
+    // Progressive reveal
+    setVisibleContent((prev) => prev + streamingContent);
+  }
+}, [streamingContent]);
+```
+
+### Skeleton States
+
+```tsx
+{
+  isLoading ? <MessageSkeleton /> : <MessageContent />;
+}
+```
+
+## Optimistic Updates Integration
+
+### Chat Completions
+
+```tsx
+// Immediately show assistant message
+setMessages((prev) => [
+  ...prev,
+  {
+    id: generateId(),
+    role: "assistant",
+    content: "", // Will be filled by streaming
+  },
+]);
+```
+
+### Compare Run Completions
+
+```tsx
+// Optimistically add completed run to cache
+mutateCompareRuns(
+  (current) => ({
+    ...current,
+    items: [...current.items, completedRun],
+  }),
+  false // Don't revalidate
+);
+```
+
+## Responsive Design Patterns
+
+### Mobile Chat Layout
+
+```tsx
+<div className="flex flex-col min-w-0 h-dvh bg-background">
+  {/* Header - fixed */}
+  <ChatHeader className="flex-shrink-0" />
+
+  {/* Messages - scrollable */}
+  <Messages className="flex-1 overflow-y-auto" />
+
+  {/* Input - fixed bottom */}
+  <MultimodalInput className="flex-shrink-0 border-t" />
+</div>
+```
+
+### Touch Interactions
+
+```tsx
+// Ensure adequate touch targets
+<button className="min-h-[44px] min-w-[44px] p-2">
+  <Icon size={20} />
+</button>
+```
+
+## Progressive Loading Patterns
+
+### Intersection Observer for Infinite Scroll
+
+```tsx
+// Detect when user scrolls to top for loading more
+const topRef = useRef<HTMLDivElement>(null);
+
+useEffect(() => {
+  if (!hasMore || !loadMore || isLoadingMore) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+        loadMore();
+      }
+    },
+    { threshold: 0.1 }
+  );
+
+  if (topRef.current) {
+    observer.observe(topRef.current);
+  }
+
+  return () => observer.disconnect();
+}, [hasMore, loadMore, isLoadingMore]);
+
+// Invisible trigger element at top
+return (
+  <div>
+    {hasMore && (
+      <div ref={topRef} className="h-4 flex items-center justify-center">
+        {isLoadingMore && <Spinner />}
+      </div>
+    )}
+    {/* Messages */}
+  </div>
+);
+```
+
+### Cursor-Based Pagination
+
+```tsx
+// API response format
+interface MessagesResponse {
+  messages: ChatMessage[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+// Database query with cursor support
+export async function getMessagesByChatId({
+  id,
+  limit,
+  before,
+}: {
+  id: string;
+  limit?: number;
+  before?: string;
+}) {
+  let query = db
+    .select()
+    .from(message)
+    .where(eq(message.chatId, id))
+    .orderBy(desc(message.createdAt)); // Latest first
+
+  if (before) {
+    const cursorMessage = await db
+      .select()
+      .from(message)
+      .where(eq(message.id, before))
+      .limit(1);
+
+    if (cursorMessage.length > 0) {
+      query = query.where(
+        and(
+          eq(message.chatId, id),
+          lt(message.createdAt, cursorMessage[0].createdAt)
+        )
+      );
+    }
+  }
+
+  const messages = await (limit ? query.limit(limit) : query);
+  return messages.reverse(); // Chronological order for UI
+}
+```
+
+## Performance Patterns
+
+### useSWRInfinite for Progressive Loading
+
+```tsx
+const {
+  data: messagesData,
+  size,
+  setSize,
+} = useSWRInfinite<{
+  messages: ChatMessage[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}>(
+  (pageIndex, previousPageData) => {
+    if (!chatId) return null;
+
+    if (pageIndex === 0) {
+      // First page: Latest messages
+      return `/api/chat/${chatId}/messages?limit=20`;
+    }
+
+    if (!previousPageData?.hasMore) return null;
+
+    // Subsequent pages: Older messages
+    return `/api/chat/${chatId}/messages?limit=20&before=${previousPageData.nextCursor}`;
+  },
+  fetcher,
+  {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+  }
+);
+```
+
+### Message Virtualization
+
+```tsx
+// For very long conversations (>1000 messages)
+<FixedSizeList
+  height={viewportHeight}
+  itemCount={messages.length}
+  itemSize={120}
+>
+  {({ index, style }) => (
+    <div style={style}>
+      <Message message={messages[index]} />
+    </div>
+  )}
+</FixedSizeList>
+```
+
+### Smart Loading States
+
+```tsx
+// Differentiate between initial load and loading more
+const isLoadingInitial = isLoading && messagesData?.length === 0;
+const isLoadingMore = size > (messagesData?.length ?? 0);
+
+// Show different UI states
+{
+  isLoadingInitial && <FullPageSkeleton />;
+}
+{
+  isLoadingMore && <LoadMoreSpinner />;
+}
+```
+
+## Testing Patterns
+
+### Chat Flow Tests
+
+```tsx
+test("complete chat flow", async ({ page }) => {
+  // 1. Send message
+  await page.fill("[data-testid='input']", "Hello");
+  await page.click("[data-testid='send-button']");
+
+  // 2. Verify streaming starts
+  await expect(page.locator("[data-testid='thinking']")).toBeVisible();
+
+  // 3. Wait for completion
+  await page.waitForSelector("[data-testid='completed']");
+
+  // 4. Verify final state
+  await expect(page.locator("[data-testid='assistant-message']")).toBeVisible();
+});
+```
+
+### Compare Mode Tests
+
+```tsx
+test("compare mode flow", async ({ page }) => {
+  // 1. Enable compare mode
+  await page.click("[data-testid='compare-toggle']");
+
+  // 2. Select multiple models
+  await page.click("[data-testid='model-selector']");
+  await page.click("[data-testid='model-gpt-4']");
+  await page.click("[data-testid='model-claude']");
+
+  // 3. Send compare request
+  await page.fill("[data-testid='input']", "Compare responses");
+  await page.click("[data-testid='send-button']");
+
+  // 4. Verify side-by-side results
+  await expect(page.locator("[data-testid='compare-results']")).toBeVisible();
+});
+```
+
+## Accessibility Patterns
+
+### Keyboard Navigation
+
+```tsx
+// Ensure proper focus management
+useEffect(() => {
+  if (newMessage) {
+    messageRef.current?.focus();
+  }
+}, [newMessage]);
+```
+
+### Screen Reader Support
+
+```tsx
+// Provide meaningful ARIA labels
+<div role="log" aria-label="Chat conversation" aria-live="polite">
+  {messages.map((message) => (
+    <div
+      key={message.id}
+      role="article"
+      aria-label={`Message from ${message.role}`}
+    >
+      {message.content}
+    </div>
+  ))}
+</div>
+```
+
+## Best Practices Summary
+
+### ✅ Do
+
+- Maintain consistent message ordering (chronological)
+- Use optimistic updates to prevent layout shifts
+- Handle loading states gracefully
+- Implement smooth transitions and animations
+- Test across different devices and screen sizes
+- Provide clear error states and recovery options
+- Ensure accessibility compliance
+- Monitor performance metrics
+
+### ❌ Don't
+
+- Break chronological message flow
+- Cause unnecessary layout shifts
+- Show inappropriate loading states
+- Use inconsistent animation timing
+- Ignore mobile responsiveness
+- Forget error handling
+- Sacrifice accessibility
+- Ignore performance implications
+
+### Key Success Metrics
+
+- **Time to Interactive**: How quickly users can start chatting
+- **Layout Stability**: Cumulative Layout Shift (CLS) scores
+- **Error Recovery**: How gracefully errors are handled
+- **Mobile Experience**: Touch interaction responsiveness
+- **Streaming Performance**: Smooth content streaming
+- **Memory Usage**: Efficient state management
+
+### Migration Guide
+
+When adding new chat features:
+
+1. **Follow established patterns** for state management
+2. **Use optimistic updates** to prevent layout shifts
+3. **Maintain chronological ordering** in all message displays
+4. **Handle loading states** appropriately
+5. **Test across scenarios** (regular chat, compare mode, errors)
+6. **Ensure responsive design** works on all devices
+7. **Add accessibility support** from the start

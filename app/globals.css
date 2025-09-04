@@ -226,20 +226,58 @@
             inset 0 1px 0 rgba(255, 255, 255, 0.06);
     }
 
+    /* Mobile dark mode glass styling */
+    @media (max-width: 768px) {
+        .dark .luxury-input {
+            box-shadow: 
+                0 1px 2px rgba(0, 0, 0, 0.1),
+                0 0 0 1.5px rgba(255, 255, 255, 0.12),
+                inset 0 1px 1px rgba(255, 255, 255, 0.04);
+            border: 1.5px solid rgba(255, 255, 255, 0.12) !important;
+        }
+
+        .dark .luxury-input:focus-within {
+            box-shadow: 
+                0 1px 4px rgba(0, 0, 0, 0.15),
+                0 0 0 2px hsl(var(--ring) / 0.5),
+                inset 0 1px 1px rgba(255, 255, 255, 0.06);
+            border-color: hsl(var(--ring) / 0.5) !important;
+        }
+
+        .dark .luxury-input:hover:not(:focus-within) {
+            box-shadow: 
+                0 1px 3px rgba(0, 0, 0, 0.12),
+                0 0 0 1.5px rgba(255, 255, 255, 0.15),
+                inset 0 1px 1px rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15) !important;
+        }
+    }
+
     /* Mobile-specific input styling */
     @media (max-width: 768px) {
         .luxury-input {
             box-shadow: 
                 0 1px 2px rgba(0, 0, 0, 0.02),
+                0 0 0 1.5px hsl(var(--border) / 0.6),
                 inset 0 1px 1px rgba(255, 255, 255, 0.08);
+            border: 1.5px solid hsl(var(--border) / 0.6) !important;
         }
 
         .luxury-input:focus-within {
             box-shadow: 
                 0 1px 4px rgba(0, 0, 0, 0.04),
-                0 0 0 1px hsl(var(--ring) / 0.2),
+                0 0 0 2px hsl(var(--ring) / 0.5),
                 inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            border-color: hsl(var(--ring) / 0.5) !important;
             transform: none;
+        }
+
+        .luxury-input:hover:not(:focus-within) {
+            box-shadow: 
+                0 1px 3px rgba(0, 0, 0, 0.03),
+                0 0 0 1.5px hsl(var(--border) / 0.7),
+                inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            border-color: hsl(var(--border) / 0.7) !important;
         }
     }
 

@@ -29,7 +29,6 @@ import { useRouter } from 'next/navigation';
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from './icons';
 import { ModelPicker } from './model-picker';
 import { PreviewAttachment } from './preview-attachment';
-import { SuggestedActions } from './suggested-actions';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
@@ -81,6 +80,7 @@ function PureMultimodalInput({
   compareRuns = [],
   activeCompareMessage = false,
   isModelsLoading = false,
+  isLoadingRuns = false,
 }: {
   chatId: string;
   input: string;
@@ -104,6 +104,7 @@ function PureMultimodalInput({
   compareRuns?: any[];
   activeCompareMessage?: boolean;
   isModelsLoading?: boolean;
+  isLoadingRuns?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
@@ -344,21 +345,6 @@ function PureMultimodalInput({
         )}
       </AnimatePresence>
 
-      {messages.length === 0 &&
-        compareRuns.length === 0 &&
-        !activeCompareMessage &&
-        attachments.length === 0 &&
-        uploadQueue.length === 0 && (
-          <SuggestedActions
-            sendMessage={sendMessage}
-            chatId={chatId}
-            selectedVisibilityType={selectedVisibilityType}
-            isCompareMode={isCompareMode}
-            selectedModelIds={selectedModelIds}
-            onStartCompare={onStartCompare}
-          />
-        )}
-
       <input
         type="file"
         className="fixed -top-4 -left-4 size-0.5 opacity-0 pointer-events-none"
@@ -442,7 +428,7 @@ function PureMultimodalInput({
           value={input}
           onChange={handleInput}
           className={cx(
-            'min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none text-base bg-transparent pb-12 px-4 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 focus:shadow-none',
+            'min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none text-base bg-transparent pb-10 md:pb-12 px-4 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 focus:shadow-none border-0',
             isCompareMode && selectedModelIds.length > 0 ? 'pt-2' : 'pt-4',
           )}
           rows={2}
@@ -467,7 +453,7 @@ function PureMultimodalInput({
         />
       </div>
 
-      <div className="absolute bottom-0 left-0 p-3 w-fit flex flex-row justify-start items-center gap-2">
+      <div className="absolute bottom-0 left-0 p-2 md:p-3 w-fit flex flex-row justify-start items-center gap-2">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
 
         {/* Compare Mode Toggle */}
@@ -503,7 +489,7 @@ function PureMultimodalInput({
         />
       </div>
 
-      <div className="absolute bottom-0 right-0 p-3 w-fit flex flex-row justify-end">
+      <div className="absolute bottom-0 right-0 p-2 md:p-3 w-fit flex flex-row justify-end">
         {status === 'submitted' ? (
           <StopButton stop={stop} setMessages={setMessages} />
         ) : (
