@@ -349,6 +349,38 @@ import { FixedSizeList } from "react-window";
 }
 ```
 
+### Horizontal Scroll Containment
+
+```tsx
+// Prevent page-wide horizontal scrolling on mobile
+<div className={cn("w-full mx-auto max-w-5xl overflow-hidden", className)}>
+  {/* Mobile: Contained horizontal scroll */}
+  <div className="md:hidden">
+    <div className="relative w-full overflow-hidden">
+      <div
+        className={cn(
+          "flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory",
+          "w-full min-w-0" // Critical for containment
+        )}
+        style={{
+          WebkitOverflowScrolling: "touch",
+          maxWidth: "100vw", // Hard viewport limit
+        }}
+      >
+        {/* Scrollable cards */}
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**Key Points:**
+
+- Use `overflow-hidden` on parent containers
+- Set `w-full min-w-0` on scroll containers
+- Add `maxWidth: "100vw"` as fallback
+- Reduce card width from 85vw to 80vw for breathing room
+
 ### Keyboard Handling
 
 ```tsx
