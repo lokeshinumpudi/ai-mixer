@@ -153,12 +153,12 @@ Create a `.env.local` file with the following variables:
 POSTGRES_URL="postgresql://..."
 
 # Supabase Authentication
-NEXT_PUBLIC_SUPABASE_URL="your-supabase-project-url"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
+NEXT_PUBLIC_NEXT_PUBLIC_SUPABASE_URL="your-supabase-project-url"
+NEXT_PUBLIC_NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
 
 # Optional: Server-side only (recommended for production)
-SUPABASE_URL="your-supabase-project-url"
-SUPABASE_ANON_KEY="your-supabase-anon-key"
+NEXT_PUBLIC_SUPABASE_URL="your-supabase-project-url"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
 
 # Note: NEXT_PUBLIC_SITE_URL is not needed - URLs are constructed dynamically
 
