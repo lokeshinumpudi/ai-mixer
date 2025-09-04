@@ -154,7 +154,7 @@ function PureMessages({
   return (
     <div
       ref={messagesContainerRef}
-      className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-24 md:pb-28 relative"
+      className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-32 relative"
     >
       {/* Invisible element at top for scroll detection */}
       {hasMore && (
