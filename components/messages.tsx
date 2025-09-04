@@ -1,30 +1,30 @@
-import { useMessages } from '@/hooks/use-messages';
-import type { Vote } from '@/lib/db/schema';
-import type { ChatMessage } from '@/lib/types';
-import type { UseChatHelpers } from '@ai-sdk/react';
-import equal from 'fast-deep-equal';
-import { motion } from 'framer-motion';
-import { memo, useEffect, useRef } from 'react';
-import { CompareMessage, type CompareMessageData } from './compare-message';
-import { useDataStream } from './data-stream-provider';
-import { Greeting } from './greeting';
-import { PreviewMessage, ThinkingMessage } from './message';
-import { SuggestedActions } from './suggested-actions';
+import { useMessages } from "@/hooks/use-messages";
+import type { Vote } from "@/lib/db/schema";
+import type { ChatMessage } from "@/lib/types";
+import type { UseChatHelpers } from "@ai-sdk/react";
+import equal from "fast-deep-equal";
+import { motion } from "framer-motion";
+import { memo, useEffect, useRef } from "react";
+import { CompareMessage, type CompareMessageData } from "./compare-message";
+import { useDataStream } from "./data-stream-provider";
+import { Greeting } from "./greeting";
+import { PreviewMessage, ThinkingMessage } from "./message";
+import { SuggestedActions } from "./suggested-actions";
 
 interface MessagesProps {
   chatId: string;
-  status: UseChatHelpers<ChatMessage>['status'];
+  status: UseChatHelpers<ChatMessage>["status"];
   votes: Array<Vote> | undefined;
   messages: ChatMessage[];
-  setMessages: UseChatHelpers<ChatMessage>['setMessages'];
-  regenerate: UseChatHelpers<ChatMessage>['regenerate'];
+  setMessages: UseChatHelpers<ChatMessage>["setMessages"];
+  regenerate: UseChatHelpers<ChatMessage>["regenerate"];
   isReadonly: boolean;
   isArtifactVisible: boolean;
   // Compare state props
   compareState: {
     runId: string | null;
     prompt: string;
-    status: 'idle' | 'running' | 'completed' | 'canceled' | 'failed';
+    status: "idle" | "running" | "completed" | "canceled" | "failed";
     modelIds: string[];
     byModelId: Record<
       string,
@@ -47,8 +47,8 @@ interface MessagesProps {
   loadMore?: () => Promise<void>;
   isLoadingMore?: boolean;
   // SuggestedActions props
-  sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
-  selectedVisibilityType: 'private' | 'public';
+  sendMessage?: UseChatHelpers<ChatMessage>["sendMessage"];
+  selectedVisibilityType: "private" | "public";
   isCompareMode?: boolean;
   selectedModelIds?: string[];
   onStartCompare?: (prompt: string, modelIds: string[]) => void;
@@ -94,10 +94,10 @@ function PureMessages({
   useDataStream();
   // Create compare message data from active compare state
   const activeCompareMessage: CompareMessageData | null =
-    compareState.status !== 'idle'
+    compareState.status !== "idle"
       ? {
-          id: compareState.runId || 'active-compare',
-          prompt: compareState.prompt || '',
+          id: compareState.runId || "active-compare",
+          prompt: compareState.prompt || "",
           modelIds: compareState.modelIds,
           status: compareState.status,
           results: compareState.byModelId as any, // Type cast for now
@@ -111,15 +111,15 @@ function PureMessages({
     // Scroll to active compare message when it first appears or when it starts running
     if (activeCompareMessage && !prevActiveMessageRef.current) {
       // New active compare message appeared - scroll to it
-      setTimeout(() => scrollToBottom('smooth'), 100);
+      setTimeout(() => scrollToBottom("smooth"), 100);
     } else if (
       activeCompareMessage &&
       prevActiveMessageRef.current &&
-      activeCompareMessage.status === 'running' &&
-      prevActiveMessageRef.current.status !== 'running'
+      activeCompareMessage.status === "running" &&
+      prevActiveMessageRef.current.status !== "running"
     ) {
       // Compare message transitioned to running state - scroll to it
-      setTimeout(() => scrollToBottom('smooth'), 100);
+      setTimeout(() => scrollToBottom("smooth"), 100);
     }
 
     // Update ref for next comparison
@@ -138,7 +138,7 @@ function PureMessages({
           loadMore();
         }
       },
-      { threshold: 0.1 },
+      { threshold: 0.1 }
     );
 
     if (topRef.current) {
@@ -173,7 +173,6 @@ function PureMessages({
             <Greeting />
             <div className="w-full max-w-2xl px-4">
               <SuggestedActions
-                sendMessage={sendMessage}
                 chatId={chatId}
                 selectedVisibilityType={selectedVisibilityType}
                 isCompareMode={isCompareMode}
@@ -190,7 +189,7 @@ function PureMessages({
           key={message.id}
           chatId={chatId}
           message={message}
-          isLoading={status === 'streaming' && messages.length - 1 === index}
+          isLoading={status === "streaming" && messages.length - 1 === index}
           vote={
             votes
               ? votes.find((vote) => vote.messageId === message.id)
@@ -229,11 +228,11 @@ function PureMessages({
               status: run.status,
               results:
                 run.results?.reduce(
-                  (acc: CompareMessageData['results'], result: any) => {
+                  (acc: CompareMessageData["results"], result: any) => {
                     acc[result.modelId] = {
                       status: result.status,
-                      content: result.content || '',
-                      reasoning: result.reasoning || '',
+                      content: result.content || "",
+                      reasoning: result.reasoning || "",
                       usage: result.usage,
                       error: result.error,
                       serverStartedAt: result.serverStartedAt,
@@ -242,7 +241,7 @@ function PureMessages({
                     };
                     return acc;
                   },
-                  {} as CompareMessageData['results'],
+                  {} as CompareMessageData["results"]
                 ) || {},
             }}
           />
@@ -278,9 +277,9 @@ function PureMessages({
         </motion.div>
       )}
 
-      {status === 'submitted' &&
+      {status === "submitted" &&
         messages.length > 0 &&
-        messages[messages.length - 1].role === 'user' && <ThinkingMessage />}
+        messages[messages.length - 1].role === "user" && <ThinkingMessage />}
 
       <motion.div
         ref={messagesEndRef}

@@ -5,20 +5,21 @@
  * and provide consistent auth handling.
  */
 
-import { getUserType } from '@/lib/db/queries';
-import { createClient } from '@/lib/supabase/server';
-import type { AppUser, UserType } from '@/lib/supabase/types';
-import type { NextRequest } from 'next/server';
-import { ChatSDKError } from './errors';
+import { getUserType } from "@/lib/db/queries";
+import { createClient } from "@/lib/supabase/server";
+import type { AppUser, UserType } from "@/lib/supabase/types";
+import type { NextRequest } from "next/server";
+import { ChatSDKError } from "./errors";
+import { authLogger } from "./logger";
 
 export type RouteHandler = (
   request: NextRequest,
-  context?: { params?: Promise<Record<string, string>> },
+  context?: { params?: Promise<Record<string, string>> }
 ) => Promise<Response>;
 export type AuthenticatedRouteHandler = (
   request: NextRequest,
   context: { params?: Promise<Record<string, string>> },
-  user: AppUser & { userType: UserType },
+  user: AppUser & { userType: UserType }
 ) => Promise<Response>;
 
 /**
@@ -28,14 +29,21 @@ export function publicRoute(handler: RouteHandler) {
   return async (request: NextRequest, context?: any) => {
     try {
       return await handler(request, context);
-    } catch (error) {
-      console.error('Public route error:', error);
+    } catch (error: any) {
+      authLogger.error(
+        {
+          error: error.message,
+          stack: error.stack,
+          url: request.url,
+        },
+        "Public route error"
+      );
       if (error instanceof ChatSDKError) {
         return error.toResponse();
       }
       return new ChatSDKError(
-        'bad_request:api',
-        'Internal server error',
+        "bad_request:api",
+        "Internal server error"
       ).toResponse();
     }
   };
@@ -46,14 +54,30 @@ export function publicRoute(handler: RouteHandler) {
  */
 export function authenticatedRoute(handler: AuthenticatedRouteHandler) {
   return async (request: NextRequest, context?: any) => {
+    authLogger.debug(
+      {
+        url: request.url,
+        method: request.method,
+      },
+      "Processing authenticated route"
+    );
+
     try {
       const supabase = await createClient();
 
       // Support Authorization: Bearer <token> for mobile clients
-      const authHeader = request.headers.get('authorization');
-      const bearer = authHeader?.startsWith('Bearer ')
+      const authHeader = request.headers.get("authorization");
+      const bearer = authHeader?.startsWith("Bearer ")
         ? authHeader.slice(7)
         : undefined;
+
+      authLogger.debug(
+        {
+          authMethod: bearer ? "bearer_token" : "session",
+          hasBearerToken: !!bearer,
+        },
+        "Getting user authentication"
+      );
 
       const {
         data: { user: supabaseUser },
@@ -64,20 +88,61 @@ export function authenticatedRoute(handler: AuthenticatedRouteHandler) {
 
       // Log error details for debugging
       if (authError) {
-        console.error('Supabase auth error:', authError);
+        authLogger.error(
+          {
+            error: authError.message,
+            code: authError.status,
+            authMethod: bearer ? "bearer_token" : "session",
+          },
+          "Supabase authentication error"
+        );
       }
 
       if (!supabaseUser) {
+        authLogger.warn(
+          {
+            authMethod: bearer ? "bearer_token" : "session",
+            url: request.url,
+          },
+          "No authenticated user found"
+        );
         return new ChatSDKError(
-          'unauthorized:api',
-          'Authentication required',
+          "unauthorized:api",
+          "Authentication required"
         ).toResponse();
       }
 
+      authLogger.info(
+        {
+          userId: supabaseUser.id,
+          isAnonymous: supabaseUser.is_anonymous,
+          email: supabaseUser.email || "none",
+          authMethod: bearer ? "bearer_token" : "session",
+        },
+        "User authenticated successfully"
+      );
+
       // Get user type from database with robust error handling
+      authLogger.debug(
+        {
+          userId: supabaseUser.id,
+          isAnonymous: supabaseUser.is_anonymous,
+        },
+        "Retrieving user type from database"
+      );
+
       const userType = await getUserType(
         supabaseUser.id,
-        supabaseUser.is_anonymous,
+        supabaseUser.is_anonymous
+      );
+
+      authLogger.debug(
+        {
+          userId: supabaseUser.id,
+          userType,
+          isAnonymous: supabaseUser.is_anonymous,
+        },
+        "User type determined"
       );
 
       const user: AppUser & { userType: UserType } = {
@@ -87,21 +152,52 @@ export function authenticatedRoute(handler: AuthenticatedRouteHandler) {
           user_type: userType, // Keep for backward compatibility
           created_via:
             supabaseUser.user_metadata?.created_via ||
-            (supabaseUser.is_anonymous ? 'anonymous' : 'google'),
+            (supabaseUser.is_anonymous ? "anonymous" : "google"),
         },
         is_anonymous: supabaseUser.is_anonymous,
         userType, // Simplified user type
       };
 
+      authLogger.debug(
+        {
+          userId: user.id,
+          userType: user.userType,
+          url: request.url,
+        },
+        "Calling authenticated route handler"
+      );
+
       return await handler(request, context, user);
-    } catch (error) {
-      console.error('Authenticated route error:', error);
+    } catch (error: any) {
+      authLogger.error(
+        {
+          error: error.message,
+          stack: error.stack,
+          url: request.url,
+        },
+        "Authenticated route error"
+      );
+
       if (error instanceof ChatSDKError) {
+        authLogger.info(
+          {
+            errorType: error.type,
+            url: request.url,
+          },
+          "Returning ChatSDKError response"
+        );
         return error.toResponse();
       }
+      authLogger.error(
+        {
+          error: error.message,
+          url: request.url,
+        },
+        "Returning generic error response"
+      );
       return new ChatSDKError(
-        'bad_request:api',
-        'Internal server error',
+        "bad_request:api",
+        "Internal server error"
       ).toResponse();
     }
   };
@@ -116,14 +212,21 @@ export function conditionalRoute(handler: RouteHandler) {
     try {
       // Let the route handle its own auth logic
       return await handler(request, context);
-    } catch (error) {
-      console.error('Conditional route error:', error);
+    } catch (error: any) {
+      authLogger.error(
+        {
+          error: error.message,
+          stack: error.stack,
+          url: request.url,
+        },
+        "Conditional route error"
+      );
       if (error instanceof ChatSDKError) {
         return error.toResponse();
       }
       return new ChatSDKError(
-        'bad_request:api',
-        'Internal server error',
+        "bad_request:api",
+        "Internal server error"
       ).toResponse();
     }
   };
@@ -135,22 +238,54 @@ export function conditionalRoute(handler: RouteHandler) {
 export async function getCurrentUser(): Promise<
   (AppUser & { userType: UserType }) | null
 > {
+  authLogger.debug({}, "getCurrentUser called");
+
   try {
     const supabase = await createClient();
 
     // Note: getCurrentUser cannot receive request; rely on cookies first,
     // then allow Authorization header via Next/Edge request if available.
     // For callers that have Request, prefer decorators.
+    authLogger.debug({}, "Getting user from session");
     const {
       data: { user: supabaseUser },
     } = await supabase.auth.getUser();
 
-    if (!supabaseUser) return null;
+    if (!supabaseUser) {
+      authLogger.debug({}, "No user found in session");
+      return null;
+    }
+
+    authLogger.info(
+      {
+        userId: supabaseUser.id,
+        isAnonymous: supabaseUser.is_anonymous,
+        email: supabaseUser.email || "none",
+      },
+      "Found authenticated user"
+    );
 
     // Determine user type from database instead of user_metadata
+    authLogger.debug(
+      {
+        userId: supabaseUser.id,
+        isAnonymous: supabaseUser.is_anonymous,
+      },
+      "Retrieving user type from database"
+    );
+
     const userType = await getUserType(
       supabaseUser.id,
-      supabaseUser.is_anonymous,
+      supabaseUser.is_anonymous
+    );
+
+    authLogger.debug(
+      {
+        userId: supabaseUser.id,
+        userType,
+        isAnonymous: supabaseUser.is_anonymous,
+      },
+      "User type determined"
     );
 
     return {
@@ -160,13 +295,19 @@ export async function getCurrentUser(): Promise<
         user_type: userType, // Keep for backward compatibility but derive from DB
         created_via:
           supabaseUser.user_metadata?.created_via ||
-          (supabaseUser.is_anonymous ? 'anonymous' : 'google'),
+          (supabaseUser.is_anonymous ? "anonymous" : "google"),
       },
       is_anonymous: supabaseUser.is_anonymous,
       userType, // New database-derived user type
     };
-  } catch (error) {
-    console.error('Failed to get current user:', error);
+  } catch (error: any) {
+    authLogger.error(
+      {
+        error: error.message,
+        stack: error.stack,
+      },
+      "Failed to get current user"
+    );
     return null;
   }
 }
@@ -184,11 +325,11 @@ export async function handleGuestAccess(request: NextRequest) {
   // Return anonymous user or create one if none exists
   return {
     user: user || {
-      id: 'anonymous',
+      id: "anonymous",
       email: undefined,
       user_metadata: {
-        user_type: 'anonymous' as const,
-        created_via: 'anonymous' as const,
+        user_type: "anonymous" as const,
+        created_via: "anonymous" as const,
       },
       is_anonymous: true,
     },
@@ -203,16 +344,16 @@ export function withAuth<T = any>(
   handler: (
     user: AppUser,
     request: NextRequest,
-    context?: T,
-  ) => Promise<Response>,
+    context?: T
+  ) => Promise<Response>
 ) {
   return async (request: NextRequest, context?: T) => {
     const user = await getCurrentUser();
 
     if (!user || user.is_anonymous) {
       return new ChatSDKError(
-        'unauthorized:api',
-        'Authentication required',
+        "unauthorized:api",
+        "Authentication required"
       ).toResponse();
     }
 

@@ -1,31 +1,29 @@
-'use client';
+"use client";
 
-import { ChatHeader } from '@/components/chat-header';
+import { ChatHeader } from "@/components/chat-header";
 
-import { useAnonymousAuth } from '@/hooks/use-anonymous-auth';
-import { useArtifactSelector } from '@/hooks/use-artifact';
-import { useAutoResume } from '@/hooks/use-auto-resume';
-import { useChatVisibility } from '@/hooks/use-chat-visibility';
-import { useCompareRun } from '@/hooks/use-compare-run';
-import { getDefaultModelForUser } from '@/lib/ai/models';
-import type { Vote } from '@/lib/db/schema';
-import { ChatSDKError } from '@/lib/errors';
-import type { AppUser } from '@/lib/supabase/types';
-import type { Attachment, ChatMessage } from '@/lib/types';
-import { fetcher, fetchWithErrorHandlers, generateUUID } from '@/lib/utils';
-import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
-import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
-import useSWR from 'swr';
-import { useModels } from '../hooks/use-models';
-import { Artifact } from './artifact';
-import { useDataStream } from './data-stream-provider';
-import { GoogleLoginCTA } from './google-login-cta';
-import { Messages } from './messages';
-import { MultimodalInput } from './multimodal-input';
-import { toast, upgradeToast } from './toast';
-type VisibilityType = 'private' | 'public';
+import { useAnonymousAuth } from "@/hooks/use-anonymous-auth";
+import { useArtifactSelector } from "@/hooks/use-artifact";
+import { useAutoResume } from "@/hooks/use-auto-resume";
+import { useChatVisibility } from "@/hooks/use-chat-visibility";
+import { useCompareRun } from "@/hooks/use-compare-run";
+import { getDefaultModelForUser } from "@/lib/ai/models";
+import type { Vote } from "@/lib/db/schema";
+import { uiLogger } from "@/lib/logger";
+import type { AppUser } from "@/lib/supabase/types";
+import type { Attachment, ChatMessage } from "@/lib/types";
+import { fetcher } from "@/lib/utils";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import useSWR from "swr";
+import { useModels } from "../hooks/use-models";
+import { Artifact } from "./artifact";
+import { useDataStream } from "./data-stream-provider";
+import { GoogleLoginCTA } from "./google-login-cta";
+import { Messages } from "./messages";
+import { MultimodalInput } from "./multimodal-input";
+import { toast, upgradeToast } from "./toast";
+type VisibilityType = "private" | "public";
 
 export function Chat({
   id,
@@ -79,11 +77,11 @@ export function Chat({
   const currentModel = !isModelsLoading
     ? userSettings?.defaultModel ||
       initialChatModel ||
-      getDefaultModelForUser(userType ?? 'anonymous')
+      getDefaultModelForUser(userType ?? "anonymous")
     : userSettings?.defaultModel ||
-      getDefaultModelForUser(userType ?? 'anonymous');
+      getDefaultModelForUser(userType ?? "anonymous");
 
-  const [input, setInput] = useState<string>('');
+  const [input, setInput] = useState<string>("");
 
   // Compare mode state - default to true for seamless model selection
   const [isCompareMode, setIsCompareMode] = useState(true);
@@ -133,86 +131,18 @@ export function Chat({
     }
   }, [isLoadingRuns, compareRuns, isCompareMode, selectedModelIds.length, id]);
 
-  const {
-    messages,
-    setMessages,
-    sendMessage,
-    status,
-    stop,
-    regenerate,
-    resumeStream,
-  } = useChat<ChatMessage>({
-    id,
-    messages: initialMessages,
-    experimental_throttle: 100,
-    generateId: generateUUID,
-    transport: new DefaultChatTransport({
-      api: '/api/chat', // All authenticated users (including anonymous) use the same API
-      fetch: fetchWithErrorHandlers,
-      prepareSendMessagesRequest({ messages, id, body }) {
-        return {
-          body: {
-            id,
-            message: messages.at(-1),
-            selectedChatModel: currentModel,
-            selectedVisibilityType: visibilityType,
-            ...body,
-          },
-        };
-      },
-    }),
-    onData: (dataPart) => {
-      setDataStream((ds) => (ds ? [...ds, dataPart] : []));
-    },
-    onFinish: () => {
-      // Note: Removed the history mutation to prevent layout shifts
-      // The chat history will be updated naturally through navigation
-      // Increment message count for anonymous users
-      if (authUser?.is_anonymous !== false) {
-        incrementMessageCount();
-      }
-    },
-    onError: (error) => {
-      console.error('Chat error:', error);
-
-      if (error instanceof ChatSDKError) {
-        if (error.type === 'rate_limit') {
-          // Show upgrade toast for rate limiting errors
-          upgradeToast({
-            title: 'Message limit reached',
-            description: error.message,
-            actionText: 'Upgrade to Pro',
-          });
-        } else {
-          toast({
-            type: 'error',
-            description: error.message,
-          });
-        }
-      } else {
-        // Handle non-ChatSDKError cases
-        const errorMessage = error?.message || 'An unexpected error occurred';
-        if (
-          errorMessage.includes('rate_limit') ||
-          errorMessage.includes('exceeded')
-        ) {
-          upgradeToast({
-            title: 'Message limit reached',
-            description: errorMessage,
-            actionText: 'Upgrade to Pro',
-          });
-        } else {
-          toast({
-            type: 'error',
-            description: errorMessage,
-          });
-        }
-      }
-    },
-  });
+  // For unified compare architecture, we don't need the regular useChat hook
+  // since all interactions go through compare infrastructure
+  const messages = initialMessages;
+  const setMessages = () => {}; // No-op since we don't use regular chat
+  const sendMessage = async (_message?: any) => Promise.resolve(); // No-op since we don't use regular chat
+  const status = "ready" as const;
+  const stop = async () => {};
+  const regenerate = async () => {};
+  const resumeStream = async () => {};
 
   const searchParams = useSearchParams();
-  const query = searchParams.get('query');
+  const query = searchParams.get("query");
 
   const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
 
@@ -225,7 +155,7 @@ export function Chat({
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
-    fetcher,
+    fetcher
   );
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
@@ -240,7 +170,7 @@ export function Chat({
       // When enabling compare mode, ensure current model is selected
       if (currentModel && !selectedModelIds.includes(currentModel)) {
         setSelectedModelIds((prev) =>
-          prev.length > 0 ? [...prev, currentModel] : [currentModel],
+          prev.length > 0 ? [...prev, currentModel] : [currentModel]
         );
       }
     }
@@ -254,38 +184,39 @@ export function Chat({
   const handleStartCompare = useCallback(
     async (prompt: string, modelIds: string[]) => {
       try {
-        if (modelIds.length === 1) {
-          // Single model - use regular chat flow for normal experience
-          sendMessage({
-            role: 'user' as const,
-            parts: [{ type: 'text', text: prompt }],
-          });
-        } else {
-          // Multiple models - use compare API
-          await startCompare({ prompt, modelIds });
-        }
+        // Always use compare infrastructure for unified architecture (1-N models)
+        await startCompare({ prompt, modelIds });
         // Clear input after starting
-        setInput('');
-      } catch (error) {
-        console.error('Failed to start chat/comparison:', error);
+        setInput("");
+      } catch (error: any) {
+        uiLogger.error(
+          {
+            error: error.message,
+            stack: error.stack,
+            chatId: id,
+            modelIds,
+            promptLength: prompt.length,
+          },
+          "Failed to start chat/comparison"
+        );
 
         // Check if it's a rate limit error for compare functionality
-        if (error instanceof Error && error.message.includes('429')) {
+        if (error instanceof Error && error.message.includes("429")) {
           upgradeToast({
-            title: 'Compare limit reached',
+            title: "Compare limit reached",
             description:
-              'Upgrade to Pro for unlimited model comparisons and 1000 messages per month.',
-            actionText: 'Upgrade to Pro',
+              "Upgrade to Pro for unlimited model comparisons and 1000 messages per month.",
+            actionText: "Upgrade to Pro",
           });
         } else {
           toast({
-            type: 'error',
-            description: 'Failed to start chat. Please try again.',
+            type: "error",
+            description: "Failed to start chat. Please try again.",
           });
         }
       }
     },
-    [startCompare, sendMessage, setInput],
+    [startCompare, setInput]
   );
 
   const handleContinueWithModels = (modelIds: string[]) => {
@@ -298,25 +229,24 @@ export function Chat({
   // Handle query parameter from URL (e.g., shared links)
   useEffect(() => {
     if (query && !hasAppendedQuery) {
-      // Use compare mode logic if multiple models are selected
-      if (isCompareMode && selectedModelIds.length > 1) {
+      // Always use compare mode for unified architecture (1-N models)
+      if (selectedModelIds.length > 0) {
         handleStartCompare(query, selectedModelIds);
       } else {
         sendMessage({
-          role: 'user' as const,
-          parts: [{ type: 'text', text: query }],
+          role: "user" as const,
+          parts: [{ type: "text", text: query }],
         });
       }
 
       setHasAppendedQuery(true);
-      window.history.replaceState({}, '', `/chat/${id}`);
+      window.history.replaceState({}, "", `/chat/${id}`);
     }
   }, [
     query,
     sendMessage,
     hasAppendedQuery,
     id,
-    isCompareMode,
     selectedModelIds,
     handleStartCompare,
   ]);
@@ -358,7 +288,6 @@ export function Chat({
           hasMore={hasMore}
           loadMore={loadMore}
           isLoadingMore={isLoadingMore}
-          sendMessage={sendMessage}
           selectedVisibilityType={visibilityType}
           isCompareMode={isCompareMode}
           selectedModelIds={selectedModelIds}
@@ -376,7 +305,7 @@ export function Chat({
                   </h3>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
                     {messageCount >= 10
-                      ? 'Sign in with Google to continue chatting with unlimited messages.'
+                      ? "Sign in with Google to continue chatting with unlimited messages."
                       : `${
                           10 - messageCount
                         } messages remaining. Sign in for unlimited access to all models.`}
@@ -406,7 +335,6 @@ export function Chat({
               setAttachments={setAttachments}
               messages={messages}
               setMessages={setMessages}
-              sendMessage={sendMessage}
               selectedVisibilityType={visibilityType}
               user={user}
               selectedModelId={currentModel}
@@ -416,7 +344,7 @@ export function Chat({
               onSelectedModelIdsChange={handleSelectedModelIdsChange}
               onStartCompare={handleStartCompare}
               compareRuns={compareRuns}
-              activeCompareMessage={compareState.status !== 'idle'}
+              activeCompareMessage={compareState.status !== "idle"}
               isModelsLoading={isModelsLoading}
               isLoadingRuns={isLoadingRuns}
             />
