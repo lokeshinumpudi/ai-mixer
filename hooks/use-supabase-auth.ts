@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { getChatHistoryPaginationKey } from '@/components/sidebar-history';
-import { createClient } from '@/lib/supabase/client';
-import type { AppUser, UserType } from '@/lib/supabase/types';
-import type { User } from '@supabase/supabase-js';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { mutate } from 'swr';
-import { unstable_serialize } from 'swr/infinite';
+import { getChatHistoryPaginationKey } from "@/components/sidebar-history";
+import { createClient } from "@/lib/supabase/client";
+import type { AppUser, UserType } from "@/lib/supabase/types";
+import type { User } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { mutate } from "swr";
+import { unstable_serialize } from "swr/infinite";
 
 export function useSupabaseAuth() {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -30,24 +30,24 @@ export function useSupabaseAuth() {
     }
     // Also clear any direct history keys as a safety net
     mutate(
-      (key) => typeof key === 'string' && key.startsWith('/api/history'),
+      (key) => typeof key === "string" && key.startsWith("/api/history"),
       undefined,
       {
         revalidate: false,
-      },
+      }
     );
-    mutate('/api/usage/summary', undefined, { revalidate: false });
-    mutate('/api/models', undefined, { revalidate: false });
-    mutate('/api/user/settings', undefined, { revalidate: false });
+    mutate("/api/usage/summary", undefined, { revalidate: false });
+    mutate("/api/models", undefined, { revalidate: false });
+    mutate("/api/user/settings", undefined, { revalidate: false });
 
     // Clear user-specific localStorage data
     const keysToRemove = [
-      'anonymous_message_count',
-      'user-model-selection',
-      'sidebar-state',
-      'chat-input-draft',
+      "anonymous_message_count",
+      "user-model-selection",
+      "sidebar-state",
+      "chat-input-draft",
       // Also clear artifact UI caches which may reveal content
-      'artifact',
+      "artifact",
     ];
 
     keysToRemove.forEach((key) => {
@@ -64,20 +64,20 @@ export function useSupabaseAuth() {
       const allKeys = Object.keys(localStorage);
       const userSpecificKeys = allKeys.filter(
         (key) =>
-          key.startsWith('chat-') ||
-          key.startsWith('user-') ||
-          key.startsWith('swr-') ||
-          key.startsWith('artifact-'),
+          key.startsWith("chat-") ||
+          key.startsWith("user-") ||
+          key.startsWith("swr-") ||
+          key.startsWith("artifact-")
       );
 
       userSpecificKeys.forEach((key) => {
         localStorage.removeItem(key);
       });
     } catch (error) {
-      console.warn('Failed to clear user-specific localStorage data:', error);
+      console.warn("Failed to clear user-specific localStorage data:", error);
     }
 
-    console.log('[AUTH] User data cleared on sign out');
+    console.log("[AUTH] User data cleared on sign out");
   };
 
   useEffect(() => {
@@ -100,13 +100,15 @@ export function useSupabaseAuth() {
       setLoading(false);
 
       // Handle auth events
-      if (event === 'SIGNED_IN') {
+      if (event === "SIGNED_IN") {
         router.refresh();
-      } else if (event === 'SIGNED_OUT') {
+      } else if (event === "SIGNED_OUT") {
         // Clear user data when signed out (in case signOut wasn't called directly)
         clearUserData();
-        router.push('/');
+        router.push("/");
         router.refresh();
+        // Force a full window refresh to ensure complete state reset
+        window.location.reload();
       }
     });
 
@@ -119,8 +121,8 @@ export function useSupabaseAuth() {
       const { data, error } = await supabase.auth.signInAnonymously({
         options: {
           data: {
-            user_type: 'anonymous' as UserType,
-            created_via: 'anonymous',
+            user_type: "anonymous" as UserType,
+            created_via: "anonymous",
           },
         },
       });
@@ -137,13 +139,18 @@ export function useSupabaseAuth() {
   const signInWithGoogle = async () => {
     setLoading(true);
     try {
+      // Use current location to construct proper redirect URL
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const redirectUrl = `${protocol}//${host}/auth/callback`;
+
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
           queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
+            access_type: "offline",
+            prompt: "consent",
           },
         },
       });
@@ -165,6 +172,13 @@ export function useSupabaseAuth() {
 
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+
+      // Navigate to home and refresh
+      router.push("/");
+      router.refresh();
+      // Force a full window refresh to ensure complete state reset
+      window.location.reload();
+
       return { error: null };
     } catch (error) {
       return { error };
@@ -175,15 +189,20 @@ export function useSupabaseAuth() {
 
   const linkGoogleAccount = async () => {
     if (!user?.is_anonymous) {
-      throw new Error('Can only link accounts for anonymous users');
+      throw new Error("Can only link accounts for anonymous users");
     }
 
     setLoading(true);
     try {
+      // Use current location to construct proper redirect URL
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const redirectUrl = `${protocol}//${host}/auth/callback`;
+
       const { data, error } = await supabase.auth.linkIdentity({
-        provider: 'google',
+        provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
         },
       });
 
@@ -205,7 +224,7 @@ export function useSupabaseAuth() {
     linkGoogleAccount,
     isAuthenticated: !!user,
     isAnonymous: user?.is_anonymous || false,
-    userType: user?.user_metadata?.user_type || 'anonymous',
+    userType: user?.user_metadata?.user_type || "anonymous",
   };
 }
 
@@ -215,8 +234,8 @@ function transformUser(user: User): AppUser {
     id: user.id,
     email: user.email,
     user_metadata: {
-      user_type: user.user_metadata?.user_type || 'free',
-      created_via: user.user_metadata?.created_via || 'google',
+      user_type: user.user_metadata?.user_type || "free",
+      created_via: user.user_metadata?.created_via || "google",
     },
     is_anonymous: user.is_anonymous,
   };

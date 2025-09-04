@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 
 interface UseAnonymousAuthReturn {
   user: any;
@@ -14,7 +14,7 @@ interface UseAnonymousAuthReturn {
 }
 
 const MAX_ANONYMOUS_MESSAGES = 5;
-const MESSAGE_COUNT_KEY = 'anonymous_message_count';
+const MESSAGE_COUNT_KEY = "anonymous_message_count";
 
 export function useAnonymousAuth(): UseAnonymousAuthReturn {
   const [user, setUser] = useState<any>(null);
@@ -25,7 +25,7 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
 
   // Load message count from localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const stored = localStorage.getItem(MESSAGE_COUNT_KEY);
       setMessageCount(stored ? Number.parseInt(stored, 10) : 0);
     }
@@ -49,15 +49,15 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
           const { data, error } = await supabase.auth.signInAnonymously();
 
           if (error) {
-            console.error('Failed to create anonymous user:', error);
+            console.error("Failed to create anonymous user:", error);
             // Create a fallback anonymous user object for client-side functionality
             setUser({
               id: `guest-${Date.now()}`,
               email: undefined,
               is_anonymous: true,
               user_metadata: {
-                user_type: 'anonymous',
-                created_via: 'anonymous',
+                user_type: "anonymous",
+                created_via: "anonymous",
               },
             } as any);
           } else {
@@ -65,7 +65,7 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
           }
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error("Auth initialization error:", error);
       } finally {
         setIsLoading(false);
       }
@@ -77,14 +77,14 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      if (event === "SIGNED_IN" && session?.user) {
         setUser(session.user);
         // Reset message count when user signs in with Google
         if (!session.user.is_anonymous) {
           setMessageCount(0);
           localStorage.removeItem(MESSAGE_COUNT_KEY);
         }
-      } else if (event === 'SIGNED_OUT') {
+      } else if (event === "SIGNED_OUT") {
         setUser(null);
         setMessageCount(0);
         localStorage.removeItem(MESSAGE_COUNT_KEY);
@@ -94,8 +94,8 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
             const { data, error } = await supabase.auth.signInAnonymously();
             if (error) {
               console.error(
-                'Failed to create anonymous user after sign out:',
-                error,
+                "Failed to create anonymous user after sign out:",
+                error
               );
               // Create fallback anonymous user
               setUser({
@@ -103,8 +103,8 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
                 email: undefined,
                 is_anonymous: true,
                 user_metadata: {
-                  user_type: 'anonymous',
-                  created_via: 'anonymous',
+                  user_type: "anonymous",
+                  created_via: "anonymous",
                 },
               } as any);
             } else {
@@ -112,8 +112,8 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
             }
           } catch (error) {
             console.error(
-              'Error creating anonymous user after sign out:',
-              error,
+              "Error creating anonymous user after sign out:",
+              error
             );
             // Create fallback anonymous user
             setUser({
@@ -121,8 +121,8 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
               email: undefined,
               is_anonymous: true,
               user_metadata: {
-                user_type: 'anonymous',
-                created_via: 'anonymous',
+                user_type: "anonymous",
+                created_via: "anonymous",
               },
             } as any);
           }
@@ -135,23 +135,28 @@ export function useAnonymousAuth(): UseAnonymousAuthReturn {
 
   const signInWithGoogle = useCallback(async () => {
     try {
+      // Use current location to construct proper redirect URL
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const redirectUrl = `${protocol}//${host}/auth/callback`;
+
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
           queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
+            access_type: "offline",
+            prompt: "consent",
           },
         },
       });
 
       if (error) {
-        console.error('Google sign-in error:', error);
+        console.error("Google sign-in error:", error);
         throw error;
       }
     } catch (error) {
-      console.error('Failed to sign in with Google:', error);
+      console.error("Failed to sign in with Google:", error);
       throw error;
     }
   }, [supabase.auth]);
