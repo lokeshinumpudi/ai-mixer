@@ -320,7 +320,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 ),
               );
 
-              // Track usage
+              // Track usage - each model in compare mode counts as 1 message
               after(async () => {
                 try {
                   const inChars = prompt.length;
@@ -332,7 +332,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                     modelId,
                     tokensIn: toTokens(inChars),
                     tokensOut: toTokens(outChars),
-                    messages: 1,
+                    messages: 1, // Each model counts as 1 message (so 2 models = 2 messages, 3 models = 3 messages)
                   });
                 } catch (err) {
                   console.error('Usage tracking failed for compare:', err);
