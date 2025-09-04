@@ -59,7 +59,7 @@ export function InlineLoadingState({
 export function SkeletonLoader({ className = '' }: { className?: string }) {
   return (
     <div className={`animate-pulse ${className}`}>
-      <div className="bg-gray-200 rounded h-full w-full" />
+      <div className="bg-gray-200 rounded size-full" />
     </div>
   );
 }

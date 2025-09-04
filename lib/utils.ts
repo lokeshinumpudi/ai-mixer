@@ -96,6 +96,34 @@ export function generateUUID(): string {
   });
 }
 
+/**
+ * Get the base URL for the application
+ * Uses NEXT_PUBLIC_BASE_URL environment variable if available,
+ * otherwise falls back to constructing from current location (client-side)
+ * or from headers (server-side)
+ */
+export function getBaseUrl(headers?: Headers): string {
+  // If environment variable is set, use it
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return process.env.NEXT_PUBLIC_BASE_URL;
+  }
+
+  // Client-side fallback
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.host}`;
+  }
+
+  // Server-side fallback using headers
+  if (headers) {
+    const host = headers.get('host');
+    const protocol = headers.get('x-forwarded-proto') || 'http';
+    return `${protocol}://${host}`;
+  }
+
+  // Last resort fallback
+  return 'http://localhost:3000';
+}
+
 type ResponseMessageWithoutId = CoreToolMessage | CoreAssistantMessage;
 type ResponseMessage = ResponseMessageWithoutId & { id: string };
 

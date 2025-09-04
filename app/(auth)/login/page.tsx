@@ -22,7 +22,7 @@ export default function LoginPage() {
       <div className="flex h-dvh w-screen items-center justify-center">
         <div className="w-full max-w-md overflow-hidden rounded-2xl flex flex-col gap-6 bg-background/80 backdrop-blur-md shadow-xl ring-1 ring-border/50 p-6 sm:p-8">
           <div className="flex flex-col items-center justify-center gap-3 px-4 text-center sm:px-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100 mx-auto" />
+            <div className="animate-spin rounded-full size-8 border-b-2 border-gray-900 dark:border-gray-100 mx-auto" />
             <p className="text-sm text-gray-500 dark:text-zinc-400">
               Checking authentication...
             </p>

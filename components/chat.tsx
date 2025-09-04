@@ -392,7 +392,7 @@ export function Chat({
           </div>
         )}
 
-        <form className="absolute bottom-0 left-0 right-0 flex mx-auto px-6 pb-6 gap-2 w-full md:max-w-3xl">
+        <form className="absolute bottom-0 inset-x-0 flex mx-auto px-6 pb-6 gap-2 w-full md:max-w-3xl">
           {/* Backdrop blur background only behind the input area */}
           <div className="absolute inset-x-6 inset-y-0 bg-background/95 backdrop-blur-sm border-t border-border/30 rounded-t-lg -z-10" />
           {!isReadonly && messageCount < 10 && (

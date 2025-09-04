@@ -408,7 +408,7 @@ function PureMultimodalInput({
                       }}
                       className="ml-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5 transition-colors"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="size-3" />
                     </button>
                   )}
                 </Badge>
@@ -471,7 +471,7 @@ function PureMultimodalInput({
                 : 'Compare multiple models'
             }
           >
-            <GitCompare className="h-3.5 w-3.5" />
+            <GitCompare className="size-3.5" />
             {isCompareMode && selectedModelIds.length > 1 && (
               <span className="text-xs">{selectedModelIds.length}</span>
             )}
@@ -531,7 +531,7 @@ function PureAttachmentsButton({
   return (
     <Button
       data-testid="attachments-button"
-      className="luxury-button rounded-xl p-2 h-9 w-9 border-0 hover:bg-accent/80"
+      className="luxury-button rounded-xl p-2 size-9 border-0 hover:bg-accent/80"
       onClick={(event) => {
         event.preventDefault();
         fileInputRef.current?.click();
@@ -556,7 +556,7 @@ function PureStopButton({
   return (
     <Button
       data-testid="stop-button"
-      className="luxury-button rounded-full p-2 h-9 w-9 border border-border/50 bg-background hover:bg-destructive hover:text-destructive-foreground"
+      className="luxury-button rounded-full p-2 size-9 border border-border/50 bg-background hover:bg-destructive hover:text-destructive-foreground"
       onClick={(event) => {
         event.preventDefault();
         stop();

@@ -42,7 +42,7 @@ export const VirtualContent = memo(function VirtualContent({
 
   const handleShowLess = useCallback(() => {
     if (!isVirtualized && content.length > threshold) {
-      setVisibleContent(content.substring(0, 2000) + '...');
+      setVisibleContent(`${content.substring(0, 2000)}...`);
       setIsVirtualized(true);
       // Scroll back to top of content
       if (containerRef.current) {

@@ -91,15 +91,15 @@ function getStatusIcon(
 ) {
   switch (status) {
     case 'pending':
-      return <div className="h-4 w-4 rounded-full bg-gray-300" />;
+      return <div className="size-4 rounded-full bg-gray-300" />;
     case 'running':
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+      return <Loader2 className="size-4 animate-spin text-blue-500" />;
     case 'completed':
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
+      return <CheckCircle className="size-4 text-green-500" />;
     case 'canceled':
-      return <StopCircle className="h-4 w-4 text-yellow-500" />;
+      return <StopCircle className="size-4 text-yellow-500" />;
     case 'failed':
-      return <XCircle className="h-4 w-4 text-red-500" />;
+      return <XCircle className="size-4 text-red-500" />;
     default:
       return null;
   }
@@ -158,7 +158,7 @@ const CompareResultCard = memo(function CompareResultCard({
   return (
     <Card className={cn('flex h-full flex-col overflow-hidden', className)}>
       {/* Clean header with model info, status icon, and timing */}
-      <CardHeader className="flex-shrink-0 px-4 py-3 border-b border-border/30">
+      <CardHeader className="shrink-0 px-4 py-3 border-b border-border/30">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Model name and status icon */}
@@ -196,10 +196,10 @@ const CompareResultCard = memo(function CompareResultCard({
                 variant="ghost"
                 size="sm"
                 onClick={onExpand}
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
                 title="Expand for better readability"
               >
-                <Maximize2 className="h-3 w-3" />
+                <Maximize2 className="size-3" />
               </Button>
             )}
 
@@ -209,10 +209,10 @@ const CompareResultCard = memo(function CompareResultCard({
                 variant="ghost"
                 size="sm"
                 onClick={onCancel}
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                className="size-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
                 title="Cancel this model"
               >
-                <X className="h-3 w-3" />
+                <X className="size-3" />
               </Button>
             )}
           </div>
@@ -342,7 +342,7 @@ const ModalHeaderContent = memo(function ModalHeaderContent({
           onClick={onCancel}
           className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 ml-2"
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
           Cancel
         </Button>
       )}
@@ -395,7 +395,7 @@ const ExpandedCompareResult = memo(function ExpandedCompareResult({
         ) : result.status === 'running' ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+              <Loader2 className="size-8 animate-spin text-blue-500 mx-auto mb-4" />
               <p className="text-muted-foreground text-lg">
                 Generating response...
               </p>
@@ -488,7 +488,7 @@ export const CompareMessage = memo(function CompareMessage({
               onClick={onRetry}
               className="gap-2"
             >
-              <RotateCcw className="h-4 w-4" />
+              <RotateCcw className="size-4" />
               Retry
             </Button>
           )}
@@ -500,7 +500,7 @@ export const CompareMessage = memo(function CompareMessage({
               onClick={onCancelAll}
               className="gap-2 text-red-600 hover:text-red-700"
             >
-              <StopCircle className="h-4 w-4" />
+              <StopCircle className="size-4" />
               Cancel All
             </Button>
           )}
@@ -529,7 +529,7 @@ export const CompareMessage = memo(function CompareMessage({
                     onCancelModel ? () => onCancelModel(modelId) : undefined
                   }
                   onExpand={() => handleExpandCard(modelId)}
-                  className="min-h-[400px] w-[80vw] max-w-[320px] flex-shrink-0 snap-start"
+                  className="min-h-[400px] w-[80vw] max-w-[320px] shrink-0 snap-start"
                 />
               );
             })}

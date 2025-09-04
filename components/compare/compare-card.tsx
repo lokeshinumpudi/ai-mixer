@@ -34,15 +34,15 @@ function getModelDisplayName(modelId: string): string {
 function getStatusIcon(status: CompareModelState['status']) {
   switch (status) {
     case 'pending':
-      return <div className="h-4 w-4 rounded-full bg-gray-300" />;
+      return <div className="size-4 rounded-full bg-gray-300" />;
     case 'running':
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+      return <Loader2 className="size-4 animate-spin text-blue-500" />;
     case 'completed':
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
+      return <CheckCircle className="size-4 text-green-500" />;
     case 'canceled':
-      return <StopCircle className="h-4 w-4 text-yellow-500" />;
+      return <StopCircle className="size-4 text-yellow-500" />;
     case 'failed':
-      return <XCircle className="h-4 w-4 text-red-500" />;
+      return <XCircle className="size-4 text-red-500" />;
     default:
       return null;
   }
@@ -112,7 +112,7 @@ export function CompareCard({
 
   return (
     <Card className={cn('flex h-full flex-col', className)}>
-      <CardHeader className="flex-shrink-0 pb-3">
+      <CardHeader className="shrink-0 pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {getStatusIcon(modelState.status)}
@@ -123,9 +123,9 @@ export function CompareCard({
               variant="ghost"
               size="sm"
               onClick={onCancel}
-              className="h-8 w-8 p-0 text-gray-500 hover:text-red-500"
+              className="size-8 p-0 text-gray-500 hover:text-red-500"
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </Button>
           )}
         </div>
@@ -158,7 +158,7 @@ export function CompareCard({
         {modelState.status === 'failed' && modelState.error ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-center text-red-600">
-              <XCircle className="mx-auto h-8 w-8 mb-2" />
+              <XCircle className="mx-auto size-8 mb-2" />
               <p className="text-sm font-medium">Failed</p>
               <p className="text-xs text-red-500 mt-1">{modelState.error}</p>
             </div>
@@ -166,7 +166,7 @@ export function CompareCard({
         ) : modelState.status === 'canceled' ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-center text-yellow-600">
-              <StopCircle className="mx-auto h-8 w-8 mb-2" />
+              <StopCircle className="mx-auto size-8 mb-2" />
               <p className="text-sm font-medium">Canceled</p>
             </div>
           </div>
@@ -179,7 +179,7 @@ export function CompareCard({
             <div className="text-center text-gray-500">
               {modelState.status === 'running' ? (
                 <>
-                  <Loader2 className="mx-auto h-8 w-8 mb-2 animate-spin" />
+                  <Loader2 className="mx-auto size-8 mb-2 animate-spin" />
                   <p className="text-sm">Generating response...</p>
                 </>
               ) : (
@@ -195,7 +195,7 @@ export function CompareCard({
         modelState.serverStartedAt) && (
         <>
           <Separator />
-          <div className="flex-shrink-0 px-4 py-2 text-xs text-gray-500 space-y-1">
+          <div className="shrink-0 px-4 py-2 text-xs text-gray-500 space-y-1">
             {(() => {
               const { inTokens, outTokens } = resolveTokenCounts(
                 modelState.usage,

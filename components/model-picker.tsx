@@ -211,7 +211,7 @@ function ModelCard({
                 {model.name}
               </h3>
               {isSelected && enabled && (
-                <div className="text-primary ml-2 flex-shrink-0">
+                <div className="text-primary ml-2 shrink-0">
                   <CheckIcon size={16} />
                 </div>
               )}
@@ -793,7 +793,7 @@ export function ModelPicker({
                   >
                     <span>Show all</span>
                     <svg
-                      className="w-3 h-3"
+                      className="size-3"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -978,7 +978,7 @@ export function ModelPicker({
                   >
                     <span>Show less</span>
                     <svg
-                      className="w-3 h-3"
+                      className="size-3"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"

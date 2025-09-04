@@ -127,7 +127,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8 overflow-hidden">
+      <div className="w-full max-w-7xl mx-auto p-4 sm:px-6 sm:py-8 overflow-hidden">
         {/* Mobile-first responsive grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           {/* Usage and Upgrade (main focus) */}
@@ -344,7 +344,7 @@ export default function SettingsPage() {
                         aria-controls={panelId}
                         type="button"
                         onClick={() => setActiveTab(tab.id)}
-                        className={`px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-colors whitespace-nowrap flex-shrink-0 min-w-fit ${
+                        className={`px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-colors whitespace-nowrap shrink-0 min-w-fit ${
                           selected
                             ? 'bg-background text-foreground shadow-sm'
                             : 'text-muted-foreground hover:text-foreground'

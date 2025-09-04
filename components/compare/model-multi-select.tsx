@@ -82,7 +82,7 @@ function ModelChip({ modelId, model, onRemove }: ModelChipProps) {
         onClick={onRemove}
         className="ml-1 text-gray-500 hover:text-gray-700"
       >
-        <X className="h-3 w-3" />
+        <X className="size-3" />
       </Button>
     </Badge>
   );
@@ -151,7 +151,7 @@ function ModelSelectCard({
 
             {isSelected && enabled && (
               <div className="text-primary">
-                <CheckIcon className="h-4 w-4" />
+                <CheckIcon className="size-4" />
               </div>
             )}
           </div>
@@ -250,7 +250,7 @@ export function ModelMultiSelect({
             className="gap-2"
             disabled={disabled || selectedModelIds.length >= COMPARE_MAX_MODELS}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
             {selectedModelIds.length === 0
               ? 'Select models to compare'
               : `Add model (${selectedModelIds.length}/${COMPARE_MAX_MODELS})`}
@@ -265,7 +265,7 @@ export function ModelMultiSelect({
           <div className="space-y-4">
             {/* Search */}
             <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
               <Input
                 placeholder="Search models..."
                 value={searchQuery}

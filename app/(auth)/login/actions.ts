@@ -1,19 +1,19 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getBaseUrl } from '@/lib/utils';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 export async function signInWithGoogle() {
   const supabase = await createClient();
   const headersList = await headers();
-  const host = headersList.get('host');
-  const protocol = headersList.get('x-forwarded-proto') || 'http';
+  const baseUrl = getBaseUrl(headersList);
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${protocol}://${host}/auth/callback`,
+      redirectTo: `${baseUrl}/auth/callback`,
     },
   });
 

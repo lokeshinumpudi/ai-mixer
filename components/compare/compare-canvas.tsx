@@ -49,7 +49,7 @@ export function CompareCanvas({
                 onClick={onRetry}
                 className="gap-2"
               >
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw className="size-4" />
                 Retry
               </Button>
             )}
@@ -61,7 +61,7 @@ export function CompareCanvas({
                 onClick={onCancelAll}
                 className="gap-2 text-red-600 hover:text-red-700"
               >
-                <StopCircle className="h-4 w-4" />
+                <StopCircle className="size-4" />
                 Cancel All
               </Button>
             )}
