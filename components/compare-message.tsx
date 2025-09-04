@@ -536,8 +536,17 @@ export const CompareMessage = memo(function CompareMessage({
           </MobileScrollContainer>
         </div>
 
-        {/* Desktop: Grid layout */}
-        <div className="hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Desktop: Flexible grid layout based on model count */}
+        <div
+          className={cn(
+            'hidden md:grid gap-4',
+            modelIds.length === 1 && 'md:grid-cols-1',
+            modelIds.length === 2 && 'md:grid-cols-2',
+            modelIds.length === 3 && 'md:grid-cols-3',
+            modelIds.length === 4 && 'md:grid-cols-4',
+            modelIds.length === 5 && 'md:grid-cols-5',
+          )}
+        >
           {modelIds.map((modelId) => {
             const result = results[modelId];
             if (!result) return null;

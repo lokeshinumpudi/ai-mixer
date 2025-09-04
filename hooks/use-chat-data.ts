@@ -30,7 +30,18 @@ export function useChatData(chatId: string): ChatData {
     revalidateOnReconnect: true,
   });
 
-  // Fetch messages data with pagination support
+  // First, check if this chat has compare runs
+  const { data: compareRunsCheck, isLoading: isLoadingCompareCheck } = useSWR<{
+    items: any[];
+  }>(chatId ? `/api/compare?chatId=${chatId}&limit=1` : null, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+  });
+
+  const hasCompareRuns = (compareRunsCheck?.items?.length ?? 0) > 0;
+
+  // Only fetch messages if there are NO compare runs
+  // This prevents duplicate content when compare mode is active
   const {
     data: messagesData,
     error: messagesError,
@@ -45,6 +56,9 @@ export function useChatData(chatId: string): ChatData {
   }>(
     (pageIndex, previousPageData) => {
       if (!chatId) return null;
+
+      // 🚫 SKIP regular message loading if compare runs exist
+      if (hasCompareRuns) return null;
 
       // If this is the first page, don't pass a cursor
       if (pageIndex === 0) {
@@ -88,14 +102,17 @@ export function useChatData(chatId: string): ChatData {
 
   return {
     chat: chat || null,
-    messages: allMessages,
-    isLoading: chatLoading || messagesLoading,
+    messages: hasCompareRuns ? [] : allMessages, // Return empty messages if compare runs exist
+    isLoading:
+      chatLoading ||
+      isLoadingCompareCheck ||
+      (!hasCompareRuns && messagesLoading),
     error: chatError || messagesError,
-    hasMore,
-    nextCursor,
+    hasMore: hasCompareRuns ? false : hasMore, // No pagination for compare mode
+    nextCursor: hasCompareRuns ? null : nextCursor,
     mutate,
-    loadMore,
-    isLoadingMore,
+    loadMore: hasCompareRuns ? async () => {} : loadMore, // No-op for compare mode
+    isLoadingMore: hasCompareRuns ? false : isLoadingMore,
   };
 }
 

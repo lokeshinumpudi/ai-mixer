@@ -1,14 +1,16 @@
 ---
-alwaysApply: false
-description: "Overall patterns for chat flow, state management, and user experience consistency"
-globs: components/chat.tsx,app/(chat)/api/chat/route.ts,app/(chat)/api/compare/stream/route.ts,hooks/use-chat.ts
+alwaysApply: true
+description: "Overall patterns for chat flow, state management, and user experience consistency - UNIFIED COMPARE MODE ONLY"
+globs: components/chat.tsx,app/(chat)/api/compare/stream/route.ts,hooks/use-compare-run.ts
 ---
 
-# Chat Flow Patterns
+# Chat Flow Patterns - Unified Compare Architecture
 
 ## Overview
 
-Consistent chat flow patterns ensure smooth user experiences across regular chat, compare mode, and streaming interactions. This rule covers the end-to-end patterns for managing chat state, streaming, and user interactions.
+**BREAKING CHANGE**: The application now operates exclusively in **unified compare mode**. All chat interactions use the compare infrastructure, eliminating dual-mode complexity and ensuring consistent user experiences.
+
+**Deprecated**: Regular chat APIs and patterns are deprecated. Use compare mode patterns for all new development.
 
 ## Core Chat Architecture
 
@@ -138,44 +140,49 @@ handleSSEEvent = (event) => {
 
 ## User Interaction Patterns
 
-### Message Submission
+### Unified Message Submission
 
 ```tsx
 const handleSubmit = async (input: string, attachments: File[]) => {
-  if (selectedModelIds.length > 1) {
-    // Compare mode
-    await handleStartCompare(input, selectedModelIds);
-  } else {
-    // Regular chat
-    sendMessage({
-      role: "user",
-      parts: [
-        ...attachments.map(file => ({ type: "file", ... })),
-        { type: "text", text: input },
-      ],
-    });
-  }
+  // ALWAYS use compare infrastructure - no conditional logic needed
+  await handleStartCompare(input, selectedModelIds, attachments);
 
   // Clear input and scroll appropriately
   setInput("");
   scrollToBottom("smooth");
 };
+
+const handleStartCompare = async (
+  prompt: string,
+  modelIds: string[],
+  attachments: File[] = []
+) => {
+  // Unified compare flow for 1-N models
+  await startCompare({
+    prompt,
+    modelIds, // Could be ["gpt-4"] or ["gpt-4", "claude-3"]
+    attachments,
+  });
+};
 ```
 
-### Mode Switching
+### Model Selection (No Mode Switching)
 
 ```tsx
-const handleCompareModeChange = (enabled: boolean) => {
-  setIsCompareMode(enabled);
-  if (enabled) {
-    // Ensure at least current model is selected
-    setSelectedModelIds((prev) =>
-      prev.includes(currentModel) ? prev : [...prev, currentModel]
-    );
-  } else {
-    // Keep only current model for regular chat
-    setSelectedModelIds([currentModel]);
+// No mode switching needed - always compare mode
+const handleModelSelection = (modelIds: string[]) => {
+  setSelectedModelIds(modelIds);
+
+  // Ensure at least one model is selected
+  if (modelIds.length === 0) {
+    setSelectedModelIds([defaultModel]);
   }
+};
+
+// Model picker always shows multi-select interface
+const ModelPicker = ({ selectedModelIds, onSelectionChange }) => {
+  // Always multi-select, works for 1-N models
+  return <MultiSelectModelPicker ... />;
 };
 ```
 

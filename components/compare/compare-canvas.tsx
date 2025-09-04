@@ -72,7 +72,16 @@ export function CompareCanvas({
       <Separator />
 
       <CardContent className="p-4">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div
+          className={cn(
+            'grid gap-4',
+            modelIds.length === 1 && 'grid-cols-1',
+            modelIds.length === 2 && 'grid-cols-2',
+            modelIds.length === 3 && 'grid-cols-3',
+            modelIds.length === 4 && 'grid-cols-4',
+            modelIds.length === 5 && 'grid-cols-5',
+          )}
+        >
           {modelIds.map((modelId) => {
             const modelState = byModelId[modelId];
             if (!modelState) return null;

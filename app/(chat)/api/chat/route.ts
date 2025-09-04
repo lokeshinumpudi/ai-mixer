@@ -152,7 +152,10 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
       }
     }
 
-    const messagesFromDb = await getMessagesByChatId({ id });
+    const messagesFromDb = await getMessagesByChatId({
+      id,
+      excludeCompareMessages: true, // Exclude compare messages in regular chat mode
+    });
     const uiMessages = [...convertToUIMessages(messagesFromDb), message];
 
     const { longitude, latitude, city, country } = geolocation(request);

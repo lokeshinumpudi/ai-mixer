@@ -40,6 +40,7 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       id: chatId,
       limit,
       before: before || undefined,
+      excludeCompareMessages: true, // Exclude compare-related messages to prevent duplication
     });
     const uiMessages = convertToUIMessages(messagesFromDb);
 

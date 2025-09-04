@@ -69,7 +69,10 @@ export const GET = authenticatedRoute(async (_: Request, context, user) => {
    * but the resumable stream has concluded at this point.
    */
   if (!stream) {
-    const messages = await getMessagesByChatId({ id: chatId });
+    const messages = await getMessagesByChatId({
+      id: chatId,
+      excludeCompareMessages: true, // Exclude compare messages in regular chat mode
+    });
     const mostRecentMessage = messages.at(-1);
 
     if (!mostRecentMessage) {

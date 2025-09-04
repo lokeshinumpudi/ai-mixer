@@ -122,6 +122,17 @@ export function Chat({
     ...compareState
   } = useCompareRun(id);
 
+  // Auto-enable compare mode if this chat has compare runs (even when reloading)
+  useEffect(() => {
+    if (!isLoadingRuns && compareRuns.length > 0 && !isCompareMode) {
+      setIsCompareMode(true);
+      // Also set the selected models from the first compare run
+      if (compareRuns[0]?.modelIds && selectedModelIds.length === 0) {
+        setSelectedModelIds(compareRuns[0].modelIds);
+      }
+    }
+  }, [isLoadingRuns, compareRuns, isCompareMode, selectedModelIds.length, id]);
+
   const {
     messages,
     setMessages,

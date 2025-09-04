@@ -310,10 +310,12 @@ export async function getMessagesByChatId({
   id,
   limit,
   before,
+  excludeCompareMessages = false,
 }: {
   id: string;
   limit?: number;
   before?: string;
+  excludeCompareMessages?: boolean;
 }) {
   try {
     // Build the base query
@@ -349,8 +351,51 @@ export async function getMessagesByChatId({
     // Apply limit and execute query
     const messages = await (limit ? query.limit(limit) : query);
 
+    // Filter out compare-related messages if requested
+    let filteredMessages = messages;
+    if (excludeCompareMessages) {
+      // Check if this chat has any compare runs
+      const hasCompareRuns = await db
+        .select({ count: count() })
+        .from(compareRun)
+        .where(eq(compareRun.chatId, id))
+        .then((result) => result[0]?.count > 0);
+
+      if (hasCompareRuns) {
+        // Filter out assistant messages that have compareRunId in metadata
+        // These are the duplicate messages created by the context management system
+        filteredMessages = messages.filter((message) => {
+          // Keep all user messages
+          if (message.role === 'user') return true;
+
+          // For assistant messages, check if they have compare-related metadata
+          if (message.role === 'assistant') {
+            try {
+              // Check for metadata part in the parts array
+              const parts = Array.isArray(message.parts) ? message.parts : [];
+              const metadataPart = parts.find(
+                (part: any) => part.type === 'metadata',
+              );
+
+              // Check if this message has compareRunId (indicates it's from compare mode)
+              const hasCompareRunId = metadataPart?.compareRunId;
+              const shouldKeep = !hasCompareRunId;
+
+              return shouldKeep;
+            } catch (e) {
+              console.error(`Error parsing message ${message.id}:`, e);
+              // If we can't parse parts, keep the message (safer default)
+              return true;
+            }
+          }
+
+          return true; // Keep other message types
+        });
+      }
+    }
+
     // Reverse to chronological order for UI
-    return messages.reverse();
+    return filteredMessages.reverse();
   } catch (error) {
     throw new ChatSDKError(
       'bad_request:database',
