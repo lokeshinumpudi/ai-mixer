@@ -1,6 +1,7 @@
 import { useMessages } from "@/hooks/use-messages";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import equal from "fast-deep-equal";
 import { motion } from "framer-motion";
@@ -218,7 +219,11 @@ function PureMessages({
               ease: [0.25, 0.46, 0.45, 0.94],
             },
           }}
-          className="w-full mx-auto max-w-5xl px-4"
+          className={cn(
+            "w-full mx-auto px-4",
+            // For single model, use full width on mobile, max-width on desktop
+            run.modelIds.length === 1 ? "max-w-none md:max-w-4xl" : "max-w-5xl"
+          )}
         >
           <CompareMessage
             data={{
@@ -261,7 +266,13 @@ function PureMessages({
               ease: [0.25, 0.46, 0.45, 0.94],
             },
           }}
-          className="w-full mx-auto max-w-5xl px-4"
+          className={cn(
+            "w-full mx-auto px-4",
+            // For single model, use full width on mobile, max-width on desktop
+            activeCompareMessage.modelIds.length === 1
+              ? "max-w-none md:max-w-4xl"
+              : "max-w-5xl"
+          )}
         >
           <CompareMessage
             data={activeCompareMessage}

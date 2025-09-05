@@ -579,7 +579,14 @@ export const CompareMessage = memo(function CompareMessage({
   }, [expandedModelId, results]);
 
   return (
-    <div className={cn("w-full mx-auto max-w-5xl overflow-hidden", className)}>
+    <div
+      className={cn(
+        "w-full mx-auto overflow-hidden",
+        // For single model, use full width on mobile, max-width on desktop
+        modelIds.length === 1 ? "max-w-none md:max-w-4xl" : "max-w-5xl",
+        className
+      )}
+    >
       {/* User Query Display */}
       <div className="mb-6 flex justify-end px-4 md:px-0">
         <div className="bg-primary text-primary-foreground px-4 py-3 rounded-2xl shadow-sm max-w-2xl">
