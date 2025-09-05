@@ -10,7 +10,7 @@ description: "Schema guidelines and centralized query patterns with Drizzle ORM.
 
 - **Drizzle ORM**: Use Drizzle for all database interactions to ensure type safety.
 - **Centralized Queries**: All database queries **MUST** be located in `lib/db/queries.ts`. This provides a single source of truth for data access logic, making the codebase easier to maintain and test.
-- **SAFE User Identity Management**: Use the **LINKING APPROACH** for OAuth users. **NEVER overwrite existing user IDs** - this causes massive data loss and foreign key violations.
+- **Clean User Identity Management**: Use **DIRECT MAPPING** for OAuth users. Supabase IDs are used directly as database primary keys.
 
 ## Schema Design
 
@@ -20,47 +20,52 @@ The database schema is defined in `lib/db/schema.ts`.
 - **Foreign Keys**: Enforce data integrity by using foreign key constraints to link related tables (e.g., `chat.userId` references `user.id`).
 - **User-Scoped Data**: Nearly all tables should have a `userId` column to ensure data is properly associated with a user.
 - **Current Implementation Notes**:
-  - `User.id` uses `defaultRandom()` for anonymous users but is set to Supabase ID for OAuth users. **CRITICAL**: Anonymous users keep their database-generated IDs when linked to OAuth accounts to preserve all foreign key relationships.
-  - The `supabaseId` field stores the OAuth user ID for identity mapping without breaking existing relationships.
-  - Anonymous users are persisted with a placeholder email to satisfy `User.email NOT NULL`. The linking approach ensures their data is preserved when they authenticate.
+  - `User.id` uses Supabase user ID directly as the primary key for all users (both anonymous and OAuth).
+  - No complex linking or ID translation required - clean 1:1 mapping.
+  - Fresh database state ensures no legacy user complications.
 
-## SAFE OAuth User Identity Management
+## CLEAN OAuth User Identity Management
 
-**🚨 DANGER**: The "simple" approach of overwriting user IDs causes catastrophic data loss. **ALWAYS use the linking approach:**
+**✅ CLEAN APPROACH**: Direct mapping eliminates complexity. No legacy user handling needed.
 
-### ✅ CORRECT: Linking Approach
-
-```typescript
-// Preserve existing anonymous user ID, just add OAuth reference
-await db
-  .update(user)
-  .set({
-    supabaseId: supabaseUserId,
-    // Keep existing id to preserve ALL relationships
-  })
-  .where(eq(user.id, existingAnonymousUserId));
-```
-
-### ❌ WRONG: Overwriting Approach
+### ✅ CLEAN: Direct Mapping Approach (CURRENT)
 
 ```typescript
-// ❌ CAUSES MASSIVE DATA LOSS
-await db
-  .update(user)
-  .set({
-    id: supabaseUserId, // BREAKS ALL FOREIGN KEYS!
-  })
-  .where(eq(user.id, existingAnonymousUserId));
-// Result: All chats, messages, payments become orphaned!
+// lib/db/queries.ts
+export async function createOAuthUserIfNotExistsSimple(
+  supabaseUserId: string,
+  email: string
+) {
+  // Check if user already exists
+  const [existingUser] = await db
+    .select()
+    .from(user)
+    .where(eq(user.id, supabaseUserId))
+    .limit(1);
+
+  if (existingUser) {
+    return existingUser; // Already exists
+  }
+
+  // Create new user with direct ID mapping
+  const [newUser] = await db
+    .insert(user)
+    .values({
+      id: supabaseUserId, // Direct: Supabase ID = Database ID
+      email,
+    })
+    .returning();
+
+  return newUser;
+}
 ```
 
-### Why Overwriting is Dangerous
+### Why This Approach is Clean
 
-- **Data Loss**: All foreign key relationships break
-- **Future Tables**: New tables added later will have broken FKs
-- **Recovery**: Impossible to undo once IDs are overwritten
-- **Concurrency**: Race conditions during ID changes
-- **Integrity**: Violates referential integrity constraints
+- **Zero Complexity**: Single database lookup
+- **Direct Mapping**: Supabase ID = Database primary key
+- **No Edge Cases**: Fresh database state
+- **Future-Proof**: Simple and maintainable
 
 ```typescript
 // lib/db/schema.ts
