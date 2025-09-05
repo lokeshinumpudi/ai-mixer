@@ -62,11 +62,7 @@ const getProviderIcon = (provider: string) => {
 };
 
 // Mock favorites - in real app this would come from user preferences
-const mockFavorites = [
-  'xai/grok-3-mini',
-  'openai/gpt-4o-mini',
-  'anthropic/claude-3.5-haiku',
-];
+const mockFavorites = ['openai/gpt-4o-mini', 'anthropic/claude-3.5-haiku'];
 
 // localStorage utilities for model selection persistence
 const MODEL_SELECTION_KEY = 'user-model-selection';
@@ -121,10 +117,6 @@ function ModelCard({
 
   // Determine if model supports image analysis (vision capabilities)
   const supportsImageAnalysis =
-    model.id.includes('vision') ||
-    model.id.includes('gpt-4') ||
-    model.id.includes('claude-3') ||
-    model.id.includes('gemini') ||
     model.description.toLowerCase().includes('vision') ||
     model.description.toLowerCase().includes('image');
 
@@ -499,6 +491,10 @@ export function ModelPicker({
       let newSelection: string[];
 
       if (currentlySelected) {
+        // Prevent deselection if it would result in empty selection
+        if (selectedModelIds.length === 1) {
+          return; // Ignore the operation - no computation needed
+        }
         // Remove model from selection
         newSelection = selectedModelIds.filter((id) => id !== modelId);
       } else {
@@ -820,9 +816,6 @@ export function ModelPicker({
                     // Determine capabilities
                     const supportsImageAnalysis =
                       model.id.includes('vision') ||
-                      model.id.includes('gpt-4') ||
-                      model.id.includes('claude-3') ||
-                      model.id.includes('gemini') ||
                       model.description.toLowerCase().includes('vision') ||
                       model.description.toLowerCase().includes('image');
 

@@ -19,7 +19,8 @@ This is a living document that captures findings from architecture reviews, summ
 
 ### ⚠️ Areas for Improvement
 
-- **Schema-Reality Mismatch**: The `user` table schema in Drizzle shows a `defaultRandom()` for the ID, but in practice, it's always overridden with the Supabase user ID. This should be corrected to avoid confusion.
+- **OAuth Identity Management**: **CRITICAL** - The initial "Supabase ID as Primary Key" approach was dangerous and would cause massive data loss. Now uses SAFE linking approach that preserves all relationships.
+- **Schema-Reality Mismatch**: The `user` table schema uses `defaultRandom()` for anonymous users but Supabase ID for OAuth users. This is intentional for the linking approach.
 - **Inconsistent User ID Types**: Some legacy tables use `varchar` for `userId` while newer ones use `uuid`. This should be standardized to `uuid`.
 - **Query Optimization**: Some high-traffic queries could benefit from composite indexes.
 
@@ -35,4 +36,26 @@ This is a living document that captures findings from architecture reviews, summ
 
 - **API Performance**: Consolidated `/api/models` and `/api/user/settings` into a single endpoint, reducing network requests by ~50% on page load.
 - **Anonymous User Handling**: Fixed bugs related to rate limiting and data persistence for anonymous users, and resolved a privacy issue where chat history could leak between sessions.
-  -- **Route Simplification**: The route configuration was simplified from a three-tier (public, protected, conditional) to a two-tier (public, protected) system, reducing cognitive overhead.
+- **Route Simplification**: The route configuration was simplified from a three-tier (public, protected, conditional) to a two-tier (public, protected) system, reducing cognitive overhead.
+
+### Critical Security & Data Integrity Fixes
+
+#### OAuth Identity Management Overhaul 🚨
+
+**ISSUE DISCOVERED**: The initial "Supabase ID as Primary Key" approach was **catastrophically dangerous** and would cause massive data loss.
+
+**RISKS IDENTIFIED**:
+
+- **Data Loss**: Overwriting user IDs would orphan all chats, messages, payments, and related data
+- **Foreign Key Violations**: Future tables would have broken relationships
+- **Recovery Impossible**: Once IDs are overwritten, data relationships cannot be restored
+- **Concurrency Issues**: Race conditions during ID changes
+
+**SOLUTION IMPLEMENTED**:
+
+- ✅ **SAFE Linking Approach**: Preserve existing user IDs, add `supabaseId` reference
+- ✅ **Data Integrity Checker**: Comprehensive monitoring for orphaned records
+- ✅ **Migration Safety**: Automated fixes for existing OAuth users
+- ✅ **Prevention Measures**: Updated all documentation and rules to prevent future issues
+
+**Impact**: Prevented potential production disaster with thousands of orphaned user records.

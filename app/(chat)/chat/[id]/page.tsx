@@ -7,7 +7,6 @@ import { Chat } from '@/components/chat';
 import { DataStreamHandler } from '@/components/data-stream-handler';
 import { useChatAccess, useChatReadOnly } from '@/hooks/use-chat-access';
 import { useChatData } from '@/hooks/use-chat-data';
-import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 
 export default function Page() {
   const params = useParams();
@@ -70,7 +69,6 @@ export default function Page() {
       <Chat
         id={chat.id}
         initialMessages={messages}
-        initialChatModel={DEFAULT_CHAT_MODEL}
         initialVisibilityType={chat.visibility}
         isReadonly={isReadonly}
         user={user}

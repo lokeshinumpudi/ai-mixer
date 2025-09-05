@@ -11,16 +11,19 @@ export const isTestEnvironment = Boolean(
 
 export const DUMMY_PASSWORD = generateDummyPassword();
 
-export const DEFAULT_MODEL = 'xai/grok-3-mini';
-// Image model configuration
-export const DEFAULT_IMAGE_MODEL = 'xai/grok-2-image-1212'; // Or whatever image model is available via gateway
+// Or whatever image model is available via gateway
 
 // Pricing configuration
 export const PRICING = {
+  ANONYMOUS_TIER: {
+    dailyMessages: 20,
+    name: 'Anonymous Plan',
+    description: '20 messages per day with basic models',
+  },
   FREE_TIER: {
-    dailyMessages: 5,
+    dailyMessages: 50,
     name: 'Free Plan',
-    description: '5 messages per day with basic models',
+    description: '50 messages per day with basic models',
   },
   PAID_TIER: {
     monthlyMessages: 1000,
@@ -32,22 +35,26 @@ export const PRICING = {
 
 // Free models (available to all users)
 export const FREE_MODELS = [
-  'openai/gpt-5-nano',
   'openai/gpt-oss-20b',
   'google/gemini-2.5-flash-lite',
+  'openai/gpt-5-nano',
 ] as const;
 
 // Pro models (require paid subscription)
 export const PRO_MODELS = [
   ...FREE_MODELS,
+  'moonshotai/kimi-k2',
+  'alibaba/qwen-3-32b',
   'openai/gpt-5-mini',
   'openai/gpt-oss-120b',
   'xai/grok-code-fast-1',
   'google/gemini-2.5-flash-image-preview',
   'openai/gpt-4o-mini',
-  'moonshotai/kimi-k2',
-  'alibaba/qwen-3-32b',
 ] as const;
+
+export const DEFAULT_MODEL = FREE_MODELS[0];
+// Image model configuration
+export const DEFAULT_IMAGE_MODEL = 'xai/grok-2-image-1212';
 
 // Unified model configuration - single source of truth
 export const SUPPORTED_MODELS = {

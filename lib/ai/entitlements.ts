@@ -15,7 +15,7 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    * For anonymous/guest users - Limited access to basic models
    */
   anonymous: {
-    maxMessagesPerDay: 5, // 5 messages for anonymous users
+    maxMessagesPerDay: PRICING.FREE_TIER.dailyMessages,
     getAllowedModelIds: () => [...FREE_MODELS],
     planName: 'Guest',
     planDescription: 'Limited access for anonymous users',

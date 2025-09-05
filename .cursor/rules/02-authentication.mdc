@@ -7,38 +7,59 @@ description: "Covers Supabase integration, anonymous users, and user data synchr
 
 ## Core Architecture
 
-The system uses **Supabase Authentication** as the primary identity provider. User records in the local PostgreSQL database are synchronized with Supabase, using the Supabase user ID as the primary key.
+The system uses **Supabase Authentication** as the primary identity provider with a **CLEAN, DIRECT APPROACH**. User records in the local PostgreSQL database use Supabase user IDs directly as database primary keys, eliminating complex linking logic.
 
 ### Authentication Flow
 
 1.  User authenticates with Supabase (e.g., via Google OAuth).
 2.  A JWT is issued and managed by Supabase middleware.
 3.  On the first API request, the `authenticatedRoute` or `protectedRoute` decorator is invoked.
-4.  The decorator calls `createOAuthUserIfNotExists` to create a corresponding user record in the local database if one doesn't already exist.
-5.  All subsequent operations use the synchronized local user record.
+4.  The decorator calls `createOAuthUserIfNotExistsSimple` to ensure the user exists in the local database.
+5.  All operations use the Supabase user ID directly as the database primary key.
 
-## User ID Synchronization
+## CLEAN User Identity Management
 
-**CRITICAL RULE**: The Supabase user ID **MUST** be used as the primary key for the `user` table in the local database. This is essential for maintaining data integrity between the authentication provider and the application database.
+**✅ SIMPLIFIED APPROACH**: **Supabase IDs are used directly as database primary keys**. No complex linking required.
+
+### ✅ CLEAN: Direct Mapping Approach (CURRENT)
 
 ```typescript
 // lib/db/queries.ts
-export async function createOAuthUserIfNotExists(
+export async function createOAuthUserIfNotExistsSimple(
   supabaseUserId: string,
   email: string
 ) {
-  // Logic to find user by Supabase ID or email (for migration)
-  // If not found, create a new user:
-  const inserted = await db
+  // Check if user already exists
+  const [existingUser] = await db
+    .select()
+    .from(user)
+    .where(eq(user.id, supabaseUserId))
+    .limit(1);
+
+  if (existingUser) {
+    return existingUser; // User already exists
+  }
+
+  // Create new user with Supabase ID as primary key
+  const [newUser] = await db
     .insert(user)
     .values({
-      id: supabaseUserId, // Use Supabase ID directly
+      id: supabaseUserId, // Direct mapping - no translation needed
       email,
     })
     .returning();
-  return inserted[0];
+
+  return newUser;
 }
 ```
+
+### Why This Approach is Clean
+
+- ✅ **Zero Complexity**: No legacy user handling
+- ✅ **Direct Mapping**: Supabase ID = Database ID
+- ✅ **Simple Logic**: Single database lookup
+- ✅ **Future-Proof**: Works with fresh database
+- ✅ **No Edge Cases**: Clean state from day one
 
 ## Anonymous User Support
 

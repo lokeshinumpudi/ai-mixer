@@ -1,5 +1,6 @@
 'use client';
 
+import { IdentityManager } from '@/components/identity-manager';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,7 @@ import useSWR from 'swr';
 
 type TabId =
   | 'account'
+  | 'identities'
   | 'customization'
   | 'history'
   | 'models'
@@ -25,6 +27,7 @@ type TabId =
 
 const tabs: { id: TabId; label: string }[] = [
   { id: 'account', label: 'Account' },
+  { id: 'identities', label: 'Linked Accounts' },
   { id: 'customization', label: 'Customization' },
   { id: 'history', label: 'History & Sync' },
   { id: 'models', label: 'Models' },
@@ -384,6 +387,14 @@ export default function SettingsPage() {
               <AccountTab />
             </section>
             <section
+              id="panel-identities"
+              role="tabpanel"
+              aria-labelledby="tab-identities"
+              hidden={activeTab !== 'identities'}
+            >
+              <IdentitiesTab />
+            </section>
+            <section
               id="panel-customization"
               role="tabpanel"
               aria-labelledby="tab-customization"
@@ -506,6 +517,15 @@ function AttachmentsTab() {
           </p>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function IdentitiesTab() {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Linked Accounts</h2>
+      <IdentityManager />
     </div>
   );
 }

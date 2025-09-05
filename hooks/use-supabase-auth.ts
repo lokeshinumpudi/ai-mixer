@@ -54,6 +54,7 @@ export function useSupabaseAuth() {
       try {
         localStorage.removeItem(key);
       } catch (error) {
+        // Non-critical error, just log it
         console.warn(`Failed to remove localStorage key: ${key}`, error);
       }
     });
@@ -74,9 +75,11 @@ export function useSupabaseAuth() {
         localStorage.removeItem(key);
       });
     } catch (error) {
+      // Non-critical error, just log it
       console.warn('Failed to clear user-specific localStorage data:', error);
     }
 
+    // Auth cleanup completed successfully
     console.log('[AUTH] User data cleared on sign out');
   };
 
@@ -144,6 +147,8 @@ export function useSupabaseAuth() {
       const baseUrl = getBaseUrl();
       const redirectUrl = `${baseUrl}/auth/callback`;
 
+      // If user is anonymous, Supabase will automatically link the Google identity
+      // to the existing anonymous user account
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -187,20 +192,32 @@ export function useSupabaseAuth() {
     }
   };
 
-  const linkGoogleAccount = async () => {
-    if (!user?.is_anonymous) {
-      throw new Error('Can only link accounts for anonymous users');
+  // Enhanced identity management with full Supabase capabilities
+  const getLinkedIdentities = async () => {
+    try {
+      const { data, error } = await supabase.auth.getUserIdentities();
+      if (error) throw error;
+      return { identities: data?.identities || [], error: null };
+    } catch (error) {
+      return { identities: [], error };
+    }
+  };
+
+  const linkIdentity = async (
+    provider: 'google' | 'github' | 'discord' | 'twitter',
+  ) => {
+    if (!user) {
+      throw new Error('Must be authenticated to link identities');
     }
 
     setLoading(true);
     try {
-      // Use getBaseUrl utility for consistent URL handling
       const { getBaseUrl } = await import('@/lib/utils');
       const baseUrl = getBaseUrl();
       const redirectUrl = `${baseUrl}/auth/callback`;
 
       const { data, error } = await supabase.auth.linkIdentity({
-        provider: 'google',
+        provider,
         options: {
           redirectTo: redirectUrl,
         },
@@ -215,12 +232,49 @@ export function useSupabaseAuth() {
     }
   };
 
+  const unlinkIdentity = async (identityId: string) => {
+    if (!user) {
+      throw new Error('Must be authenticated to unlink identities');
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.unlinkIdentity({
+        id: identityId,
+        identity_id: identityId,
+        user_id: user.id,
+        provider: identityId,
+      });
+
+      if (error) throw error;
+
+      // Refresh user data to reflect changes
+      await supabase.auth.getUser();
+
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Legacy function for backward compatibility
+  const linkGoogleAccount = async () => {
+    return await linkIdentity('google');
+  };
+
   return {
     user,
     loading,
     signInAnonymously,
     signInWithGoogle,
     signOut,
+    // Enhanced identity management
+    getLinkedIdentities,
+    linkIdentity,
+    unlinkIdentity,
+    // Legacy compatibility
     linkGoogleAccount,
     isAuthenticated: !!user,
     isAnonymous: user?.is_anonymous || false,

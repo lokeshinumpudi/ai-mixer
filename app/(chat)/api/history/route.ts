@@ -1,24 +1,33 @@
-import { authenticatedRoute } from "@/lib/auth-decorators";
-import { getChatsByUserId } from "@/lib/db/queries";
-import { ChatSDKError } from "@/lib/errors";
-import type { NextRequest } from "next/server";
+import { authenticatedRoute } from '@/lib/auth-decorators';
+import { getChatsByUserId } from '@/lib/db/queries';
+import { ChatSDKError } from '@/lib/errors';
+import type { NextRequest } from 'next/server';
 
 export const GET = authenticatedRoute(
   async (request: NextRequest, context, user) => {
     // Ensure user exists in our database (for OAuth users)
     if (!user.is_anonymous && user.email) {
+      try {
+        const { createOAuthUserIfNotExistsSimple } = await import(
+          '@/lib/db/queries'
+        );
+        await createOAuthUserIfNotExistsSimple(user.id, user.email);
+      } catch (error) {
+        console.error('Failed to ensure OAuth user exists:', error);
+        // Continue anyway - user might already exist
+      }
     }
 
     const { searchParams } = request.nextUrl;
 
-    const limit = Number.parseInt(searchParams.get("limit") || "10");
-    const startingAfter = searchParams.get("starting_after");
-    const endingBefore = searchParams.get("ending_before");
+    const limit = Number.parseInt(searchParams.get('limit') || '10');
+    const startingAfter = searchParams.get('starting_after');
+    const endingBefore = searchParams.get('ending_before');
 
     if (startingAfter && endingBefore) {
       return new ChatSDKError(
-        "bad_request:api",
-        "Only one of starting_after or ending_before can be provided."
+        'bad_request:api',
+        'Only one of starting_after or ending_before can be provided.',
       ).toResponse();
     }
 
@@ -30,5 +39,5 @@ export const GET = authenticatedRoute(
     });
 
     return Response.json(chats);
-  }
+  },
 );
