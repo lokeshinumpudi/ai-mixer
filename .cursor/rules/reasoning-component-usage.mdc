@@ -8,7 +8,7 @@ globs: components/ai-elements/reasoning.tsx,components/message.tsx,components/co
 
 ## Overview
 
-The application uses a unified reasoning component system that provides consistent thinking/reasoning display across regular chat and compare modes.
+The application uses a unified reasoning component system that provides consistent thinking/reasoning display within the compare mode architecture.
 
 ## Key Components
 
@@ -31,12 +31,16 @@ The application uses a unified reasoning component system that provides consiste
 </Reasoning>
 ```
 
-### Basic Usage (Regular Chat)
+### Basic Usage (Compare Mode)
 
 ```tsx
-<Reasoning isStreaming={isLoading} className="w-full">
+<Reasoning
+  isStreaming={result.status === "running"}
+  className="w-full"
+  variant="grey"
+>
   <ReasoningTrigger />
-  <ReasoningContent>{part.text}</ReasoningContent>
+  <ReasoningContent>{result.reasoning}</ReasoningContent>
 </Reasoning>
 ```
 
@@ -49,8 +53,8 @@ The application uses a unified reasoning component system that provides consiste
 
 ### 2. Variant Usage
 
-- **Use `variant="grey"` for compare mode** - provides visual distinction without ugly boxes
-- **Use default variant for regular chat** - cleaner appearance
+- **Use `variant="grey"` for compare mode** - provides visual distinction within compare cards
+- **Use default variant sparingly** - primarily for compare mode interactions
 - Grey variant applies subtle text colors and max-height scrollable content
 
 ### 3. Mobile Considerations

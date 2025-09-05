@@ -38,11 +38,13 @@ alwaysApply: true
 
 ## Current Architecture State
 
-### Database Schema
+### Unified Compare Architecture
 
-- ✅ Compare tables (`compareRun`, `compareResult`) with proper constraints
-- ✅ Migration system working correctly with Drizzle
-- ✅ Composite primary keys and foreign key relationships
+- ✅ **Entry Point**: `compare-message.tsx` is the defacto entry point for all message rendering
+- ✅ **Unified Mode**: Application operates exclusively in compare mode - no dual interfaces
+- ✅ **Database Schema**: Compare tables (`compareRun`, `compareResult`) with proper constraints
+- ✅ **Migration System**: Working correctly with Drizzle ORM
+- ✅ **Composite Primary Keys**: Proper foreign key relationships established
 
 ### API Layer
 
@@ -66,12 +68,12 @@ alwaysApply: true
 
 ## User Experience Flow
 
-1. **Landing**: User sees compare mode active with current model selected
+1. **Landing**: User sees unified compare mode with current model selected
 2. **Selection**: Can add/remove models via model picker (up to 3)
-3. **Submission**: System automatically routes based on model count
-4. **Results**: Side-by-side comparison or regular chat response
+3. **Submission**: All interactions use unified compare infrastructure
+4. **Results**: All results rendered through `compare-message.tsx` entry point
 5. **Continuation**: Can continue with same or different model selection
-6. **History**: All interactions preserved in chat history
+6. **History**: All interactions preserved in unified chat history
 
 ## Rate Limiting & Monetization
 
@@ -158,4 +160,4 @@ The AI Compare feature is fully ready for production deployment:
 - ✅ **Security**: Authentication and authorization in place
 - ✅ **UX**: Smooth user experience with upgrade paths
 
-The feature successfully transforms the application from a single-model chat into a powerful multi-model comparison platform while maintaining the simplicity of the original interface.
+The feature successfully transforms the application from a single-model chat into a **unified multi-model comparison platform** where `compare-message.tsx` serves as the defacto entry point for all interactions.

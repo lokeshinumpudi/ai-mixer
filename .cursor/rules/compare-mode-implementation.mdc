@@ -8,7 +8,7 @@ globs: hooks/use-compare-run.ts,components/compare-message.tsx,components/messag
 
 ## Overview
 
-Compare mode enables side-by-side model comparison with real-time streaming, optimistic updates, smooth UX transitions, and mobile-responsive horizontal scrolling.
+Compare mode is now the **core application architecture** - `compare-message.tsx` serves as the defacto entry point for all message rendering and interactions. This unified approach eliminates dual-mode complexity while maintaining real-time streaming, optimistic updates, smooth UX transitions, and mobile-responsive horizontal scrolling.
 
 ## Core Architecture
 

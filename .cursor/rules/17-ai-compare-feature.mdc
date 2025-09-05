@@ -6,7 +6,7 @@ description: "AI Compare feature implementation - multi-model comparison system 
 
 ## Overview
 
-The AI Compare feature allows users to compare responses from multiple AI models (1-3) simultaneously in a unified interface. This feature is now the **default experience** with seamless single/multi-model switching.
+The AI Compare feature is now the **core application architecture** - all interactions use this unified multi-model comparison system. The application operates exclusively in compare mode, with `compare-message.tsx` serving as the **defacto entry point** for all message rendering and interactions.
 
 ## Core Architecture
 
@@ -25,41 +25,32 @@ The AI Compare feature allows users to compare responses from multiple AI models
 
 ### Key Components
 
-- **`useCompareRun`**: Hook managing compare state, SSE lifecycle, and API calls
-- **`CompareMessage`**: Displays comparison results inline within chat history
-- **`MultimodalInput`**: Enhanced with compare mode toggle and model selection
-- **`ModelPicker`**: Extended to support multi-model selection (1-3 models)
-- **`Chat`**: Orchestrates compare and regular chat modes seamlessly
+- **`CompareMessage`**: 🚨 **ENTRY POINT** - Handles all message rendering and interactions
+- **`useCompareRun`**: Hook managing unified compare state, SSE lifecycle, and API calls
+- **`MultimodalInput`**: Enhanced with unified compare mode and model selection
+- **`ModelPicker`**: Multi-model selection interface (1-3 models)
+- **`Chat`**: Orchestrates unified compare experience
 
 ## Implementation Details
 
-### Default Compare Mode
-
-Compare mode is now the default experience:
-
-```typescript
-// components/chat.tsx
-const [isCompareMode, setIsCompareMode] = useState(true);
-const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
-```
-
 ### Unified Compare Architecture
 
-**BREAKING CHANGE**: The system now **ALWAYS uses compare mode**, eliminating dual-mode complexity:
+**BREAKING CHANGE**: The application now **operates exclusively in compare mode**. There is no longer a separate single chat interface:
 
 ```typescript
 // components/chat.tsx - ALWAYS compare mode
-const handleStartCompare = async (prompt: string, modelIds: string[]) => {
-  // Always use compare infrastructure, even for single model
-  await startCompare({ prompt, modelIds });
-};
+const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
 
-// No more conditional routing - unified experience
-// Single model: startCompare({ prompt, modelIds: ["gpt-4"] })
-// Multi model: startCompare({ prompt, modelIds: ["gpt-4", "claude-3"] })
+// Single model selection still uses compare infrastructure
+if (selectedModelIds.length === 1) {
+  // Still uses /api/compare/stream with single model
+  await startCompare({ prompt, modelIds: selectedModelIds });
+}
 ```
 
-**CRITICAL**: Regular chat APIs (`/api/chat/route`, `/api/chat/[id]/stream`) are now **deprecated**. All new interactions use the compare infrastructure.
+**Entry Point**: `compare-message.tsx` handles all message rendering and interactions - no dual-mode logic exists.
+
+**CRITICAL**: Regular chat APIs (`/api/chat/route`, `/api/chat/[id]/stream`) are **deprecated**. All interactions use the unified compare infrastructure.
 
 ### Multi-Model Selection
 
@@ -106,14 +97,14 @@ for (const line of lines) {
 
 ## User Experience Flow
 
-1. **Unified Experience**: Always compare mode - no mode switching needed
+1. **Unified Experience**: Application operates exclusively in compare mode
 2. **Model Selection**: Users can select 1-3 models via model picker
 3. **Unified Submission**: All interactions use compare infrastructure:
    - 1 model → Compare run with single model card
    - 2+ models → Compare run with side-by-side cards
-4. **Inline Results**: All results display as `CompareMessage` components in chat history
+4. **Entry Point Rendering**: All results display as `CompareMessage` components (the defacto entry point)
 5. **Continuation**: Users can continue conversations with same or different model selection
-6. **Legacy Support**: Existing regular chats continue to work, new interactions use compare mode
+6. **Legacy Support**: Existing regular chats continue to work, new interactions use unified compare mode
 
 ## Rate Limiting & Entitlements
 

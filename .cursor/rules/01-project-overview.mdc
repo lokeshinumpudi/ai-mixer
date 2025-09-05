@@ -7,7 +7,9 @@ description: "High-level project overview, architecture, tech stack, and key pat
 
 ## Core Architecture
 
-This is a **Next.js 15 AI chatbot application** featuring real-time streaming, artifacts generation, multi-modal interactions, and a robust offline-first experience.
+This is a **Next.js 15 AI comparison platform** featuring unified multi-model interactions, real-time streaming, artifacts generation, and a robust offline-first experience. The application operates exclusively in **unified compare mode**, eliminating the complexity of dual chat interfaces.
+
+**Entry Point**: `compare-message.tsx` is the defacto entry point for all message rendering and interactions.
 
 ### Tech Stack
 
@@ -21,22 +23,28 @@ This is a **Next.js 15 AI chatbot application** featuring real-time streaming, a
 ### Project Structure
 
 ```
-app/            # Next.js App Router with route groups for auth and chat
+app/            # Next.js App Router with route groups for auth and unified compare mode
 components/     # UI components (shadcn/ui + custom)
+├── compare-message.tsx  # 🚨 ENTRY POINT: All message rendering and interactions
+├── multimodal-input.tsx # Enhanced with unified compare mode
+├── model-picker.tsx     # Multi-model selection interface
+├── chat.tsx            # Orchestrates unified compare experience
 lib/            # Core application logic
 ├── ai/         # AI SDK integration, tools, and model management
 ├── db/         # Drizzle schema, queries, and migrations
 ├── supabase/   # Supabase client and middleware setup
 └── artifacts/  # Server-side artifact system logic
 artifacts/      # Implementations for text, code, image, and sheet artifacts
-hooks/          # Custom React hooks (e.g., useModels, useArtifact)
+hooks/          # Custom React hooks (e.g., useModels, useArtifact, useCompareRun)
 ```
 
 ## Key Architectural Patterns
 
-- **Client Components**: Most interactive components are client-rendered (`'use client'`) to support the offline-first architecture.
-- **Consolidated APIs**: Endpoints like `/api/models` provide multiple related data types (models, user settings, user type) in a single call to improve performance.
-- **Authentication Decorators**: API routes are wrapped with `authenticatedRoute` or `protectedRoute` for consistent, type-safe security.
-- **Centralized Database Queries**: All database logic is centralized in `lib/db/queries.ts` to ensure consistency and maintainability.
-- **Supabase-First User IDs**: The application uses Supabase user IDs as the primary key for all user-related data in the local database to ensure synchronization.
-- **Cache-First & Offline-First**: SWR is configured for a cache-first approach, with critical data persisted in localStorage for a seamless offline experience.
+- **Unified Compare Mode**: Application operates exclusively in compare mode - no dual chat interfaces
+- **Entry Point Component**: `compare-message.tsx` handles all message rendering and interactions
+- **Client Components**: Most interactive components are client-rendered (`'use client'`) to support the offline-first architecture
+- **Consolidated APIs**: Endpoints like `/api/models` provide multiple related data types (models, user settings, user type) in a single call to improve performance
+- **Authentication Decorators**: API routes are wrapped with `authenticatedRoute` or `protectedRoute` for consistent, type-safe security
+- **Centralized Database Queries**: All database logic is centralized in `lib/db/queries.ts` to ensure consistency and maintainability
+- **Supabase-First User IDs**: The application uses Supabase user IDs as the primary key for all user-related data in the local database to ensure synchronization
+- **Cache-First & Offline-First**: SWR is configured for a cache-first approach, with critical data persisted in localStorage for a seamless offline experience

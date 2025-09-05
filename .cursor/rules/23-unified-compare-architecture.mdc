@@ -8,6 +8,8 @@ alwaysApply: true
 
 The application has been **unified to always use compare mode**, eliminating the complexity of dual chat modes. This simplifies the architecture, improves maintainability, and provides a consistent user experience regardless of model selection count.
 
+**Entry Point**: `compare-message.tsx` is the **defacto entry point** for all message rendering and interactions - no dual-mode logic exists in the application.
+
 ## Core Architectural Decision
 
 ### Always Compare Mode
@@ -60,18 +62,15 @@ export function useChatData(chatId: string): ChatData {
   const hasCompareRuns = (compareRunsCheck?.items?.length ?? 0) > 0;
 
   // 🚫 SKIP regular message loading if compare runs exist
-  const messagesData = useSWRInfinite(
-    (pageIndex, previousPageData) => {
-      if (!chatId) return null;
-      
-      // Skip loading if compare runs exist
-      if (hasCompareRuns) return null;
-      
-      // Only load regular messages for legacy chats without compare runs
-      return `/api/chat/${chatId}/messages?limit=20`;
-    },
-    fetcher
-  );
+  const messagesData = useSWRInfinite((pageIndex, previousPageData) => {
+    if (!chatId) return null;
+
+    // Skip loading if compare runs exist
+    if (hasCompareRuns) return null;
+
+    // Only load regular messages for legacy chats without compare runs
+    return `/api/chat/${chatId}/messages?limit=20`;
+  }, fetcher);
 
   return {
     chat: chat || null,
@@ -97,9 +96,9 @@ export function useChatData(chatId: string): ChatData {
 // User selects 1 model → Still uses compare infrastructure
 const handleSubmit = async (prompt: string) => {
   // Always use compare, even for single model
-  await startCompare({ 
-    prompt, 
-    modelIds: selectedModelIds // Could be ["gpt-4"] 
+  await startCompare({
+    prompt,
+    modelIds: selectedModelIds, // Could be ["gpt-4"]
   });
 };
 ```
@@ -109,29 +108,35 @@ const handleSubmit = async (prompt: string) => {
 ```typescript
 // User selects 2+ models → Same infrastructure
 const handleSubmit = async (prompt: string) => {
-  await startCompare({ 
-    prompt, 
-    modelIds: selectedModelIds // Could be ["gpt-4", "claude-3"] 
+  await startCompare({
+    prompt,
+    modelIds: selectedModelIds, // Could be ["gpt-4", "claude-3"]
   });
 };
 ```
 
-### UI Rendering
+### UI Rendering - Entry Point
 
 ```typescript
 // components/messages.tsx
-// Only compare runs are rendered - no regular messages for new chats
-{messages.length === 0 && compareRuns.length === 0 && <Greeting />}
+// 🚨 ENTRY POINT: compare-message.tsx handles all message rendering
+{
+  messages.length === 0 && compareRuns.length === 0 && <Greeting />;
+}
 
-{/* Historical compare runs */}
-{compareRuns.map((run) => (
-  <CompareMessage key={run.id} data={run} />
-))}
+{
+  /* Historical compare runs */
+}
+{
+  compareRuns.map((run) => <CompareMessage key={run.id} data={run} />);
+}
 
-{/* Active compare message */}
-{activeCompareMessage && (
-  <CompareMessage data={activeCompareMessage} />
-)}
+{
+  /* Active compare message - defacto entry point for interactions */
+}
+{
+  activeCompareMessage && <CompareMessage data={activeCompareMessage} />;
+}
 ```
 
 ## Migration Strategy
@@ -161,9 +166,9 @@ The following can be deprecated over time:
 ```typescript
 // components/multimodal-input.tsx
 // Always shows compare mode UI
-const MultimodalInput = ({ 
+const MultimodalInput = ({
   selectedModelIds, // Always array, even for single model
-  onStartCompare,   // Always compare function
+  onStartCompare, // Always compare function
   // ... other props
 }) => {
   // No mode switching - always compare
@@ -180,10 +185,10 @@ const MultimodalInput = ({
 const Chat = ({ id }: { id: string }) => {
   // Always in compare mode
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
-  
+
   // No mode switching logic needed
   const { startCompare, compareRuns, ...compareState } = useCompareRun(id);
-  
+
   // Unified message handling
   const handleStartCompare = async (prompt: string, modelIds: string[]) => {
     await startCompare({ prompt, modelIds });
@@ -203,12 +208,12 @@ const messageWithMetadata = {
   role: "assistant",
   parts: [
     { type: "text", text: result.content },
-    { 
-      type: "metadata", 
+    {
+      type: "metadata",
       compareRunId: runId,
       modelId: result.modelId,
       createdAt: new Date().toISOString(),
-    }
+    },
   ],
 };
 ```
@@ -224,15 +229,15 @@ export async function getMessagesByChatId({
   // Filter out compare-related messages to prevent duplication
   const filteredMessages = messages.filter((message) => {
     if (message.role === "user") return true;
-    
+
     if (message.role === "assistant") {
       const parts = Array.isArray(message.parts) ? message.parts : [];
       const metadataPart = parts.find((part: any) => part.type === "metadata");
-      
+
       // Exclude messages with compareRunId (they belong to compare mode)
       return !metadataPart?.compareRunId;
     }
-    
+
     return true;
   });
 }
@@ -281,7 +286,7 @@ const handleRateLimit = (error: any) => {
 // ❌ /api/chat/[id]/messages
 // ❌ /api/compare?chatId=...
 
-// After: One API call for compare mode chats  
+// After: One API call for compare mode chats
 // ✅ /api/compare?chatId=... (only)
 ```
 
@@ -309,7 +314,7 @@ test("single model interaction", async ({ page }) => {
   await page.click("[data-testid='gpt-4']");
   await page.fill("[data-testid='input']", "Hello");
   await page.click("[data-testid='send-button']");
-  
+
   // Should create compare run with single model
   await expect(page.locator("[data-testid='compare-message']")).toBeVisible();
 });
@@ -320,7 +325,7 @@ test("multi model interaction", async ({ page }) => {
   await page.click("[data-testid='claude-3']");
   await page.fill("[data-testid='input']", "Compare responses");
   await page.click("[data-testid='send-button']");
-  
+
   // Should create compare run with multiple models
   await expect(page.locator("[data-testid='compare-cards']")).toHaveCount(2);
 });
