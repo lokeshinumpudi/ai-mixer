@@ -171,24 +171,30 @@ export function UsageDashboard() {
       {/* Usage History Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <CardTitle className="text-lg">Recent Usage</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center sm:justify-end gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
+                className="flex items-center gap-1"
               >
                 <ChevronLeft className="size-4" />
+                <span className="hidden sm:inline">Previous</span>
               </Button>
-              <span className="text-sm text-muted-foreground">Page {page}</span>
+              <span className="text-sm text-muted-foreground px-2">
+                Page {page}
+              </span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setPage(page + 1)}
                 disabled={!usageData?.hasMore}
+                className="flex items-center gap-1"
               >
+                <span className="hidden sm:inline">Next</span>
                 <ChevronRight className="size-4" />
               </Button>
             </div>
@@ -200,51 +206,122 @@ export function UsageDashboard() {
               No usage data available
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2 text-sm font-medium">Date</th>
-                    <th className="text-left p-2 text-sm font-medium">Model</th>
-                    <th className="text-right p-2 text-sm font-medium">
-                      Tokens In
-                    </th>
-                    <th className="text-right p-2 text-sm font-medium">
-                      Tokens Out
-                    </th>
-                    <th className="text-right p-2 text-sm font-medium">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.id} className="border-b hover:bg-muted/50">
-                      <td className="p-2 text-sm">
+            <>
+              {/* Mobile: Card layout */}
+              <div className="md:hidden space-y-3">
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="text-sm font-medium">
                         {new Date(item.createdAt).toLocaleDateString("en-US", {
                           month: "short",
                           day: "numeric",
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
-                      </td>
-                      <td className="p-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {item.modelId.split("/")[1] || item.modelId}
-                        </Badge>
-                      </td>
-                      <td className="p-2 text-sm text-right">
-                        {item.tokensIn.toLocaleString()}
-                      </td>
-                      <td className="p-2 text-sm text-right">
-                        {item.tokensOut.toLocaleString()}
-                      </td>
-                      <td className="p-2 text-sm text-right">
-                        ${(item.cost / 100).toFixed(4)}
-                      </td>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {item.modelId.split("/")[1] || item.modelId}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-muted-foreground text-xs mb-1">
+                          Tokens In
+                        </div>
+                        <div className="font-medium">
+                          {item.tokensIn.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-xs mb-1">
+                          Tokens Out
+                        </div>
+                        <div className="font-medium">
+                          {item.tokensOut.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-xs mb-1">
+                          Total Tokens
+                        </div>
+                        <div className="font-medium">
+                          {(item.tokensIn + item.tokensOut).toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-xs mb-1">
+                          Cost
+                        </div>
+                        <div className="font-medium">
+                          ${(item.cost / 100).toFixed(4)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop: Table layout */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-3 text-sm font-medium">
+                        Date
+                      </th>
+                      <th className="text-left p-3 text-sm font-medium">
+                        Model
+                      </th>
+                      <th className="text-right p-3 text-sm font-medium">
+                        Tokens In
+                      </th>
+                      <th className="text-right p-3 text-sm font-medium">
+                        Tokens Out
+                      </th>
+                      <th className="text-right p-3 text-sm font-medium">
+                        Cost
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {items.map((item) => (
+                      <tr key={item.id} className="border-b hover:bg-muted/50">
+                        <td className="p-3 text-sm">
+                          {new Date(item.createdAt).toLocaleDateString(
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <Badge variant="secondary" className="text-xs">
+                            {item.modelId.split("/")[1] || item.modelId}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-sm text-right">
+                          {item.tokensIn.toLocaleString()}
+                        </td>
+                        <td className="p-3 text-sm text-right">
+                          {item.tokensOut.toLocaleString()}
+                        </td>
+                        <td className="p-3 text-sm text-right">
+                          ${(item.cost / 100).toFixed(4)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
