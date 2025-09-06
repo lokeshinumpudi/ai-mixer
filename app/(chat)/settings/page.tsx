@@ -1,60 +1,60 @@
-'use client';
+"use client";
 
-import { IdentityManager } from '@/components/identity-manager';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { useSidebar } from '@/components/ui/sidebar';
-import { UsageDashboard } from '@/components/usage/usage-dashboard';
-import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
-import { useUsage } from '@/hooks/use-usage';
-import { fetcher } from '@/lib/utils';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import useSWR from 'swr';
+import { IdentityManager } from "@/components/identity-manager";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { useSidebar } from "@/components/ui/sidebar";
+import { UsageDashboard } from "@/components/usage/usage-dashboard";
+import { useSupabaseAuth } from "@/hooks/use-supabase-auth";
+import { useUsage } from "@/hooks/use-usage";
+import { fetcher } from "@/lib/utils";
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import useSWR from "swr";
 
 type TabId =
-  | 'account'
-  | 'identities'
-  | 'customization'
-  | 'history'
-  | 'models'
-  | 'api'
-  | 'attachments'
-  | 'contact';
+  | "account"
+  | "identities"
+  | "customization"
+  | "history"
+  | "models"
+  | "api"
+  | "attachments"
+  | "contact";
 
 const tabs: { id: TabId; label: string }[] = [
-  { id: 'account', label: 'Account' },
-  { id: 'identities', label: 'Linked Accounts' },
-  { id: 'customization', label: 'Customization' },
-  { id: 'history', label: 'Usage & Analytics' },
-  { id: 'models', label: 'Models' },
-  { id: 'api', label: 'API Keys' },
-  { id: 'attachments', label: 'Attachments' },
-  { id: 'contact', label: 'Contact Us' },
+  { id: "account", label: "Account" },
+  { id: "identities", label: "Linked Accounts" },
+  { id: "customization", label: "Customization" },
+  { id: "history", label: "Usage & Analytics" },
+  { id: "models", label: "Models" },
+  { id: "api", label: "API Keys" },
+  { id: "attachments", label: "Attachments" },
+  { id: "contact", label: "Contact Us" },
 ];
 
 export default function SettingsPage() {
   // All hooks must be called at the top level, before any conditional logic
   const { user, loading } = useSupabaseAuth();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<TabId>('history');
+  const [activeTab, setActiveTab] = useState<TabId>("history");
   const { plan, usageHistory, mutate: mutateUsage } = useUsage();
 
   // Check for refresh parameter to force fresh billing status check
-  const shouldRefreshBilling = searchParams.get('refresh') === 'billing';
+  const shouldRefreshBilling = searchParams.get("refresh") === "billing";
 
   // Only check billing status once when component mounts, or when refresh is requested
   const { data: billingStatus, mutate: mutateBillingStatus } = useSWR(
-    '/api/billing/status',
+    "/api/billing/status",
     fetcher,
     {
       // Force revalidation if refresh parameter is present
       revalidateOnMount: shouldRefreshBilling,
-    },
+    }
   );
   const { setOpen, setOpenMobile } = useSidebar();
 
@@ -70,17 +70,17 @@ export default function SettingsPage() {
 
   // Clean up refresh parameter from URL after handling it
   useEffect(() => {
-    if (shouldRefreshBilling && typeof window !== 'undefined') {
+    if (shouldRefreshBilling && typeof window !== "undefined") {
       const url = new URL(window.location.href);
-      url.searchParams.delete('refresh');
-      window.history.replaceState({}, '', url.pathname + url.search);
+      url.searchParams.delete("refresh");
+      window.history.replaceState({}, "", url.pathname + url.search);
     }
   }, [shouldRefreshBilling]);
 
   // Refresh data when payment is detected
   useEffect(() => {
     if (billingStatus?.hasRecentPurchaseCredit) {
-      console.log('💳 Recent payment detected, refreshing data...');
+      console.log("💳 Recent payment detected, refreshing data...");
       // Refresh usage data to get updated plan info
       mutateUsage();
     }
@@ -103,12 +103,12 @@ export default function SettingsPage() {
   }
 
   const displayPlan = plan;
-  const isProUser = displayPlan.type === 'monthly';
-  const userType = isProUser ? 'pro' : 'free';
+  const isProUser = displayPlan.type === "monthly";
+  const userType = isProUser ? "pro" : "free";
 
   const usedPct = Math.min(
     100,
-    Math.round(((displayPlan.used ?? 0) / displayPlan.quota) * 100),
+    Math.round(((displayPlan.used ?? 0) / displayPlan.quota) * 100)
   );
 
   return (
@@ -139,22 +139,22 @@ export default function SettingsPage() {
             {/* Compact Profile Header */}
             <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
               <div className="size-10 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center text-white text-sm font-bold">
-                {user?.email?.[0]?.toUpperCase() || 'G'}
+                {user?.email?.[0]?.toUpperCase() || "G"}
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-sm font-semibold truncate">
-                  {user?.email?.split('@')[0] || 'Guest User'}
+                  {user?.email?.split("@")[0] || "Guest User"}
                 </h2>
                 <Badge
-                  variant={isProUser ? 'default' : 'secondary'}
+                  variant={isProUser ? "default" : "secondary"}
                   className="text-xs mt-1"
                 >
-                  {isProUser ? 'Pro Plan' : 'Free Plan'}
+                  {isProUser ? "Pro Plan" : "Free Plan"}
                 </Badge>
               </div>
             </div>
 
-            {/* Usage */}
+            {/* Quick Usage Overview */}
             <Card>
               <CardHeader className="p-4 pb-2">
                 <CardTitle className="text-base font-semibold">
@@ -167,7 +167,7 @@ export default function SettingsPage() {
               <CardContent className="p-4 pt-2 space-y-4">
                 <div>
                   <div className="flex justify-between text-xs sm:text-sm mb-2">
-                    <span>{isProUser ? 'Pro Plan' : 'Free Plan'}</span>
+                    <span>{isProUser ? "Pro Plan" : "Free Plan"}</span>
                     <span>
                       {displayPlan.used}/{displayPlan.quota}
                     </span>
@@ -176,6 +176,18 @@ export default function SettingsPage() {
                   <p className="text-[11px] sm:text-xs text-muted-foreground mt-1">
                     {displayPlan.quota - displayPlan.used} messages remaining
                   </p>
+                </div>
+
+                {/* Link to detailed analytics */}
+                <div className="pt-2 border-t">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={() => setActiveTab("history")}
+                  >
+                    View Detailed Analytics →
+                  </Button>
                 </div>
 
                 {!isProUser && (
@@ -235,12 +247,12 @@ export default function SettingsPage() {
                           onClick={() => {
                             const paymentUrl =
                               process.env
-                                .NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+                                .NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
                             if (paymentUrl) {
-                              window.open(paymentUrl, '_blank');
+                              window.open(paymentUrl, "_blank");
                             } else {
                               console.error(
-                                'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+                                "Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL."
                               );
                             }
                           }}
@@ -272,12 +284,12 @@ export default function SettingsPage() {
                           onClick={() => {
                             const paymentUrl =
                               process.env
-                                .NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+                                .NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
                             if (paymentUrl) {
-                              window.open(paymentUrl, '_blank');
+                              window.open(paymentUrl, "_blank");
                             } else {
                               console.error(
-                                'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+                                "Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL."
                               );
                             }
                           }}
@@ -350,8 +362,8 @@ export default function SettingsPage() {
                         onClick={() => setActiveTab(tab.id)}
                         className={`px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-colors whitespace-nowrap shrink-0 min-w-fit ${
                           selected
-                            ? 'bg-background text-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
                         {tab.label}
@@ -367,7 +379,7 @@ export default function SettingsPage() {
               id="panel-history"
               role="tabpanel"
               aria-labelledby="tab-history"
-              hidden={activeTab !== 'history'}
+              hidden={activeTab !== "history"}
             >
               <HistoryTab usage={usage} />
             </section>
@@ -375,7 +387,7 @@ export default function SettingsPage() {
               id="panel-models"
               role="tabpanel"
               aria-labelledby="tab-models"
-              hidden={activeTab !== 'models'}
+              hidden={activeTab !== "models"}
             >
               <ModelsTab userType={userType} />
             </section>
@@ -383,7 +395,7 @@ export default function SettingsPage() {
               id="panel-account"
               role="tabpanel"
               aria-labelledby="tab-account"
-              hidden={activeTab !== 'account'}
+              hidden={activeTab !== "account"}
             >
               <AccountTab />
             </section>
@@ -391,7 +403,7 @@ export default function SettingsPage() {
               id="panel-identities"
               role="tabpanel"
               aria-labelledby="tab-identities"
-              hidden={activeTab !== 'identities'}
+              hidden={activeTab !== "identities"}
             >
               <IdentitiesTab />
             </section>
@@ -399,7 +411,7 @@ export default function SettingsPage() {
               id="panel-customization"
               role="tabpanel"
               aria-labelledby="tab-customization"
-              hidden={activeTab !== 'customization'}
+              hidden={activeTab !== "customization"}
             >
               <CustomizationTab />
             </section>
@@ -407,7 +419,7 @@ export default function SettingsPage() {
               id="panel-api"
               role="tabpanel"
               aria-labelledby="tab-api"
-              hidden={activeTab !== 'api'}
+              hidden={activeTab !== "api"}
             >
               <APIKeysTab />
             </section>
@@ -415,7 +427,7 @@ export default function SettingsPage() {
               id="panel-attachments"
               role="tabpanel"
               aria-labelledby="tab-attachments"
-              hidden={activeTab !== 'attachments'}
+              hidden={activeTab !== "attachments"}
             >
               <AttachmentsTab />
             </section>
@@ -423,7 +435,7 @@ export default function SettingsPage() {
               id="panel-contact"
               role="tabpanel"
               aria-labelledby="tab-contact"
-              hidden={activeTab !== 'contact'}
+              hidden={activeTab !== "contact"}
             >
               <ContactTab />
             </section>
@@ -437,14 +449,20 @@ export default function SettingsPage() {
 function HistoryTab({ usage }: { usage: any[] }) {
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Usage & Analytics</h2>
+      <div>
+        <h2 className="text-2xl font-bold">Usage & Analytics</h2>
+        <p className="text-muted-foreground">
+          Detailed usage analytics and token consumption across all your
+          conversations.
+        </p>
+      </div>
       <UsageDashboard />
     </div>
   );
 }
 
 function ModelsTab({ userType }: { userType: string }) {
-  const isProUser = userType === 'pro';
+  const isProUser = userType === "pro";
 
   return (
     <div className="space-y-6">
