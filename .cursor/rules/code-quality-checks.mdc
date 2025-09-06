@@ -12,6 +12,7 @@ description: "Code quality checks and build commands for development workflow"
 ```bash
 pnpm lint:check    # ESLint + Biome linting and formatting checks
 pnpm type-check    # TypeScript type checking (noEmit)
+npx vitest run     # Run unit tests
 ```
 
 ### Full Build (Run Before Deploy)
@@ -42,6 +43,13 @@ pnpm pre-commit    # Runs format + type-check + lint:check (used by husky)
 - **Includes**: Full TypeScript compilation check without emitting files
 - **Blocks**: Pre-commit hooks will fail if this doesn't pass
 
+### `npx vitest run` - Unit Testing
+
+- **When**: After making changes to business logic, utility functions, or data validation
+- **Purpose**: Ensures unit tests pass and catch regressions in core functionality
+- **Includes**: All Vitest unit tests in the `lib/__tests__/` directory
+- **Note**: Fast to run, should be part of regular development workflow
+
 ### `pnpm build` - Production Readiness
 
 - **When**: Before deployment, after major changes, or when troubleshooting build issues
@@ -54,13 +62,15 @@ pnpm pre-commit    # Runs format + type-check + lint:check (used by husky)
 1. **Run quality checks frequently** during development to catch issues early
 2. **Fix linting errors immediately** - they're designed to prevent bugs and maintain consistency
 3. **Run type checks after schema changes** to ensure type safety
-4. **Only run full builds** when necessary - it's the most expensive operation
-5. **Use pre-commit hooks** to automate quality gates for all commits
+4. **Run unit tests** after modifying business logic or utility functions
+5. **Only run full builds** when necessary - it's the most expensive operation
+6. **Use pre-commit hooks** to automate quality gates for all commits
 
 ## Troubleshooting
 
 - If `pnpm lint:check` fails: Run `pnpm lint:fix` to auto-fix many issues
 - If `pnpm type-check` fails: Check for missing imports, incorrect types, or schema mismatches
+- If `npx vitest run` fails: Check for missing dependencies or incorrect test imports (use 'vitest' not '@jest/globals')
 - If `pnpm build` fails: Ensure database is accessible and all dependencies are installed
 
 ## Integration with Development Workflow

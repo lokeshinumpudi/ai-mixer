@@ -21,6 +21,8 @@ The development workflow is optimized for speed and quality.
 - `pnpm format`: Formats the code using Biome.
 - `pnpm type-check`: Runs the TypeScript compiler to check for type errors.
 - `pnpm test`: Runs Playwright end-to-end tests.
+- `npx vitest run`: Runs Vitest unit tests.
+- `npx vitest run lib/__tests__/`: Runs specific unit test files.
 - `pnpm db:generate`: Generates a new database migration.
 - `pnpm db:migrate`: Applies pending database migrations.
 

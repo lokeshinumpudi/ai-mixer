@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { fetcher } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, DollarSign, Info, Zap } from 'lucide-react';
-import { useState } from 'react';
-import useSWR from 'swr';
+} from "@/components/ui/tooltip";
+import { fetcher } from "@/lib/utils";
+import { ChevronLeft, ChevronRight, DollarSign, Info, Zap } from "lucide-react";
+import { useState } from "react";
+import useSWR from "swr";
 
 interface ChatUsage {
   id: string;
@@ -35,7 +35,7 @@ interface UsageData {
     quota: number;
     used: number;
     remaining: number;
-    type: 'daily' | 'monthly';
+    type: "daily" | "monthly";
     resetInfo: string;
   };
   currentUsage: {
@@ -55,7 +55,7 @@ interface UsageData {
 function TableHeaderWithTooltip({
   children,
   tooltip,
-  className = '',
+  className = "",
 }: {
   children: React.ReactNode;
   tooltip: string;
@@ -67,7 +67,7 @@ function TableHeaderWithTooltip({
         {children}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Info className="size-3 text-muted-foreground hover:text-foreground cursor-help" />
+            <Info className="size-3 text-muted-foreground hover:text-foreground cursor-pointer" />
           </TooltipTrigger>
           <TooltipContent>
             <p className="text-xs">{tooltip}</p>
@@ -106,7 +106,7 @@ export function UsageDashboard() {
       <div className="space-y-6">
         {/* Loading skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {['messages', 'tokens', 'cost', 'chats'].map((type) => (
+          {["messages", "tokens", "cost", "chats"].map((type) => (
             <Card key={type}>
               <CardContent className="p-6">
                 <div className="h-8 bg-muted animate-pulse rounded mb-2" />
@@ -130,21 +130,21 @@ export function UsageDashboard() {
       quota: 50,
       used: 0,
       remaining: 50,
-      type: 'daily' as const,
-      resetInfo: '',
+      type: "daily" as const,
+      resetInfo: "",
     },
     currentUsage: {
-      totalTokens: '0',
+      totalTokens: "0",
       totalCost: 0,
-      totalChats: '0',
-      activeChats: '0',
+      totalChats: "0",
+      activeChats: "0",
     },
     warnings: [],
   };
 
   const usagePercentage = Math.min(
     100,
-    Math.round((limits.used / limits.quota) * 100),
+    Math.round((limits.used / limits.quota) * 100)
   );
 
   return (
@@ -251,22 +251,22 @@ export function UsageDashboard() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="text-sm font-medium">
                           {new Date(item.createdAt).toLocaleDateString(
-                            'en-US',
+                            "en-US",
                             {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            },
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
                           )}
                         </div>
                         <div className="flex items-center gap-1">
                           <Badge variant="secondary" className="text-xs">
-                            {item.modelId.split('/')[1] || item.modelId}
+                            {item.modelId.split("/")[1] || item.modelId}
                           </Badge>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-help" />
+                              <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-pointer" />
                             </TooltipTrigger>
                             <TooltipContent>
                               <p className="text-xs">
@@ -283,11 +283,11 @@ export function UsageDashboard() {
                             Tokens In
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-help" />
+                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-pointer" />
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p className="text-xs">
-                                  Input tokens sent to the AI model
+                                  Input tokens/words sent to the AI model
                                 </p>
                               </TooltipContent>
                             </Tooltip>
@@ -301,11 +301,11 @@ export function UsageDashboard() {
                             Tokens Out
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-help" />
+                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-pointer" />
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p className="text-xs">
-                                  Output tokens generated by the AI model
+                                  Output tokens/words generated by the AI model
                                 </p>
                               </TooltipContent>
                             </Tooltip>
@@ -327,12 +327,12 @@ export function UsageDashboard() {
                             Cost
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-help" />
+                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-pointer" />
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p className="text-xs">
-                                  Compute cost that's being offset by AI
-                                  providers
+                                  Compute cost that's being charged by AI Model
+                                  companies
                                 </p>
                               </TooltipContent>
                             </Tooltip>
@@ -385,18 +385,18 @@ export function UsageDashboard() {
                         >
                           <td className="p-3 text-sm">
                             {new Date(item.createdAt).toLocaleDateString(
-                              'en-US',
+                              "en-US",
                               {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              },
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
                             )}
                           </td>
                           <td className="p-3">
                             <Badge variant="secondary" className="text-xs">
-                              {item.modelId.split('/')[1] || item.modelId}
+                              {item.modelId.split("/")[1] || item.modelId}
                             </Badge>
                           </td>
                           <td className="p-3 text-sm text-right">
