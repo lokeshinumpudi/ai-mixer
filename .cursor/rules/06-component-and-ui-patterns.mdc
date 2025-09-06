@@ -41,3 +41,9 @@ Recent refactoring has established several important UI/UX patterns that should 
 - **Separated Concerns in Layouts**: Avoid cluttered headers. For example, in dialogs, the title should be distinct from secondary actions like an "Upgrade" call-to-action.
 - **Streamlined User Flows**: Minimize the number of steps to complete an action. The upgrade flow was streamlined by removing the intermediate `/pricing` page and linking CTAs directly to the payment gateway.
 - **Mobile-First Responsive Design**: Use responsive grid layouts and ensure content is prioritized correctly on smaller screens. For instance, in the settings page, the main content tabs appear before the usage/profile sidebar on mobile.
+
+### Sharing Pattern (New)
+
+- Use `ShareButtonSimple` to toggle chat visibility and copy the URL in one tap.
+- Prefer simple toggles with toast feedback over dropdowns, especially on mobile.
+- Visual state communicates sharing status (green globe for public, neutral share icon for private).

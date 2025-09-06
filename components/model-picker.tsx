@@ -897,6 +897,7 @@ export function ModelPicker({
                               content="This model can analyze and understand images"
                               side="top"
                               showIcon={false}
+                              asButton={false}
                             >
                               <div className="text-purple-600 bg-purple-100 dark:bg-purple-500/20 dark:text-purple-400 rounded p-0.5">
                                 <ImageIcon size={10} />
@@ -908,6 +909,7 @@ export function ModelPicker({
                               content="This model has advanced reasoning and thinking capabilities"
                               side="top"
                               showIcon={false}
+                              asButton={false}
                             >
                               <div className="text-blue-600 bg-blue-100 dark:bg-blue-500/20 dark:text-blue-400 rounded p-0.5">
                                 <BrainIcon size={10} />
@@ -919,6 +921,7 @@ export function ModelPicker({
                               content="This model can generate code and create artifacts"
                               side="top"
                               showIcon={false}
+                              asButton={false}
                             >
                               <div className="text-green-600 bg-green-100 dark:bg-green-500/20 dark:text-green-400 rounded p-0.5">
                                 <CodeIcon size={10} />

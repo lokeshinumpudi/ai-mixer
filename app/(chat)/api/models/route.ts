@@ -1,19 +1,51 @@
-import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
-import { enrichModelWithCapabilities } from '@/lib/ai/models';
-import { authenticatedRoute } from '@/lib/auth-decorators';
-import { MODEL_CONFIG } from '@/lib/constants';
-import { getUserSettings } from '@/lib/db/queries';
-import { gateway } from '@/lib/gateway';
-import { NextResponse } from 'next/server';
+import { getAllowedModelIdsForUser } from "@/lib/ai/entitlements";
+import { enrichModelWithCapabilities } from "@/lib/ai/models";
+import { authenticatedRoute } from "@/lib/auth-decorators";
+import { MODEL_CONFIG } from "@/lib/constants";
+import { getUserSettings } from "@/lib/db/queries";
+import { gateway } from "@/lib/gateway";
+import { NextResponse } from "next/server";
 
-export const dynamic = 'force-dynamic';
+// In-memory cache for gateway model list
+let cachedModels: { models: Array<{ id: string; name?: string }> } | null =
+  null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+export const dynamic = "force-dynamic";
 
 export const GET = authenticatedRoute(async (request, context, user) => {
   try {
-    // Fetch user settings and models in parallel
+    // Fetch user settings and models in parallel with a short timeout for models
+    const timeout = 1200; // 1.2s: prefer fast fallback to keep UI snappy
+    const useCache = cachedModels && Date.now() - cachedAt < CACHE_TTL_MS;
+    const getModels = async () => {
+      if (useCache && cachedModels) return cachedModels;
+      const result = await gateway.getAvailableModels();
+      cachedModels = result;
+      cachedAt = Date.now();
+      return result;
+    };
+
+    const getModelsWithTimeout = Promise.race([
+      getModels(),
+      new Promise<{ models: Array<{ id: string; name?: string }> }>((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              models: Object.keys(MODEL_CONFIG).map((modelId) => ({
+                id: modelId,
+                name: modelId,
+              })),
+            }),
+          timeout
+        )
+      ),
+    ]);
+
     const [userSettings, allModels] = await Promise.all([
       getUserSettings(user.id),
-      gateway.getAvailableModels(),
+      getModelsWithTimeout,
     ]);
 
     const allowedModelIds = getAllowedModelIdsForUser(user.userType);
@@ -35,7 +67,7 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       userSettings: userSettings?.settings || {},
     });
   } catch (error) {
-    console.error('Failed to get available models:', error);
+    console.error("Failed to get available models:", error);
 
     // Fallback response with basic model info
     // Note: user is already available from authenticatedRoute decorator
@@ -48,7 +80,7 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       const settings = await getUserSettings(user.id);
       userSettings = settings?.settings || {};
     } catch (settingsError) {
-      console.error('Failed to get user settings in fallback:', settingsError);
+      console.error("Failed to get user settings in fallback:", settingsError);
     }
 
     // Fallback models from our config
@@ -67,7 +99,7 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       models: fallbackModels,
       userType: user.userType,
       userSettings,
-      warning: 'Using fallback model configuration due to provider error',
+      warning: "Using fallback model configuration due to provider error",
     });
   }
 });

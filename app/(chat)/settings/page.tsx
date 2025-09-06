@@ -43,13 +43,15 @@ export default function SettingsPage() {
   const { user, loading } = useSupabaseAuth();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>("history");
-  // Use new usage tracking system instead of legacy useUsage hook
+  // Use new usage tracking system only when the Usage tab is active
+  const isUsageTab = activeTab === "history";
   const { data: usageData, mutate: mutateUsage } = useSWR(
-    "/api/usage?page=1&limit=100", // Get enough records to calculate daily usage
+    isUsageTab ? "/api/usage?page=1&limit=100" : null,
     fetcher,
     {
       revalidateOnFocus: false,
-      refreshInterval: 30000, // Sync with dashboard refresh rate
+      // Slow background refresh while viewing the Usage tab only
+      refreshInterval: isUsageTab ? 60000 : 0,
     }
   );
 

@@ -114,7 +114,11 @@ export function Chat({
     compareRuns,
     isLoadingRuns,
     ...compareState
-  } = useCompareRun(id);
+  } = useCompareRun(id, {
+    // Skip listing runs on the root page to avoid useless /api/compare calls
+    listOnMount:
+      typeof window !== "undefined" && window.location.pathname !== "/",
+  });
 
   // Auto-set models if this chat has compare runs (even when reloading)
   useEffect(() => {

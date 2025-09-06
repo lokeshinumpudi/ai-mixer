@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-import { AppSidebar } from '@/components/app-sidebar';
-import { DataStreamProvider } from '@/components/data-stream-provider';
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
-import Script from 'next/script';
+import { AppSidebar } from "@/components/app-sidebar";
+import { DataStreamProvider } from "@/components/data-stream-provider";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import Script from "next/script";
 
 // Hook for managing sidebar state
 function useSidebarState() {
@@ -14,9 +14,9 @@ function useSidebarState() {
 
   useEffect(() => {
     // Load sidebar state from localStorage or cookies
-    const savedState = localStorage.getItem('sidebar:state');
+    const savedState = localStorage.getItem("sidebar:state");
     if (savedState !== null) {
-      setIsCollapsed(savedState !== 'true');
+      setIsCollapsed(savedState !== "true");
     }
     setIsLoaded(true);
   }, []);
@@ -24,7 +24,7 @@ function useSidebarState() {
   const toggleSidebar = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
-    localStorage.setItem('sidebar:state', (!newState).toString());
+    localStorage.setItem("sidebar:state", (!newState).toString());
   };
 
   return { isCollapsed, isLoaded, toggleSidebar };
@@ -45,9 +45,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {/* Load pyodide lazily only when needed to reduce initial TTI */}
       <Script
         src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"
-        strategy="beforeInteractive"
+        strategy="lazyOnload"
       />
       <DataStreamProvider>
         <SidebarProvider defaultOpen={!isCollapsed}>

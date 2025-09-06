@@ -33,6 +33,14 @@ Mobile-responsive patterns ensure optimal user experiences across all device siz
 - **Progressive Disclosure**: Show most important content first
 - **Collapsible Sections**: Allow users to expand when needed
 
+### 4. Share Button Placement (New)
+
+- Prefer a single-toggle share button (public/private) on mobile instead of dropdowns.
+- Group right-side actions in a compact row in the header: New Chat + Share.
+- Use 44x44px minimum hit area (e.g., `size-8`) and avoid tiny icons.
+- Visual state: public → green background + globe icon; private → neutral + share icon.
+- On public toggle, copy the chat URL and show a toast; no extra modal.
+
 ## Mobile Scroll Container Pattern
 
 ### Implementation

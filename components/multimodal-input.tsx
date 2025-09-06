@@ -108,13 +108,16 @@ function PureMultimodalInput({
   const router = useRouter();
   const { userType } = useModels();
 
-  // Use new usage tracking system for rate limiting
+  // Avoid fetching usage on the new-chat root page where no rate decision is needed yet
+  const shouldFetchUsage =
+    typeof window !== "undefined" && window.location.pathname !== "/";
   const { data: usageData } = useSWR(
-    "/api/usage?page=1&limit=100", // Get enough records to calculate daily usage
+    shouldFetchUsage ? "/api/usage?page=1&limit=100" : null,
     (url) => fetch(url).then((res) => res.json()),
     {
       revalidateOnFocus: false,
-      refreshInterval: 30000,
+      // Prefer event-driven cache invalidation from DataStreamHandler over polling
+      refreshInterval: 0,
     }
   );
   const { width } = useWindowSize();
