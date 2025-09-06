@@ -901,7 +901,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 // Handle multiple property name variations in AI SDK v5
                 const tokensIn = usage.inputTokens ?? 0;
                 const tokensOut = usage.outputTokens ?? 0;
-                
+
                 usageBatch.push({
                   userId: user.id,
                   chatId, // Track which chat this usage belongs to
