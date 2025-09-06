@@ -1,5 +1,6 @@
-import type { ArtifactKind } from '@/components/artifact';
-import type { Geo } from '@vercel/functions';
+import type { ArtifactKind } from "@/components/artifact";
+import type { UserSystemPrompt } from "@/lib/types";
+import type { Geo } from "@vercel/functions";
 
 export const artifactsPrompt = `
 Artifacts is a special user interface mode that helps users with writing, editing, and other content creation tasks. When artifact is open, it is on the right side of the screen, while the conversation is on the left side. When creating or updating documents, changes are reflected in real-time on the artifacts and visible to the user.
@@ -32,14 +33,53 @@ This is a guide for using artifacts tools: \`createDocument\` and \`updateDocume
 Do not update document right after creating it. Wait for user feedback or request to update it.
 `;
 
-export const regularPrompt =
-  'You are a friendly assistant! Keep your responses concise and helpful.';
+export const regularPrompt = `You are the world's most polite, friendly, technical rockstar,
+ factual yet funny assistant!
+   Keep your responses concise and helpful.`;
+
+// Build custom system prompt from user preferences
+export function buildUserSystemPrompt(userPrompt: UserSystemPrompt): string {
+  if (
+    !userPrompt ||
+    (!userPrompt.name &&
+      !userPrompt.profession &&
+      !userPrompt.traits?.length &&
+      !userPrompt.preferences)
+  ) {
+    return "";
+  }
+
+  const sections: string[] = [];
+
+  // Add user information section
+  const userInfo: string[] = [];
+  if (userPrompt.name) {
+    userInfo.push(`- Name: ${userPrompt.name}`);
+  }
+  if (userPrompt.profession) {
+    userInfo.push(`- Profession: ${userPrompt.profession}`);
+  }
+  if (userPrompt.traits?.length) {
+    userInfo.push(`- Personality Traits: ${userPrompt.traits.join(", ")}`);
+  }
+
+  if (userInfo.length > 0) {
+    sections.push(`User Information:\n${userInfo.join("\n")}`);
+  }
+
+  // Add preferences section
+  if (userPrompt.preferences) {
+    sections.push(`User Preferences:\n${userPrompt.preferences}`);
+  }
+
+  return sections.length > 0 ? sections.join("\n\n") : "";
+}
 
 export interface RequestHints {
-  latitude: Geo['latitude'];
-  longitude: Geo['longitude'];
-  city: Geo['city'];
-  country: Geo['country'];
+  latitude: Geo["latitude"];
+  longitude: Geo["longitude"];
+  city: Geo["city"];
+  country: Geo["country"];
 }
 
 export const getRequestPromptFromHints = (requestHints: RequestHints) => `\
@@ -53,6 +93,7 @@ About the origin of user's request:
 export const systemPrompt = ({
   selectedModel,
   requestHints,
+  userPrompt,
 }: {
   selectedModel: {
     id: string;
@@ -60,13 +101,22 @@ export const systemPrompt = ({
     supportsReasoning: boolean;
   };
   requestHints: RequestHints;
+  userPrompt?: UserSystemPrompt | null;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
+  const customPrompt = userPrompt ? buildUserSystemPrompt(userPrompt) : "";
+
+  let basePrompt = regularPrompt;
+
+  // Add custom user prompt if available
+  if (customPrompt) {
+    basePrompt = `${regularPrompt}\n\n${customPrompt}`;
+  }
 
   if (selectedModel.supportsArtifacts) {
-    return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
+    return `${basePrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
   } else {
-    return `${regularPrompt}\n\n${requestPrompt}`;
+    return `${basePrompt}\n\n${requestPrompt}`;
   }
 };
 
@@ -102,24 +152,24 @@ You are a spreadsheet creation assistant. Create a spreadsheet in csv format bas
 
 export const updateDocumentPrompt = (
   currentContent: string | null,
-  type: ArtifactKind,
+  type: ArtifactKind
 ) =>
-  type === 'text'
+  type === "text"
     ? `\
 Improve the following contents of the document based on the given prompt.
 
 ${currentContent}
 `
-    : type === 'code'
-      ? `\
+    : type === "code"
+    ? `\
 Improve the following code snippet based on the given prompt.
 
 ${currentContent}
 `
-      : type === 'sheet'
-        ? `\
+    : type === "sheet"
+    ? `\
 Improve the following spreadsheet based on the given prompt.
 
 ${currentContent}
 `
-        : '';
+    : "";

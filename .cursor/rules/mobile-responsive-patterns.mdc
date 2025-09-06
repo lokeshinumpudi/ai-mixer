@@ -475,3 +475,128 @@ test("scroll performance maintains 60fps", async ({ page }) => {
 - **Modal Open Time**: < 200ms animation duration
 - **Memory Usage**: Proper cleanup of event listeners
 - **Battery Impact**: Minimize continuous animations
+
+## Mobile-First Settings Page Pattern
+
+### Responsive Layout Strategy
+
+```tsx
+// Mobile: Priority content first, Desktop: Sidebar layout
+<div className="flex flex-col lg:grid lg:grid-cols-12 lg:gap-8 gap-6">
+  {/* Mobile: User info at top, Desktop: Sidebar */}
+  <div className="lg:col-span-4 lg:order-2 order-1">
+    {/* User profile, usage stats, upgrade CTA */}
+  </div>
+
+  {/* Mobile: Main content second, Desktop: Main content first */}
+  <div className="lg:col-span-8 lg:order-1 order-2">
+    {/* Tab content with responsive navigation */}
+  </div>
+</div>
+```
+
+### Responsive Tab Navigation
+
+```tsx
+{
+  /* Mobile: Dropdown selector */
+}
+<div className="lg:hidden">
+  <select
+    value={activeTab}
+    onChange={(e) => setActiveTab(e.target.value)}
+    className="w-full p-3 rounded-lg border border-border bg-background text-foreground text-base font-medium shadow-sm focus:ring-2 focus:ring-primary focus:border-primary"
+  >
+    {tabs.map((tab) => (
+      <option key={tab.id} value={tab.id}>
+        {tab.label}
+      </option>
+    ))}
+  </select>
+</div>;
+
+{
+  /* Desktop: Traditional tabs */
+}
+<div className="hidden lg:block">
+  <div className="bg-muted p-1 rounded-lg">
+    <div className="flex gap-1">
+      {tabs.map((tab) => (
+        <button
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
+            selected
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  </div>
+</div>;
+```
+
+### Mobile-Optimized Data Tables
+
+```tsx
+{
+  /* Mobile: Card layout */
+}
+<div className="md:hidden space-y-3">
+  {items.map((item) => (
+    <div className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-medium">{formatDate(item.date)}</div>
+        <Badge variant="secondary">{item.category}</Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <div className="text-muted-foreground text-xs mb-1">Label 1</div>
+          <div className="font-medium">{item.value1}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground text-xs mb-1">Label 2</div>
+          <div className="font-medium">{item.value2}</div>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>;
+
+{
+  /* Desktop: Table layout */
+}
+<div className="hidden md:block overflow-x-auto">
+  <table className="w-full">
+    <thead>
+      <tr className="border-b">
+        <th className="text-left p-3">Column 1</th>
+        <th className="text-left p-3">Column 2</th>
+        <th className="text-right p-3">Column 3</th>
+      </tr>
+    </thead>
+    <tbody>
+      {items.map((item) => (
+        <tr className="border-b hover:bg-muted/50">
+          <td className="p-3">{item.value1}</td>
+          <td className="p-3">{item.value2}</td>
+          <td className="p-3 text-right">{item.value3}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>;
+```
+
+### Mobile Content Hierarchy
+
+```
+Mobile Priority Order:
+1. 👤 User Profile & Status (Top Priority)
+2. 📊 Key Metrics/Usage (High Priority)
+3. ⚡ Action Items/CTAs (High Priority)
+4. 📋 Navigation Controls (Medium Priority)
+5. 📄 Detailed Content (Selected Content)
+```

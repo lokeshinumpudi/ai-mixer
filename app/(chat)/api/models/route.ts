@@ -1,16 +1,16 @@
-import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
-import { enrichModelWithCapabilities } from '@/lib/ai/models';
-import { authenticatedRoute } from '@/lib/auth-decorators';
-import { MODEL_CONFIG } from '@/lib/constants';
-import { getUserSettings } from '@/lib/db/queries';
-import { gateway } from '@/lib/gateway';
-import { NextResponse } from 'next/server';
+import { getAllowedModelIdsForUser } from "@/lib/ai/entitlements";
+import { enrichModelWithCapabilities } from "@/lib/ai/models";
+import { authenticatedRoute } from "@/lib/auth-decorators";
+import { MODEL_CONFIG } from "@/lib/constants";
+import { getUserSettings } from "@/lib/db/queries";
+import { gateway } from "@/lib/gateway";
+import { NextResponse } from "next/server";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export const GET = authenticatedRoute(async (request, context, user) => {
   try {
-    // Fetch user settings alongside models
+    // Fetch user settings and models in parallel
     const [userSettings, allModels] = await Promise.all([
       getUserSettings(user.id),
       gateway.getAvailableModels(),
@@ -35,7 +35,7 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       userSettings: userSettings?.settings || {},
     });
   } catch (error) {
-    console.error('Failed to get available models:', error);
+    console.error("Failed to get available models:", error);
 
     // Fallback response with basic model info
     // Note: user is already available from authenticatedRoute decorator
@@ -48,7 +48,7 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       const settings = await getUserSettings(user.id);
       userSettings = settings?.settings || {};
     } catch (settingsError) {
-      console.error('Failed to get user settings in fallback:', settingsError);
+      console.error("Failed to get user settings in fallback:", settingsError);
     }
 
     // Fallback models from our config
@@ -67,7 +67,7 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       models: fallbackModels,
       userType: user.userType,
       userSettings,
-      warning: 'Using fallback model configuration due to provider error',
+      warning: "Using fallback model configuration due to provider error",
     });
   }
 });

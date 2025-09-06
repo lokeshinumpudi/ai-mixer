@@ -1,0 +1,518 @@
+---
+alwaysApply: false
+description: "Settings page patterns with mobile-first responsive design and user-centric information hierarchy"
+globs: app/(chat)/settings/**,components/usage/**
+---
+
+# 25: Settings Page Patterns
+
+## Overview
+
+Settings pages implement a **mobile-first, user-centric design** that prioritizes critical information on mobile while maintaining rich desktop experiences.
+
+## Core Principles
+
+### 1. Mobile-First Information Hierarchy
+
+```
+Mobile Priority Order:
+1. 👤 User Profile & Status (Top Priority)
+2. 📊 Key Metrics/Usage (High Priority)
+3. ⚡ Action Items/CTAs (High Priority)
+4. 📋 Navigation Controls (Medium Priority)
+5. 📄 Detailed Content (Selected Content)
+```
+
+### 2. Responsive Layout Strategy
+
+```tsx
+// Mobile: Vertical stack with priority ordering
+// Desktop: Grid layout with sidebar
+<div className="flex flex-col lg:grid lg:grid-cols-12 lg:gap-8 gap-6">
+  {/* Mobile: Priority content first, Desktop: Sidebar */}
+  <div className="lg:col-span-4 lg:order-2 order-1">
+    {/* User info, usage, CTAs */}
+  </div>
+
+  {/* Mobile: Secondary content, Desktop: Main content */}
+  <div className="lg:col-span-8 lg:order-1 order-2">
+    {/* Tab content with responsive navigation */}
+  </div>
+</div>
+```
+
+## Navigation Patterns
+
+### Responsive Tab Navigation
+
+```tsx
+{
+  /* Mobile: Dropdown selector for space efficiency */
+}
+<div className="lg:hidden">
+  <label htmlFor="mobile-tab-select" className="sr-only">
+    Select settings section
+  </label>
+  <select
+    id="mobile-tab-select"
+    value={activeTab}
+    onChange={(e) => setActiveTab(e.target.value as TabId)}
+    className="w-full p-3 rounded-lg border border-border bg-background text-foreground text-base font-medium shadow-sm focus:ring-2 focus:ring-primary focus:border-primary"
+  >
+    {tabs.map((tab) => (
+      <option key={tab.id} value={tab.id}>
+        {tab.label}
+      </option>
+    ))}
+  </select>
+</div>;
+
+{
+  /* Desktop: Traditional horizontal tabs */
+}
+<div className="hidden lg:block" role="tablist" aria-label="Settings sections">
+  <div className="bg-muted p-1 rounded-lg">
+    <div className="flex gap-1">
+      {tabs.map((tab) => {
+        const selected = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={selected}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap flex-1 ${
+              selected
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+</div>;
+```
+
+### Tab Simplification Strategy
+
+```tsx
+// Prioritize essential tabs, comment out secondary ones
+const tabs: { id: TabId; label: string }[] = [
+  { id: "history", label: "Usage & Analytics" }, // Primary: User's main concern
+  { id: "customization", label: "Customization" }, // Secondary: Personalization
+  { id: "identities", label: "Linked Accounts" }, // Secondary: Account management
+  // { id: "account", label: "Account" }, // Commented: Redundant with identities
+  // { id: "models", label: "Models" }, // Commented: Available in main UI
+  // { id: "api", label: "API Keys" }, // Commented: Advanced feature
+  // { id: "attachments", label: "Attachments" }, // Commented: Secondary feature
+  // { id: "contact", label: "Contact Us" }, // Commented: Can be external link
+];
+```
+
+## User Profile Section
+
+### Compact Profile Header
+
+```tsx
+<div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+  <div className="size-10 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center text-white text-sm font-bold">
+    {user?.email?.[0]?.toUpperCase() || "G"}
+  </div>
+  <div className="flex-1 min-w-0">
+    <div className="font-medium text-sm truncate">
+      {user?.email || "Guest User"}
+    </div>
+    <div className="text-xs text-muted-foreground">
+      {isProUser ? "Pro Plan" : "Free Plan"}
+    </div>
+  </div>
+</div>
+```
+
+## Usage Display Patterns
+
+### Message Usage Card
+
+```tsx
+<Card>
+  <CardHeader className="pb-3">
+    <CardTitle className="text-base">Message Usage</CardTitle>
+    <p className="text-xs text-muted-foreground">
+      {plan?.resetInfo || "Resets daily"}
+    </p>
+  </CardHeader>
+  <CardContent className="space-y-3">
+    <div className="flex items-center justify-between text-sm">
+      <span className="font-medium">
+        {plan?.type === "daily" ? "Free Plan" : "Pro Plan"}
+      </span>
+      <span className="font-mono">
+        {plan?.used || 0}/{plan?.quota || 50}
+      </span>
+    </div>
+
+    <Progress
+      value={((plan?.used || 0) / (plan?.quota || 50)) * 100}
+      className="h-2"
+    />
+
+    <p className="text-xs text-muted-foreground">
+      {plan?.remaining || 0} messages remaining
+    </p>
+  </CardContent>
+</Card>
+```
+
+### Real-Time Usage Calculation
+
+```tsx
+// Calculate daily usage from granular usage data
+const plan = usageData ? {
+  type: usageData.limits?.type || "daily",
+  quota: usageData.limits?.quota || 50,
+  used: (() => {
+    if (!usageData.items) return 0;
+    const today = new Date().toDateString();
+    return usageData.items.filter((item: any) => {
+      const itemDate = new Date(item.createdAt);
+      return itemDate.toDateString() === today;
+    }).length;
+  })(),
+  remaining: (() => {
+    const quota = usageData.limits?.quota || 50;
+    const todayUsed = /* calculate today's usage from items */;
+    return Math.max(0, quota - todayUsed);
+  })(),
+  resetInfo: usageData.limits?.resetInfo || "tomorrow at 5:29 AM",
+} : null;
+```
+
+## Upgrade CTA Patterns
+
+### Enhanced Upgrade Section (Free Users)
+
+```tsx
+{
+  !isProUser && (
+    <div className="pt-4 border-t">
+      <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-5 rounded-xl border border-amber-200/50 dark:border-amber-800/30 shadow-sm">
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-3xl">⚡</span>
+            <h4 className="text-xl font-bold text-amber-900 dark:text-amber-100">
+              Upgrade to Pro
+            </h4>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-green-600 font-bold text-lg">✓</span>
+              <span className="font-medium text-green-700 dark:text-green-400">
+                1000 messages/month
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-green-600 font-bold text-lg">✓</span>
+              <span className="font-medium text-green-700 dark:text-green-400">
+                Access to all AI models
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-green-600 font-bold text-lg">✓</span>
+              <span className="font-medium text-green-700 dark:text-green-400">
+                Priority support
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white/60 dark:bg-black/20 rounded-lg p-3 my-4">
+            <div className="flex items-baseline justify-center gap-1">
+              <span className="text-3xl font-bold text-amber-700 dark:text-amber-300">
+                ₹249
+              </span>
+              <span className="text-sm text-muted-foreground">/month</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Cancel anytime</p>
+          </div>
+
+          <Button
+            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 font-bold text-base h-12 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+            onClick={() => {
+              const paymentUrl =
+                process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
+              if (paymentUrl) {
+                window.open(paymentUrl, "_blank");
+              }
+            }}
+          >
+            ⚡ Upgrade Now
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### Pro User Confirmation (Pro Users)
+
+```tsx
+{
+  isProUser && (
+    <div className="pt-4 border-t">
+      <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 p-4 rounded-lg border border-green-200/50 dark:border-green-800/30">
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-2xl">🎉</span>
+            <p className="text-lg font-semibold text-green-700 dark:text-green-300">
+              Pro Plan Active
+            </p>
+          </div>
+          <p className="text-sm text-green-600 dark:text-green-400 mb-3">
+            Enjoying unlimited access to all features!
+          </p>
+          <Button
+            variant="outline"
+            className="w-full border-green-300 hover:bg-green-50 dark:border-green-700 dark:hover:bg-green-950/30"
+            size="sm"
+            onClick={() => {
+              const paymentUrl =
+                process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
+              if (paymentUrl) {
+                window.open(paymentUrl, "_blank");
+              }
+            }}
+          >
+            Manage Subscription
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+## Data Integration Patterns
+
+### Usage Data Fetching
+
+```tsx
+// Single API call for comprehensive usage data
+const {
+  data: usageData,
+  error,
+  isLoading,
+} = useSWR<UsageData>(
+  `/api/usage?page=1&limit=100`, // Fetch enough for daily calculations
+  fetcher,
+  {
+    refreshInterval: 30000, // Refresh every 30 seconds
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+  }
+);
+```
+
+### Error Handling
+
+```tsx
+if (error) {
+  return (
+    <Card>
+      <CardContent className="p-6 text-center">
+        <div className="text-muted-foreground">
+          <p className="text-sm">Unable to load usage data</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => mutate()}
+          >
+            Retry
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+### Loading States
+
+```tsx
+if (isLoading) {
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-2 w-full" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+## Accessibility Patterns
+
+### Screen Reader Support
+
+```tsx
+<div
+  role="tabpanel"
+  id={`panel-${activeTab}`}
+  aria-labelledby={`tab-${activeTab}`}
+>
+  <h2 className="sr-only">
+    {tabs.find((t) => t.id === activeTab)?.label} Settings
+  </h2>
+  {/* Tab content */}
+</div>
+```
+
+### Keyboard Navigation
+
+```tsx
+<select
+  id="mobile-tab-select"
+  value={activeTab}
+  onChange={(e) => setActiveTab(e.target.value as TabId)}
+  className="w-full p-3 rounded-lg border focus:ring-2 focus:ring-primary focus:border-primary"
+  aria-label="Select settings section"
+>
+  {tabs.map((tab) => (
+    <option key={tab.id} value={tab.id}>
+      {tab.label}
+    </option>
+  ))}
+</select>
+```
+
+## Performance Considerations
+
+### Conditional Rendering
+
+```tsx
+// Only render active tab content to improve performance
+{
+  activeTab === "history" && (
+    <section role="tabpanel" id="panel-history">
+      <UsageDashboard />
+    </section>
+  );
+}
+
+{
+  activeTab === "customization" && (
+    <section role="tabpanel" id="panel-customization">
+      <CustomizationSettings />
+    </section>
+  );
+}
+```
+
+### Lazy Loading
+
+```tsx
+// Lazy load heavy components
+const UsageDashboard = lazy(() => import("@/components/usage/usage-dashboard"));
+
+// With suspense boundary
+<Suspense fallback={<SettingsSkeleton />}>
+  <UsageDashboard />
+</Suspense>;
+```
+
+## Testing Patterns
+
+### Mobile Responsiveness Tests
+
+```tsx
+test("settings page shows user info first on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 }); // iPhone SE
+  await page.goto("/settings");
+
+  // User profile should be visible without scrolling
+  const profileSection = page.locator('[data-testid="user-profile"]');
+  await expect(profileSection).toBeInViewport();
+
+  // Usage stats should be immediately below
+  const usageSection = page.locator('[data-testid="usage-stats"]');
+  await expect(usageSection).toBeInViewport();
+});
+
+test("settings tabs work via dropdown on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto("/settings");
+
+  // Should show dropdown, not horizontal tabs
+  await expect(
+    page.locator('select[aria-label="Select settings section"]')
+  ).toBeVisible();
+  await expect(page.locator('[role="tablist"]')).toBeHidden();
+
+  // Should be able to change tabs via dropdown
+  await page.selectOption(
+    'select[aria-label="Select settings section"]',
+    "customization"
+  );
+  await expect(
+    page.locator('[role="tabpanel"][id="panel-customization"]')
+  ).toBeVisible();
+});
+```
+
+### Desktop Layout Tests
+
+```tsx
+test("settings page shows sidebar layout on desktop", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto("/settings");
+
+  // Should show horizontal tabs, not dropdown
+  await expect(page.locator('[role="tablist"]')).toBeVisible();
+  await expect(
+    page.locator('select[aria-label="Select settings section"]')
+  ).toBeHidden();
+
+  // Main content should be on the left, sidebar on the right
+  const mainContent = page.locator('[data-testid="main-content"]');
+  const sidebar = page.locator('[data-testid="sidebar"]');
+
+  const mainBox = await mainContent.boundingBox();
+  const sidebarBox = await sidebar.boundingBox();
+
+  expect(mainBox!.x).toBeLessThan(sidebarBox!.x);
+});
+```
+
+## Best Practices
+
+### ✅ Do
+
+- **Prioritize user info on mobile** - Profile, usage, and CTAs first
+- **Use dropdown navigation on mobile** - Saves space and improves UX
+- **Implement responsive data displays** - Cards for mobile, tables for desktop
+- **Calculate usage client-side** - Reduces server load and improves real-time accuracy
+- **Provide clear upgrade paths** - Beautiful, prominent CTAs for free users
+- **Test across breakpoints** - Ensure smooth transitions between layouts
+- **Use proper ARIA labels** - Support screen readers and keyboard navigation
+- **Implement loading states** - Show skeletons while data loads
+
+### ❌ Don't
+
+- **Bury important info on mobile** - User profile and usage should be immediately visible
+- **Force desktop layouts on mobile** - Use appropriate navigation patterns for each device
+- **Create cramped table layouts** - Use card layouts for better mobile readability
+- **Make server-side usage calculations** - Client-side is more cost-effective and real-time
+- **Hide upgrade opportunities** - Make Pro plan benefits clear and accessible
+- **Ignore accessibility** - Ensure keyboard navigation and screen reader support
+- **Skip loading states** - Always provide feedback during data fetching
+- **Forget error handling** - Provide retry mechanisms for failed data loads
+
+This pattern ensures **excellent user experience** across all devices while maintaining **cost-effective architecture** and **accessibility standards**.

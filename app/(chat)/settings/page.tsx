@@ -1,6 +1,7 @@
 "use client";
 
 import { IdentityManager } from "@/components/identity-manager";
+import { SystemPromptForm } from "@/components/settings/SystemPromptForm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -551,14 +552,13 @@ function AccountTab() {
 function CustomizationTab() {
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Customization</h2>
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-muted-foreground">
-            Customization options coming soon...
-          </p>
-        </CardContent>
-      </Card>
+      <div>
+        <h2 className="text-2xl font-bold">Customization</h2>
+        <p className="text-muted-foreground">
+          Personalize your AI experience with custom settings and preferences.
+        </p>
+      </div>
+      <SystemPromptForm />
     </div>
   );
 }

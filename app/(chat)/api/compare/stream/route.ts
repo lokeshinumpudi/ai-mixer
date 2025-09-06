@@ -19,6 +19,7 @@ import {
   getChatById,
   getCompareRun,
   getMessagesByChatId,
+  getUserSettings,
   getUserUsageAndLimits,
   saveChat,
   saveMessages,
@@ -429,19 +430,26 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
     const MAX_HISTORY_MESSAGES = 24;
     let allMessages: any[] = [];
     let uiMessagesWithMetadata: any[] = [];
+    let userSystemPrompt: any = null;
 
     apiLogger.debug(
       {
         chatId,
         userId: user.id,
       },
-      "Loading chat history for compare run"
+      "Loading chat history and user preferences for compare run"
     );
     try {
-      const dbMessages = await getMessagesByChatId({
-        id: chatId,
-        excludeCompareMessages: false, // Keep compare messages for context in compare mode
-      });
+      // Load messages and user settings in parallel
+      const [dbMessages, userSettings] = await Promise.all([
+        getMessagesByChatId({
+          id: chatId,
+          excludeCompareMessages: false, // Keep compare messages for context in compare mode
+        }),
+        getUserSettings(user.id),
+      ]);
+
+      userSystemPrompt = (userSettings?.settings as any)?.systemPrompt || null;
 
       apiLogger.debug(
         {
@@ -780,6 +788,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                   supportsReasoning: true,
                 },
                 requestHints,
+                userPrompt: userSystemPrompt,
               }),
               messages: modelSpecificMessages, // Use filtered context
               abortSignal: abortController.signal,
