@@ -26,14 +26,14 @@ type TabId =
   | "contact";
 
 const tabs: { id: TabId; label: string }[] = [
-  { id: "account", label: "Account" },
-  { id: "identities", label: "Linked Accounts" },
-  { id: "customization", label: "Customization" },
+  // { id: "account", label: "Account" },
   { id: "history", label: "Usage & Analytics" },
-  { id: "models", label: "Models" },
-  { id: "api", label: "API Keys" },
-  { id: "attachments", label: "Attachments" },
-  { id: "contact", label: "Contact Us" },
+  { id: "customization", label: "Customization" },
+  { id: "identities", label: "Linked Accounts" },
+  // { id: "models", label: "Models" },
+  // { id: "api", label: "API Keys" },
+  // { id: "attachments", label: "Attachments" },
+  // { id: "contact", label: "Contact Us" },
 ];
 
 export default function SettingsPage() {
