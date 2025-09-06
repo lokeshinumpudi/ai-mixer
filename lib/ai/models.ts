@@ -1,4 +1,4 @@
-import { FREE_MODELS, getModelCapabilities, PRO_MODELS } from '@/lib/constants';
+import { FREE_MODELS, MODEL_CONFIG, PRO_MODELS } from '@/lib/constants';
 import type { UserType } from '@/lib/supabase/types';
 
 // Get default model based on user plan
@@ -29,29 +29,55 @@ export interface ChatModel {
   name: string;
   description: string;
   provider: string;
-  supportsReasoning: boolean;
-  supportsArtifacts: boolean;
+  // Basic capabilities inferred from gateway + our config
   supportsVision?: boolean;
   supportsImageGeneration?: boolean;
+  supportsReasoning?: boolean;
+  supportsArtifacts?: boolean;
   supportsToolCalling?: boolean;
   supportsPdf?: boolean;
-  enabled?: boolean; // Optional for backward compatibility
+  // Business controls
+  enabled?: boolean;
+  allowFileUploads?: boolean;
+  // Gateway pricing data
+  pricing?: {
+    input: string;
+    output: string;
+  } | null;
 }
 
 // Helper function to convert gateway model to our ChatModel interface
 export const enrichModelWithCapabilities = (gatewayModel: any): ChatModel => {
-  const capabilities = getModelCapabilities(gatewayModel.id);
+  // Get our custom config for this model
+  const customConfig =
+    MODEL_CONFIG[gatewayModel.id as keyof typeof MODEL_CONFIG];
+
+  // Infer basic capabilities from gateway data
+  const hasVisionSupport =
+    gatewayModel.modelType === 'image' ||
+    gatewayModel.description?.toLowerCase().includes('vision');
 
   return {
     id: gatewayModel.id,
     name: gatewayModel.name || gatewayModel.id,
     description: gatewayModel.description || `${gatewayModel.id} model`,
     provider: gatewayModel.id.split('/')[0] || 'unknown',
-    supportsReasoning: capabilities.supportsReasoning,
-    supportsArtifacts: capabilities.supportsArtifacts,
-    supportsVision: capabilities.supportsVision,
-    supportsImageGeneration: capabilities.supportsImageGeneration,
-    supportsToolCalling: capabilities.supportsToolCalling,
-    supportsPdf: capabilities.supportsPdf,
+
+    // Basic capabilities inferred from gateway
+    supportsVision: customConfig?.supportsVision ?? hasVisionSupport,
+    supportsImageGeneration: gatewayModel.modelType === 'image',
+    
+    // Enhanced capabilities from our config
+    supportsReasoning: customConfig?.supportsReasoning ?? false,
+    supportsArtifacts: customConfig?.supportsArtifacts ?? false,
+    supportsToolCalling: customConfig?.supportsToolCalling ?? false,
+    supportsPdf: customConfig?.supportsPdf ?? hasVisionSupport,
+
+    // Business controls from our config
+    enabled: customConfig?.enabled ?? false,
+    allowFileUploads: customConfig?.allowFileUploads ?? hasVisionSupport,
+
+    // Gateway pricing data
+    pricing: gatewayModel.pricing || null,
   };
 };

@@ -1,28 +1,27 @@
-"use client";
+'use client';
 
-import { ChatHeader } from "@/components/chat-header";
+import { ChatHeader } from '@/components/chat-header';
 
-import { useAnonymousAuth } from "@/hooks/use-anonymous-auth";
-import { useArtifactSelector } from "@/hooks/use-artifact";
-import { useAutoResume } from "@/hooks/use-auto-resume";
-import { useChatVisibility } from "@/hooks/use-chat-visibility";
-import { useCompareRun } from "@/hooks/use-compare-run";
-import { getDefaultModelForUser } from "@/lib/ai/models";
-import type { Vote } from "@/lib/db/schema";
-import { uiLogger } from "@/lib/logger";
-import type { AppUser } from "@/lib/supabase/types";
-import type { Attachment, ChatMessage } from "@/lib/types";
-import { fetcher } from "@/lib/utils";
-import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import useSWR from "swr";
-import { useModels } from "../hooks/use-models";
-import { Artifact } from "./artifact";
-import { useDataStream } from "./data-stream-provider";
-import { GoogleLoginCTA } from "./google-login-cta";
-import { Messages } from "./messages";
-import { MultimodalInput } from "./multimodal-input";
-import { toast, upgradeToast } from "./toast";
+import { useAnonymousAuth } from '@/hooks/use-anonymous-auth';
+import { useArtifactSelector } from '@/hooks/use-artifact';
+import { useAutoResume } from '@/hooks/use-auto-resume';
+import { useChatVisibility } from '@/hooks/use-chat-visibility';
+import { useCompareRun } from '@/hooks/use-compare-run';
+import { getDefaultModelForUser } from '@/lib/ai/models';
+import type { Vote } from '@/lib/db/schema';
+import { uiLogger } from '@/lib/logger';
+import type { AppUser } from '@/lib/supabase/types';
+import type { Attachment, ChatMessage } from '@/lib/types';
+import { fetcher } from '@/lib/utils';
+import { useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import useSWR from 'swr';
+import { useModels } from '../hooks/use-models';
+import { Artifact } from './artifact';
+import { GoogleLoginCTA } from './google-login-cta';
+import { Messages } from './messages';
+import { MultimodalInput } from './multimodal-input';
+import { toast, upgradeToast } from './toast';
 
 export function Chat({
   id,
@@ -37,7 +36,7 @@ export function Chat({
 }: {
   id: string;
   initialMessages: ChatMessage[];
-  initialVisibilityType: "private" | "public";
+  initialVisibilityType: 'private' | 'public';
   isReadonly: boolean;
   user: AppUser | null;
   autoResume: boolean;
@@ -57,8 +56,6 @@ export function Chat({
     user: authUser,
   } = useAnonymousAuth();
 
-  const { setDataStream } = useDataStream();
-
   // Use integrated models API that includes user settings
   const {
     userSettings,
@@ -73,9 +70,9 @@ export function Chat({
   // Don't use initialChatModel while API is loading to avoid race conditions
   const currentModel =
     userSettings?.defaultModel ||
-    getDefaultModelForUser(userType ?? "anonymous");
+    getDefaultModelForUser(userType ?? 'anonymous');
 
-  const [input, setInput] = useState<string>("");
+  const [input, setInput] = useState<string>('');
 
   // Compare mode state - default to true for seamless model selection
   const [isCompareMode, setIsCompareMode] = useState(true);
@@ -85,7 +82,6 @@ export function Chat({
   // Reset initialization flag when chat changes
   useEffect(() => {
     setHasInitialized(false);
-    setSelectedModelIds([]); // Clear selected models when changing chats
   }, [id]); // Reset when chatId changes
 
   // Initialize selectedModelIds from compareModels only after API data is loaded
@@ -130,13 +126,13 @@ export function Chat({
   const messages = initialMessages;
   const setMessages = () => {}; // No-op since we don't use regular chat
   const sendMessage = async (_message?: any) => Promise.resolve(); // No-op since we don't use regular chat
-  const status = "ready" as const;
+  const status = 'ready' as const;
   const stop = async () => {};
   const regenerate = async () => {};
   const resumeStream = async () => {};
 
   const searchParams = useSearchParams();
-  const query = searchParams.get("query");
+  const query = searchParams.get('query');
 
   const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
 
@@ -149,7 +145,7 @@ export function Chat({
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
-    fetcher
+    fetcher,
   );
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
@@ -164,7 +160,7 @@ export function Chat({
       // When enabling compare mode, ensure current model is selected
       if (currentModel && !selectedModelIds.includes(currentModel)) {
         setSelectedModelIds((prev) =>
-          prev.length > 0 ? [...prev, currentModel] : [currentModel]
+          prev.length > 0 ? [...prev, currentModel] : [currentModel],
         );
       }
     }
@@ -181,7 +177,7 @@ export function Chat({
         // Always use compare infrastructure for unified architecture (1-N models)
         await startCompare({ prompt, modelIds });
         // Clear input after starting
-        setInput("");
+        setInput('');
       } catch (error: any) {
         uiLogger.error(
           {
@@ -191,34 +187,27 @@ export function Chat({
             modelIds,
             promptLength: prompt.length,
           },
-          "Failed to start chat/comparison"
+          'Failed to start chat/comparison',
         );
 
         // Check if it's a rate limit error for compare functionality
-        if (error instanceof Error && error.message.includes("429")) {
+        if (error instanceof Error && error.message.includes('429')) {
           upgradeToast({
-            title: "Compare limit reached",
+            title: 'Compare limit reached',
             description:
-              "Upgrade to Pro for unlimited model comparisons and 1000 messages per month.",
-            actionText: "Upgrade to Pro",
+              'Upgrade to Pro for unlimited model comparisons and 1000 messages per month.',
+            actionText: 'Upgrade to Pro',
           });
         } else {
           toast({
-            type: "error",
-            description: "Failed to start chat. Please try again.",
+            type: 'error',
+            description: 'Failed to start chat. Please try again.',
           });
         }
       }
     },
-    [startCompare, setInput]
+    [startCompare, setInput],
   );
-
-  const handleContinueWithModels = (modelIds: string[]) => {
-    // Update selected models and keep compare mode enabled
-    setSelectedModelIds(modelIds);
-    // Focus on input for continuation
-    // The input will be ready for the user to type their follow-up
-  };
 
   // Handle query parameter from URL (e.g., shared links)
   useEffect(() => {
@@ -228,13 +217,13 @@ export function Chat({
         handleStartCompare(query, selectedModelIds);
       } else {
         sendMessage({
-          role: "user" as const,
-          parts: [{ type: "text", text: query }],
+          role: 'user' as const,
+          parts: [{ type: 'text', text: query }],
         });
       }
 
       setHasAppendedQuery(true);
-      window.history.replaceState({}, "", `/chat/${id}`);
+      window.history.replaceState({}, '', `/chat/${id}`);
     }
   }, [
     query,
@@ -299,7 +288,7 @@ export function Chat({
                   </h3>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
                     {messageCount >= 10
-                      ? "Sign in with Google to continue chatting with unlimited messages."
+                      ? 'Sign in with Google to continue chatting with unlimited messages.'
                       : `${
                           10 - messageCount
                         } messages remaining. Sign in for unlimited access to all models.`}
@@ -315,47 +304,49 @@ export function Chat({
           </div>
         )}
 
-        <form className="absolute bottom-0 left-0 right-0 flex mx-auto px-4 pb-4 md:px-6 md:pb-6 gap-2 w-full md:max-w-3xl">
-          {/* Backdrop blur background only behind the input area */}
-          <div className="absolute inset-x-4 md:inset-x-6 inset-y-0 bg-background/95 backdrop-blur-sm border-t border-border/30 rounded-t-lg -z-10" />
-          {!isReadonly && messageCount < 10 && (
-            <MultimodalInput
-              chatId={id}
-              input={input}
-              setInput={setInput}
-              status={status}
-              stop={stop}
-              attachments={attachments}
-              setAttachments={setAttachments}
-              messages={messages}
-              setMessages={setMessages}
-              selectedVisibilityType={visibilityType}
-              user={user}
-              selectedModelId={currentModel}
-              isCompareMode={isCompareMode}
-              onCompareModeChange={handleCompareModeChange}
-              selectedModelIds={selectedModelIds}
-              onSelectedModelIdsChange={handleSelectedModelIdsChange}
-              onStartCompare={handleStartCompare}
-              compareRuns={compareRuns}
-              activeCompareMessage={compareState.status !== "idle"}
-              isModelsLoading={isModelsLoading}
-              isLoadingRuns={isLoadingRuns}
-            />
-          )}
-          {!isReadonly &&
-            messageCount >= 10 &&
-            authUser?.is_anonymous !== false && (
-              <div className="flex-1 flex items-center justify-center py-4">
-                <div className="text-center">
-                  <p className="text-muted-foreground mb-4">
-                    You've reached your message limit. Sign in to continue.
-                  </p>
-                  <GoogleLoginCTA />
-                </div>
-              </div>
+        <div className="absolute bottom-0 inset-x-0 flex justify-center px-4 pb-4 md:px-6 md:pb-6">
+          <form className="relative flex gap-2 w-full max-w-3xl">
+            {/* Backdrop blur background only behind the input area */}
+            <div className="absolute inset-0 bg-background/95 backdrop-blur-sm border-t border-border/30 rounded-t-lg -z-10" />
+            {!isReadonly && messageCount < 10 && (
+              <MultimodalInput
+                chatId={id}
+                input={input}
+                setInput={setInput}
+                status={status}
+                stop={stop}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                messages={messages}
+                setMessages={setMessages}
+                selectedVisibilityType={visibilityType}
+                user={user}
+                selectedModelId={currentModel}
+                isCompareMode={isCompareMode}
+                onCompareModeChange={handleCompareModeChange}
+                selectedModelIds={selectedModelIds}
+                onSelectedModelIdsChange={handleSelectedModelIdsChange}
+                onStartCompare={handleStartCompare}
+                compareRuns={compareRuns}
+                activeCompareMessage={compareState.status !== 'idle'}
+                isModelsLoading={isModelsLoading}
+                isLoadingRuns={isLoadingRuns}
+              />
             )}
-        </form>
+            {!isReadonly &&
+              messageCount >= 10 &&
+              authUser?.is_anonymous !== false && (
+                <div className="flex-1 flex items-center justify-center py-4">
+                  <div className="text-center">
+                    <p className="text-muted-foreground mb-4">
+                      You've reached your message limit. Sign in to continue.
+                    </p>
+                    <GoogleLoginCTA />
+                  </div>
+                </div>
+              )}
+          </form>
+        </div>
       </div>
 
       <Artifact

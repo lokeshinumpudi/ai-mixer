@@ -27,6 +27,7 @@ import { sql } from 'drizzle-orm';
 import { ChatSDKError } from '../errors';
 import {
   chat,
+  chatUsage,
   compareResult,
   compareRun,
   creditLedger,
@@ -2167,6 +2168,186 @@ export async function listCompareRunsByUser({
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to list compare runs by user',
+    );
+  }
+}
+
+// ============================================================================
+// NEW USAGE TRACKING SYSTEM
+// ============================================================================
+
+// Cost calculation utility using model pricing
+export function calculateCost(modelId: string, usage: any): number {
+  // Model pricing in USD per 1M tokens (input, output)
+  const pricing: Record<string, { input: number; output: number }> = {
+    // Add more models as needed
+  };
+
+  const modelPricing = pricing[modelId];
+  if (!modelPricing) return 0;
+
+  const inputTokens = usage?.promptTokens || 0;
+  const outputTokens = usage?.completionTokens || 0;
+
+  const inputCost = (inputTokens / 1_000_000) * modelPricing.input;
+  const outputCost = (outputTokens / 1_000_000) * modelPricing.output;
+
+  // Return cost in cents to avoid floating point issues
+  return Math.round((inputCost + outputCost) * 100);
+}
+
+// Batch insert chat usage - CRITICAL for multi-model efficiency
+interface UsageRecord {
+  userId: string;
+  chatId: string | null; // NULL for deleted chats
+  modelId: string;
+  tokensIn: number;
+  tokensOut: number;
+  cost: number; // In cents
+}
+
+export async function batchInsertChatUsage(records: UsageRecord[]) {
+  try {
+    if (records.length === 0) return;
+
+    dbLogger.info(
+      { recordCount: records.length },
+      'Batch inserting usage records',
+    );
+
+    return await db.insert(chatUsage).values(records);
+  } catch (error) {
+    dbLogger.error(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        recordCount: records.length,
+      },
+      'Failed to batch insert usage records',
+    );
+    throw new ChatSDKError('bad_request:database', 'Failed to track usage');
+  }
+}
+
+// Ultra-minimal query for raw usage data (client-side computation)
+export async function getUserUsageData(userId: string, limit = 25, page = 1) {
+  try {
+    const offset = (page - 1) * limit;
+
+    const [usageData, totalCount] = await Promise.all([
+      db
+        .select()
+        .from(chatUsage)
+        .where(eq(chatUsage.userId, userId))
+        .orderBy(desc(chatUsage.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(chatUsage)
+        .where(eq(chatUsage.userId, userId)),
+    ]);
+
+    return {
+      items: usageData,
+      total: totalCount[0].count,
+      page,
+      limit,
+      hasMore: offset + limit < totalCount[0].count,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user usage data',
+    );
+  }
+}
+
+// Server-side validation functions for security (cannot trust client data)
+export async function getCurrentUserUsage(userId: string) {
+  try {
+    const [result] = await db
+      .select({
+        totalTokens: sql<number>`SUM(${chatUsage.tokensIn} + ${chatUsage.tokensOut})`,
+        totalCostCents: sql<number>`SUM(${chatUsage.cost})`,
+        totalChats: sql<number>`COUNT(DISTINCT ${chatUsage.chatId})`,
+        activeChats: sql<number>`COUNT(DISTINCT CASE WHEN ${chatUsage.chatId} IS NOT NULL THEN ${chatUsage.chatId} END)`,
+      })
+      .from(chatUsage)
+      .where(eq(chatUsage.userId, userId));
+
+    return (
+      result || {
+        totalTokens: 0,
+        totalCostCents: 0,
+        totalChats: 0,
+        activeChats: 0,
+      }
+    );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get current user usage',
+    );
+  }
+}
+
+// Get usage data with server validation context for API
+export async function getUserUsageWithValidation(
+  userId: string,
+  userType: UserType,
+  page = 1,
+  limit = 25,
+) {
+  try {
+    // Get raw data for client computation
+    const usageData = await getUserUsageData(userId, limit, page);
+
+    // Get server validation data
+    const currentUsage = await getCurrentUserUsage(userId);
+    const usageInfo = await getUserUsageAndLimits({ userId, userType });
+
+    // Generate server-side warnings/limits for security
+    const warnings: Array<{
+      type: string;
+      message: string;
+      severity: string;
+    }> = [];
+    const warningThreshold = 0.8;
+
+    if (usageInfo.used > usageInfo.quota * warningThreshold) {
+      warnings.push({
+        type: 'quota',
+        message: `You've used ${Math.round(
+          (usageInfo.used / usageInfo.quota) * 100,
+        )}% of your quota`,
+        severity: 'warning',
+      });
+    }
+
+    return {
+      ...usageData,
+      // Server validation context
+      limits: {
+        quota: usageInfo.quota,
+        used: usageInfo.used,
+        remaining: usageInfo.quota - usageInfo.used,
+        type: usageInfo.type,
+        resetInfo: usageInfo.resetInfo,
+      },
+      currentUsage: {
+        totalTokens: currentUsage.totalTokens || 0,
+        totalCost:
+          Math.round(((currentUsage.totalCostCents || 0) / 100) * 10000) /
+          10000, // Convert cents to dollars with 4 decimal places
+        totalChats: currentUsage.totalChats || 0,
+        activeChats: currentUsage.activeChats || 0,
+      },
+      warnings,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user usage with validation',
     );
   }
 }

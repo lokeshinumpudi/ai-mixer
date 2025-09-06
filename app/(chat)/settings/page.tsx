@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useSidebar } from '@/components/ui/sidebar';
+import { UsageDashboard } from '@/components/usage/usage-dashboard';
 import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import { useUsage } from '@/hooks/use-usage';
 import { fetcher } from '@/lib/utils';
@@ -29,7 +30,7 @@ const tabs: { id: TabId; label: string }[] = [
   { id: 'account', label: 'Account' },
   { id: 'identities', label: 'Linked Accounts' },
   { id: 'customization', label: 'Customization' },
-  { id: 'history', label: 'History & Sync' },
+  { id: 'history', label: 'Usage & Analytics' },
   { id: 'models', label: 'Models' },
   { id: 'api', label: 'API Keys' },
   { id: 'attachments', label: 'Attachments' },
@@ -436,12 +437,8 @@ export default function SettingsPage() {
 function HistoryTab({ usage }: { usage: any[] }) {
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">History</h2>
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-muted-foreground">History coming soon...</p>
-        </CardContent>
-      </Card>
+      <h2 className="text-2xl font-bold">Usage & Analytics</h2>
+      <UsageDashboard />
     </div>
   );
 }

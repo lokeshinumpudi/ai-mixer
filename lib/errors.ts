@@ -1,41 +1,41 @@
 export type ErrorType =
-  | "bad_request"
-  | "unauthorized"
-  | "forbidden"
-  | "not_found"
-  | "rate_limit"
-  | "login_required"
-  | "offline";
+  | 'bad_request'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not_found'
+  | 'rate_limit'
+  | 'login_required'
+  | 'offline';
 
 export type Surface =
-  | "chat"
-  | "auth"
-  | "api"
-  | "stream"
-  | "database"
-  | "history"
-  | "vote"
-  | "document"
-  | "suggestions"
-  | "compare"
-  | "model";
+  | 'chat'
+  | 'auth'
+  | 'api'
+  | 'stream'
+  | 'database'
+  | 'history'
+  | 'vote'
+  | 'document'
+  | 'suggestions'
+  | 'compare'
+  | 'model';
 
 export type ErrorCode = `${ErrorType}:${Surface}`;
 
-export type ErrorVisibility = "response" | "log" | "none";
+export type ErrorVisibility = 'response' | 'log' | 'none';
 
 export const visibilityBySurface: Record<Surface, ErrorVisibility> = {
-  database: "log",
-  chat: "response",
-  auth: "response",
-  stream: "response",
-  api: "response",
-  history: "response",
-  vote: "response",
-  document: "response",
-  suggestions: "response",
-  compare: "response",
-  model: "response",
+  database: 'log',
+  chat: 'response',
+  auth: 'response',
+  stream: 'response',
+  api: 'response',
+  history: 'response',
+  vote: 'response',
+  document: 'response',
+  suggestions: 'response',
+  compare: 'response',
+  model: 'response',
 };
 
 export class ChatSDKError extends Error {
@@ -46,7 +46,7 @@ export class ChatSDKError extends Error {
   constructor(errorCode: ErrorCode, cause?: string) {
     super();
 
-    const [type, surface] = errorCode.split(":");
+    const [type, surface] = errorCode.split(':');
 
     this.type = type as ErrorType;
     this.cause = cause;
@@ -61,7 +61,7 @@ export class ChatSDKError extends Error {
 
     const { message, cause, statusCode } = this;
 
-    if (visibility === "log") {
+    if (visibility === 'log') {
       console.error({
         code,
         message,
@@ -69,8 +69,8 @@ export class ChatSDKError extends Error {
       });
 
       return Response.json(
-        { code: "", message: "Something went wrong. Please try again later." },
-        { status: statusCode }
+        { code: '', message: 'Something went wrong. Please try again later.' },
+        { status: statusCode },
       );
     }
 
@@ -79,63 +79,63 @@ export class ChatSDKError extends Error {
 }
 
 export function getMessageByErrorCode(errorCode: ErrorCode): string {
-  if (errorCode.includes("database")) {
-    return "An error occurred while executing a database query.";
+  if (errorCode.includes('database')) {
+    return 'An error occurred while executing a database query.';
   }
 
   switch (errorCode) {
-    case "bad_request:api":
+    case 'bad_request:api':
       return "The request couldn't be processed. Please check your input and try again.";
 
-    case "unauthorized:auth":
-      return "You need to sign in before continuing.";
-    case "forbidden:auth":
-      return "Your account does not have access to this feature.";
+    case 'unauthorized:auth':
+      return 'You need to sign in before continuing.';
+    case 'forbidden:auth':
+      return 'Your account does not have access to this feature.';
 
-    case "rate_limit:chat":
-      return "You have exceeded your maximum number of messages for the day. Please try again later.";
-    case "login_required:chat":
-      return "Sign in to unlock unlimited model comparisons and higher limits.";
-    case "login_required:compare":
-      return "Sign in to unlock unlimited model comparisons and higher limits.";
-    case "not_found:chat":
-      return "The requested chat was not found. Please check the chat ID and try again.";
-    case "forbidden:chat":
-      return "This chat belongs to another user. Please check the chat ID and try again.";
-    case "unauthorized:chat":
-      return "You need to sign in to view this chat. Please sign in and try again.";
-    case "offline:chat":
+    case 'rate_limit:chat':
+      return 'You have exceeded your maximum number of messages for the day. Please try again later.';
+    case 'login_required:chat':
+      return 'Sign in to unlock unlimited model comparisons and higher limits.';
+    case 'login_required:compare':
+      return 'Sign in to unlock unlimited model comparisons and higher limits.';
+    case 'not_found:chat':
+      return 'The requested chat was not found. Please check the chat ID and try again.';
+    case 'forbidden:chat':
+      return 'This chat belongs to another user. Please check the chat ID and try again.';
+    case 'unauthorized:chat':
+      return 'You need to sign in to view this chat. Please sign in and try again.';
+    case 'offline:chat':
       return "We're having trouble sending your message. Please check your internet connection and try again.";
 
-    case "not_found:document":
-      return "The requested document was not found. Please check the document ID and try again.";
-    case "forbidden:document":
-      return "This document belongs to another user. Please check the document ID and try again.";
-    case "unauthorized:document":
-      return "You need to sign in to view this document. Please sign in and try again.";
-    case "bad_request:document":
-      return "The request to create or update the document was invalid. Please check your input and try again.";
+    case 'not_found:document':
+      return 'The requested document was not found. Please check the document ID and try again.';
+    case 'forbidden:document':
+      return 'This document belongs to another user. Please check the document ID and try again.';
+    case 'unauthorized:document':
+      return 'You need to sign in to view this document. Please sign in and try again.';
+    case 'bad_request:document':
+      return 'The request to create or update the document was invalid. Please check your input and try again.';
 
     default:
-      return "Something went wrong. Please try again later.";
+      return 'Something went wrong. Please try again later.';
   }
 }
 
 function getStatusCodeByType(type: ErrorType) {
   switch (type) {
-    case "bad_request":
+    case 'bad_request':
       return 400;
-    case "unauthorized":
+    case 'unauthorized':
       return 401;
-    case "forbidden":
+    case 'forbidden':
       return 403;
-    case "not_found":
+    case 'not_found':
       return 404;
-    case "rate_limit":
+    case 'rate_limit':
       return 429;
-    case "login_required":
+    case 'login_required':
       return 429; // Use same status as rate_limit
-    case "offline":
+    case 'offline':
       return 503;
     default:
       return 500;

@@ -8,6 +8,8 @@ import {
 } from "@/lib/cache/stream-registry";
 import { COMPARE_MAX_MODELS } from "@/lib/constants";
 import {
+  batchInsertChatUsage,
+  calculateCost,
   cancelCompareRun,
   completeCompareResult,
   completeCompareRun,
@@ -21,7 +23,6 @@ import {
   saveChat,
   saveMessages,
   startCompareResultInference,
-  upsertDailyUsage,
 } from "@/lib/db/queries";
 import { ChatSDKError } from "@/lib/errors";
 import { apiLogger } from "@/lib/logger";
@@ -29,7 +30,6 @@ import type { UserType } from "@/lib/supabase/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { geolocation } from "@vercel/functions";
 import { convertToModelMessages, streamText } from "ai";
-import { after } from "next/server";
 import { compareStreamRequestSchema } from "../schema";
 
 export const maxDuration = 60;
@@ -668,6 +668,17 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           },
           "Starting parallel processing for models"
         );
+
+        // CRITICAL: Batch usage tracking for cost efficiency
+        const usageBatch: Array<{
+          userId: string;
+          chatId: string | null;
+          modelId: string;
+          tokensIn: number;
+          tokensOut: number;
+          cost: number;
+        }> = [];
+
         const modelPromises = modelIds.map(async (modelId: string) => {
           apiLogger.debug(
             {
@@ -851,15 +862,15 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
               );
 
               // Complete the result with timing data
-              const usage = await result.usage;
-              console.log(`[COMPARE_STREAM_MODEL] ${modelId} usage:`, usage);
+              const usage1 = await result.usage;
+              console.log(`[COMPARE_STREAM_MODEL] ${modelId} usage:`, usage1);
 
               await completeCompareResult({
                 runId,
                 modelId,
                 content: fullContent,
                 reasoning: reasoningContent,
-                usage,
+                usage: usage1,
                 serverStartedAt,
                 serverCompletedAt,
                 inferenceTimeMs,
@@ -876,7 +887,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                     type: "model_end",
                     runId,
                     modelId,
-                    usage,
+                    usage: usage1,
                     serverStartedAt: serverStartedAt.toISOString(),
                     serverCompletedAt: serverCompletedAt.toISOString(),
                     inferenceTimeMs,
@@ -884,35 +895,32 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 )
               );
 
-              // Track usage - each model in compare mode counts as 1 message
-              after(async () => {
-                try {
-                  const inChars = prompt.length;
-                  const outChars = fullContent.length;
-                  const toTokens = (n: number) => Math.ceil(n / 4);
+              // Collect usage for batch processing (cost-efficient approach)
+              const usage = await result.usage;
+              if (usage) {
+                // Handle multiple property name variations in AI SDK v5
+                const tokensIn = usage.inputTokens ?? 0;
+                const tokensOut = usage.outputTokens ?? 0;
+                
+                usageBatch.push({
+                  userId: user.id,
+                  chatId, // Track which chat this usage belongs to
+                  modelId,
+                  tokensIn,
+                  tokensOut,
+                  cost: calculateCost(modelId, usage),
+                });
 
-                  await upsertDailyUsage({
-                    userId: user.id,
+                apiLogger.debug(
+                  {
                     modelId,
-                    tokensIn: toTokens(inChars),
-                    tokensOut: toTokens(outChars),
-                    messages: 1, // Each model counts as 1 message (so 2 models = 2 messages, 3 models = 3 messages)
-                  });
-                } catch (err) {
-                  const parsedErr =
-                    err instanceof Error ? err : new Error(String(err));
-                  apiLogger.error(
-                    {
-                      error: parsedErr.message,
-                      stack: parsedErr.stack,
-                      chatId,
-                      runId,
-                      modelId,
-                    },
-                    "Usage tracking failed for compare"
-                  );
-                }
-              });
+                    tokensIn,
+                    tokensOut,
+                    cost: calculateCost(modelId, usage),
+                  },
+                  "Usage collected for batch processing"
+                );
+              }
             }
           } catch (error: any) {
             const parsedError =
@@ -969,6 +977,39 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           .then(async () => {
             // Mark run as completed
             await completeCompareRun({ runId });
+
+            // CRITICAL: Single batch insert for all models (cost-efficient)
+            if (usageBatch.length > 0) {
+              try {
+                await batchInsertChatUsage(usageBatch);
+                apiLogger.info(
+                  {
+                    runId,
+                    chatId,
+                    recordCount: usageBatch.length,
+                    totalCost: usageBatch.reduce(
+                      (sum, record) => sum + record.cost,
+                      0
+                    ),
+                  },
+                  "Batch usage tracking completed successfully"
+                );
+              } catch (error) {
+                const parsedError =
+                  error instanceof Error ? error : new Error(String(error));
+                apiLogger.error(
+                  {
+                    error: parsedError.message,
+                    stack: parsedError.stack,
+                    runId,
+                    chatId,
+                    recordCount: usageBatch.length,
+                  },
+                  "Batch usage tracking failed"
+                );
+                // Don't fail the entire request if usage tracking fails
+              }
+            }
 
             // Save assistant message to maintain conversation continuity
             // This ensures follow-up messages have context from AI responses

@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
-import { useSupabaseAuth } from "@/hooks/use-supabase-auth";
-import { useRouter } from "next/navigation";
+import { Button } from '@/components/ui/button';
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
+import { useRouter } from 'next/navigation';
 
 interface LoginCTAProps {
-  variant?: "sidebar" | "inline" | "toast";
+  variant?: 'sidebar' | 'inline' | 'toast';
   className?: string;
   onClick?: () => void;
 }
 
 export function LoginCTA({
-  variant = "inline",
+  variant = 'inline',
   className,
   onClick,
 }: LoginCTAProps) {
@@ -24,11 +24,11 @@ export function LoginCTA({
       await signInWithGoogle();
     } catch (e) {
       // Fallback to the login page if signIn throws
-      router.push("/login");
+      router.push('/login');
     }
   };
 
-  if (variant === "sidebar") {
+  if (variant === 'sidebar') {
     return (
       <div className={className}>
         <div className="text-xs text-muted-foreground mb-2 px-2">
@@ -41,7 +41,7 @@ export function LoginCTA({
     );
   }
 
-  if (variant === "toast") {
+  if (variant === 'toast') {
     return (
       <div className={className}>
         <div className="text-sm font-medium mb-1">

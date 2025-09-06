@@ -1,17 +1,17 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   // Disable PPR for fully client-side rendering
   experimental: {
     ppr: false,
-    serverComponentsExternalPackages: ["pino"],
+    serverComponentsExternalPackages: ['pino'],
   },
 
   // Optimize for client-side rendering
   images: {
     remotePatterns: [
       {
-        hostname: "avatar.vercel.sh",
+        hostname: 'avatar.vercel.sh',
       },
     ],
   },
@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
     if (!isServer) {
       // Client-side specific optimizations
-      config.optimization.splitChunks.chunks = "all";
+      config.optimization.splitChunks.chunks = 'all';
     }
     return config;
   },

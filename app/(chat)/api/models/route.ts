@@ -1,7 +1,7 @@
 import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
 import { enrichModelWithCapabilities } from '@/lib/ai/models';
 import { authenticatedRoute } from '@/lib/auth-decorators';
-import { SUPPORTED_MODEL_IDS } from '@/lib/constants';
+import { MODEL_CONFIG } from '@/lib/constants';
 import { getUserSettings } from '@/lib/db/queries';
 import { gateway } from '@/lib/gateway';
 import { NextResponse } from 'next/server';
@@ -18,14 +18,14 @@ export const GET = authenticatedRoute(async (request, context, user) => {
 
     const allowedModelIds = getAllowedModelIdsForUser(user.userType);
 
-    // Filter supported models, enrich with capabilities, and add enabled flag
+    // Filter models that exist in our config, enrich with capabilities
     const supportedModels = allModels.models
-      .filter((model) => SUPPORTED_MODEL_IDS.includes(model.id as any))
+      .filter((model) => model.id in MODEL_CONFIG)
       .map((model) => {
         const enrichedModel = enrichModelWithCapabilities(model);
         return {
           ...enrichedModel,
-          enabled: allowedModelIds.includes(model.id),
+          enabled: enrichedModel.enabled && allowedModelIds.includes(model.id),
         };
       });
 
@@ -41,16 +41,6 @@ export const GET = authenticatedRoute(async (request, context, user) => {
     // Note: user is already available from authenticatedRoute decorator
 
     const allowedModelIds = getAllowedModelIdsForUser(user.userType);
-    const fallbackModels = SUPPORTED_MODEL_IDS.map((modelId) => {
-      const enrichedModel = enrichModelWithCapabilities({
-        id: modelId,
-        name: modelId,
-      });
-      return {
-        ...enrichedModel,
-        enabled: allowedModelIds.includes(modelId),
-      };
-    });
 
     // Try to get user settings even in fallback
     let userSettings = {} as any;
@@ -60,6 +50,18 @@ export const GET = authenticatedRoute(async (request, context, user) => {
     } catch (settingsError) {
       console.error('Failed to get user settings in fallback:', settingsError);
     }
+
+    // Fallback models from our config
+    const fallbackModels = Object.keys(MODEL_CONFIG).map((modelId) => {
+      const enrichedModel = enrichModelWithCapabilities({
+        id: modelId,
+        name: modelId,
+      });
+      return {
+        ...enrichedModel,
+        enabled: enrichedModel.enabled && allowedModelIds.includes(modelId),
+      };
+    });
 
     return NextResponse.json({
       models: fallbackModels,

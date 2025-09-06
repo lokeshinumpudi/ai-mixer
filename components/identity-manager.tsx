@@ -142,15 +142,15 @@ export function IdentityManager() {
   const getProviderIcon = (provider: string) => {
     switch (provider.toLowerCase()) {
       case 'google':
-        return <Shield className="h-4 w-4 text-red-500" />;
+        return <Shield className="size-4 text-red-500" />;
       case 'github':
-        return <Github className="h-4 w-4" />;
+        return <Github className="size-4" />;
       case 'twitter':
-        return <Twitter className="h-4 w-4 text-blue-500" />;
+        return <Twitter className="size-4 text-blue-500" />;
       case 'email':
-        return <Mail className="h-4 w-4" />;
+        return <Mail className="size-4" />;
       default:
-        return <Shield className="h-4 w-4" />;
+        return <Shield className="size-4" />;
     }
   };
 
@@ -210,9 +210,9 @@ export function IdentityManager() {
               className="w-full"
             >
               {linkingProvider === 'google' ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 size-4 animate-spin" />
               ) : (
-                <Shield className="mr-2 h-4 w-4" />
+                <Shield className="mr-2 size-4" />
               )}
               Link Google Account
             </Button>
@@ -223,9 +223,9 @@ export function IdentityManager() {
               className="w-full"
             >
               {linkingProvider === 'github' ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 size-4 animate-spin" />
               ) : (
-                <Github className="mr-2 h-4 w-4" />
+                <Github className="mr-2 size-4" />
               )}
               Link GitHub Account
             </Button>
@@ -250,7 +250,7 @@ export function IdentityManager() {
 
           {loadingIdentities ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin" />
+              <Loader2 className="size-6 animate-spin" />
             </div>
           ) : identities.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -298,9 +298,9 @@ export function IdentityManager() {
                           disabled={unlinkingId === identity.id}
                         >
                           {unlinkingId === identity.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="size-4 animate-spin" />
                           ) : (
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="size-4" />
                           )}
                         </Button>
                       </AlertDialogTrigger>
@@ -350,9 +350,9 @@ export function IdentityManager() {
                 className="flex items-center space-x-2"
               >
                 {linkingProvider === 'google' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Shield className="h-4 w-4 text-red-500" />
+                  <Shield className="size-4 text-red-500" />
                 )}
                 <span>Google</span>
               </Button>
@@ -366,9 +366,9 @@ export function IdentityManager() {
                 className="flex items-center space-x-2"
               >
                 {linkingProvider === 'github' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Github className="h-4 w-4" />
+                  <Github className="size-4" />
                 )}
                 <span>GitHub</span>
               </Button>
@@ -381,7 +381,7 @@ export function IdentityManager() {
                 disabled={linkingProvider !== null}
                 className="flex items-center space-x-2"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="size-4" />
                 <span>Discord</span>
               </Button>
             )}
@@ -393,7 +393,7 @@ export function IdentityManager() {
                 disabled={linkingProvider !== null}
                 className="flex items-center space-x-2"
               >
-                <Twitter className="h-4 w-4 text-blue-500" />
+                <Twitter className="size-4 text-blue-500" />
                 <span>Twitter</span>
               </Button>
             )}
@@ -403,7 +403,7 @@ export function IdentityManager() {
         {/* Security Note */}
         <div className="bg-muted p-4 rounded-lg">
           <div className="flex items-start space-x-2">
-            <Shield className="h-5 w-5 text-muted-foreground mt-0.5" />
+            <Shield className="size-5 text-muted-foreground mt-0.5" />
             <div className="text-sm">
               <p className="font-medium text-muted-foreground">
                 Security Information

@@ -1,12 +1,12 @@
-import pino from "pino";
+import pino from 'pino';
 
 // Configure logger based on environment
-const isProduction = process.env.NODE_ENV === "production";
-const isDevelopment = process.env.NODE_ENV === "development";
+const isProduction = process.env.NODE_ENV === 'production';
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 // Create logger with appropriate level and format
 export const logger = pino({
-  level: isDevelopment ? "debug" : "info",
+  level: isDevelopment ? 'debug' : 'info',
   // In production, use JSON format for log aggregation
   ...(isProduction && {
     formatters: {
@@ -19,7 +19,7 @@ export const logger = pino({
           ...obj,
           timestamp: new Date().toISOString(),
           env: process.env.NODE_ENV,
-          service: "ai-chat",
+          service: 'ai-chat',
         };
       },
     },
@@ -27,11 +27,11 @@ export const logger = pino({
   // In development, use pretty printing
   ...(!isProduction && {
     transport: {
-      target: "pino-pretty",
+      target: 'pino-pretty',
       options: {
         colorize: true,
-        translateTime: "SYS:standard",
-        ignore: "pid,hostname",
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname',
       },
     },
   }),
@@ -43,27 +43,27 @@ export const createModuleLogger = (module: string) => {
 };
 
 // Specific loggers for different parts of the app
-export const authLogger = createModuleLogger("auth");
-export const apiLogger = createModuleLogger("api");
-export const compareLogger = createModuleLogger("compare");
-export const streamLogger = createModuleLogger("stream");
-export const dbLogger = createModuleLogger("database");
-export const uiLogger = createModuleLogger("ui");
+export const authLogger = createModuleLogger('auth');
+export const apiLogger = createModuleLogger('api');
+export const compareLogger = createModuleLogger('compare');
+export const streamLogger = createModuleLogger('stream');
+export const dbLogger = createModuleLogger('database');
+export const uiLogger = createModuleLogger('ui');
 
 // Helper functions for common logging patterns
 export const logRequest = (
   logger: pino.Logger,
   method: string,
   url: string,
-  userId?: string
+  userId?: string,
 ) => {
-  logger.info({ method, url, userId }, "Request received");
+  logger.info({ method, url, userId }, 'Request received');
 };
 
 export const logError = (logger: pino.Logger, error: any, context?: any) => {
   logger.error(
     { error: error.message, stack: error.stack, ...context },
-    "Error occurred"
+    'Error occurred',
   );
 };
 
@@ -71,9 +71,9 @@ export const logPerformance = (
   logger: pino.Logger,
   operation: string,
   duration: number,
-  context?: any
+  context?: any,
 ) => {
-  logger.info({ operation, duration, ...context }, "Performance measurement");
+  logger.info({ operation, duration, ...context }, 'Performance measurement');
 };
 
 // Export default logger for backward compatibility

@@ -1,10 +1,10 @@
-"use server";
+'use server';
 
-import { authLogger } from "@/lib/logger";
-import { createClient } from "@/lib/supabase/server";
-import { getBaseUrl } from "@/lib/utils";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { authLogger } from '@/lib/logger';
+import { createClient } from '@/lib/supabase/server';
+import { getBaseUrl } from '@/lib/utils';
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 export async function signInWithGoogle() {
   const supabase = await createClient();
@@ -16,11 +16,11 @@ export async function signInWithGoogle() {
       baseUrl,
       redirectUrl: `${baseUrl}/auth/callback`,
     },
-    "Google OAuth sign-in initiated"
+    'Google OAuth sign-in initiated',
   );
 
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
+    provider: 'google',
     options: {
       redirectTo: `${baseUrl}/auth/callback`,
     },
@@ -32,9 +32,9 @@ export async function signInWithGoogle() {
         error: error.message,
         baseUrl,
       },
-      "Google OAuth sign-in failed"
+      'Google OAuth sign-in failed',
     );
-    redirect("/error");
+    redirect('/error');
   }
 
   authLogger.info(
@@ -42,7 +42,7 @@ export async function signInWithGoogle() {
       oauthUrl: data.url,
       baseUrl,
     },
-    "Google OAuth sign-in successful, redirecting"
+    'Google OAuth sign-in successful, redirecting',
   );
   redirect(data.url);
 }

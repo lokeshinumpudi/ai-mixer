@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { uiLogger } from "@/lib/logger";
-import type { CustomUIDataTypes } from "@/lib/types";
-import type { DataUIPart } from "ai";
-import React, { createContext, useContext, useMemo, useState } from "react";
+import { uiLogger } from '@/lib/logger';
+import type { CustomUIDataTypes } from '@/lib/types';
+import type { DataUIPart } from 'ai';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 
 interface DataStreamContextValue {
   dataStream: DataUIPart<CustomUIDataTypes>[];
@@ -19,17 +19,17 @@ export function DataStreamProvider({
 }: {
   children: React.ReactNode;
 }) {
-  uiLogger.debug({}, "DataStreamProvider initialized");
+  uiLogger.debug({}, 'DataStreamProvider initialized');
 
   const [dataStream, setDataStream] = useState<DataUIPart<CustomUIDataTypes>[]>(
-    []
+    [],
   );
 
   uiLogger.debug(
     {
       streamLength: dataStream.length,
     },
-    "DataStreamProvider state updated"
+    'DataStreamProvider state updated',
   );
 
   const value = useMemo(() => {
@@ -37,7 +37,7 @@ export function DataStreamProvider({
       {
         itemCount: dataStream.length,
       },
-      "Creating DataStreamProvider context value"
+      'Creating DataStreamProvider context value',
     );
     return { dataStream, setDataStream };
   }, [dataStream]);
@@ -52,8 +52,8 @@ export function DataStreamProvider({
 export function useDataStream() {
   const context = useContext(DataStreamContext);
   if (!context) {
-    uiLogger.error({}, "useDataStream called outside of DataStreamProvider");
-    throw new Error("useDataStream must be used within a DataStreamProvider");
+    uiLogger.error({}, 'useDataStream called outside of DataStreamProvider');
+    throw new Error('useDataStream must be used within a DataStreamProvider');
   }
   return context;
 }

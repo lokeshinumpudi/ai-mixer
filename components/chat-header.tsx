@@ -6,8 +6,10 @@ import { useWindowSize } from 'usehooks-ts';
 import { SidebarToggle } from '@/components/sidebar-toggle';
 import { Button } from '@/components/ui/button';
 import { useModels } from '@/hooks/use-models';
+import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import type { AppUser } from '@/lib/supabase/types';
 import { memo, useEffect, useRef } from 'react';
+import { GoogleLoginCTA } from './google-login-cta';
 import { DiamondIcon, PlusIcon } from './icons';
 import { useSidebar } from './ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -27,6 +29,7 @@ function PureChatHeader({
   user?: AppUser | null;
 }) {
   const { mutate: mutateModels, userType } = useModels();
+  const { isAnonymous } = useSupabaseAuth();
   const router = useRouter();
   const { open } = useSidebar();
 
@@ -69,6 +72,11 @@ function PureChatHeader({
       className="flex sticky top-0 bg-background py-1.5 items-center px-2 md:px-2 gap-2"
     >
       <SidebarToggle />
+
+      {/* Google Login CTA for anonymous users - show when sidebar is closed or on mobile */}
+      {isAnonymous && (!open || windowWidth < 768) && (
+        <GoogleLoginCTA variant="outline" size="sm" className="order-1" />
+      )}
 
       {(!open || windowWidth < 768) && (
         <Tooltip>

@@ -9,7 +9,7 @@ description: "High-level project overview, architecture, tech stack, and key pat
 
 This is a **Next.js 15 AI comparison platform** featuring unified multi-model interactions, real-time streaming, artifacts generation, and a robust offline-first experience. The application operates exclusively in **unified compare mode**, eliminating the complexity of dual chat interfaces.
 
-**Entry Point**: `compare-message.tsx` is the defacto entry point for all message rendering and interactions.
+**Entry Point**: `messages.tsx, compare-message.tsx` is the defacto entry point for all message rendering and interactions.
 
 ### Tech Stack
 
@@ -41,10 +41,132 @@ hooks/          # Custom React hooks (e.g., useModels, useArtifact, useCompareRu
 ## Key Architectural Patterns
 
 - **Unified Compare Mode**: Application operates exclusively in compare mode - no dual chat interfaces
-- **Entry Point Component**: `compare-message.tsx` handles all message rendering and interactions
+- **Entry Point Component**: `messages.tsx` and `compare-message.tsx` handles all message rendering and interactions
 - **Client Components**: Most interactive components are client-rendered (`'use client'`) to support the offline-first architecture
 - **Consolidated APIs**: Endpoints like `/api/models` provide multiple related data types (models, user settings, user type) in a single call to improve performance
 - **Authentication Decorators**: API routes are wrapped with `authenticatedRoute` or `protectedRoute` for consistent, type-safe security
 - **Centralized Database Queries**: All database logic is centralized in `lib/db/queries.ts` to ensure consistency and maintainability
 - **Supabase-First User IDs**: The application uses Supabase user IDs as the primary key for all user-related data in the local database to ensure synchronization
 - **Cache-First & Offline-First**: SWR is configured for a cache-first approach, with critical data persisted in localStorage for a seamless offline experience
+
+---
+
+alwaysApply: true
+description: "Cost-conscious development principles for user-facing SPA"
+
+---
+
+# 🎯 **Cost-Conscious Development Philosophy**
+
+## **Core Reality: User-Facing SPA with Cost Constraints**
+
+Our application is a **user-facing Single Page Application (SPA)** where **keeping server/database costs at minimum** is our **utmost priority**. Every architectural decision must consider cost implications.
+
+## **🚨 Cost-First Decision Framework**
+
+### **Before Any Implementation:**
+
+1. **Cost Impact Assessment Required**
+
+   - Database queries: Compute cost per request
+   - Storage: GB/month impact
+   - Server functions: Execution time/cost
+   - CDN/Data transfer: Bandwidth costs
+
+2. **Ask: "What's the Cheapest Way to Do This?"**
+   - Client-side computation over server-side processing
+   - Static data over dynamic queries
+   - Caching over real-time computation
+   - Simple queries over complex aggregations
+
+### **✅ Cost-Effective Patterns**
+
+#### **Database Philosophy**
+
+- **Single table solutions** over complex multi-table relationships
+- **Client-side aggregation** over database pre-computation
+- **Simple queries** over expensive JOINs/aggregations
+- **Pagination** over loading all data at once
+
+#### **API Design**
+
+- **Raw data responses** over computed server-side summaries
+- **Client-side filtering/sorting** over server-side processing
+- **Batch operations** to minimize round trips
+- **Caching strategies** to reduce repeated queries
+
+#### **Performance vs Cost Balance**
+
+- **Accept slightly slower responses** if it saves server costs
+- **Optimize for 99% of users** (not edge cases)
+- **Client-side processing** for small datasets (< 10k records)
+- **Lazy loading** over eager loading
+
+### **❌ Anti-Patterns to Avoid**
+
+#### **Database Anti-Patterns**
+
+- ❌ Pre-computed summary tables (storage + trigger costs)
+- ❌ Complex database functions/triggers
+- ❌ Expensive aggregations (`json_agg`, complex GROUP BY)
+- ❌ Unnecessary indexes (storage cost)
+
+#### **Server Anti-Patterns**
+
+- ❌ Server-side computation for user-specific aggregations
+- ❌ Real-time updates when polling works
+- ❌ Over-engineering for "enterprise scale"
+- ❌ Complex caching layers
+
+### **💡 Decision Tree for New Features**
+
+```
+New Feature Request
+         │
+         ▼
+   Cost Impact Assessment?
+         │
+         ▼
+Can Client Handle It? ──► YES ──► Client-Side Solution
+         │                           (Cheapest Option)
+         ▼
+       NO
+         │
+         ▼
+   Minimize Server Work ──► Simple Queries + Client Processing
+         │
+         │
+         ▼
+   Database Optimization ──► Last Resort (Expensive)
+```
+
+### **📊 Cost Monitoring**
+
+#### **Key Metrics to Track:**
+
+- Database query execution time/cost
+- API response sizes
+- Client-side computation time
+- Cache hit rates
+- User session duration vs data usage
+
+#### **Cost Alerts:**
+
+- Any database query > 100ms
+- API responses > 500KB
+- Client computation > 200ms
+- Storage growth > 10% per month
+
+## **🎯 Success Criteria**
+
+- **Database costs**: < $5/month for moderate usage
+- **API response time**: < 200ms (acceptable for cost savings)
+- **Client load time**: < 1 second
+- **Storage efficiency**: No unnecessary data duplication
+- **Query optimization**: Simple queries over complex operations
+
+## **🚀 Implementation Principle**
+
+**"If the client can do it cheaper, let the client do it."**
+
+Every line of code should justify its existence through the lens of cost efficiency. Complexity is only acceptable if it demonstrably reduces overall system costs.

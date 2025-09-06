@@ -11,8 +11,6 @@ export const isTestEnvironment = Boolean(
 
 export const DUMMY_PASSWORD = generateDummyPassword();
 
-// Or whatever image model is available via gateway
-
 // Pricing configuration
 export const PRICING = {
   ANONYMOUS_TIER: {
@@ -23,7 +21,7 @@ export const PRICING = {
   FREE_TIER: {
     dailyMessages: 50,
     name: 'Free Plan',
-    description: '50 messages per day with basic models',
+    description: '50 messages per day with basic+ models',
   },
   PAID_TIER: {
     monthlyMessages: 1000,
@@ -56,115 +54,117 @@ export const DEFAULT_MODEL = FREE_MODELS[0];
 // Image model configuration
 export const DEFAULT_IMAGE_MODEL = 'xai/grok-2-image-1212';
 
-// Unified model configuration - single source of truth
-export const SUPPORTED_MODELS = {
-  'gemini-2.5-flash-lite': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+// Minimal model configuration - only business controls we need
+export const MODEL_CONFIG = {
+  'google/gemini-2.5-flash-lite': {
+    enabled: true,
+    allowFileUploads: true,
     supportsVision: true,
-    supportsImageGeneration: false,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: true,
   },
   'openai/gpt-5-nano': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: false,
     supportsVision: false,
-    supportsImageGeneration: false,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: false,
   },
   'xai/grok-code-fast-1': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: false,
     supportsVision: false,
-    supportsImageGeneration: false,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: false,
   },
   'moonshotai/kimi-k2': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: false,
     supportsVision: false,
-    supportsImageGeneration: false,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
-    supportsPdf: true,
+    supportsPdf: false,
   },
   'openai/gpt-oss-20b': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: false,
     supportsVision: false,
-    supportsImageGeneration: false,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: false,
   },
   'openai/gpt-5-mini': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: true,
     supportsVision: true,
-    supportsImageGeneration: false,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: true,
   },
   'openai/gpt-oss-120b': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: true,
     supportsVision: true,
-    supportsImageGeneration: false,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: true,
   },
   'openai/gpt-4o-mini': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: true,
     supportsVision: true,
-    supportsImageGeneration: true,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: true,
   },
   'google/gemini-2.5-flash-image-preview': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: true,
     supportsVision: true,
-    supportsImageGeneration: true,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: true,
   },
   'alibaba/qwen-3-32b': {
-    supportsReasoning: true,
-    supportsArtifacts: true,
+    enabled: true,
+    allowFileUploads: false,
     supportsVision: false,
-    supportsImageGeneration: false,
+    supportsReasoning: false,
+    supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: false,
   },
 } as const;
 
+// Backward compatibility alias
+export const SUPPORTED_MODELS = MODEL_CONFIG;
+
 // Derived constants for convenience
-export const SUPPORTED_MODEL_IDS = Object.keys(SUPPORTED_MODELS) as Array<
-  keyof typeof SUPPORTED_MODELS
+export const SUPPORTED_MODEL_IDS = Object.keys(MODEL_CONFIG) as Array<
+  keyof typeof MODEL_CONFIG
 >;
 
-// Helper functions to work with the unified model config
-export function getModelCapabilities(modelId: string) {
-  return (
-    SUPPORTED_MODELS[modelId as keyof typeof SUPPORTED_MODELS] || {
-      supportsReasoning: false,
-      supportsArtifacts: false,
-      supportsVision: false,
-      supportsImageGeneration: false,
-      supportsToolCalling: false,
-      supportsPdf: false,
-    }
-  );
-}
-
+// Helper function to check if model is configured
 export function isModelSupported(modelId: string): boolean {
-  return modelId in SUPPORTED_MODELS;
+  return modelId in MODEL_CONFIG;
 }
 
-// Backward compatibility alias (deprecated - use SUPPORTED_MODELS directly)
-export const MODEL_CAPABILITIES = SUPPORTED_MODELS;
+// Helper function to get model capabilities
+export function getModelCapabilities(modelId: string) {
+  return MODEL_CONFIG[modelId as keyof typeof MODEL_CONFIG] || null;
+}
 
 // AI Compare feature configuration
 export const COMPARE_MAX_MODELS = 3;
