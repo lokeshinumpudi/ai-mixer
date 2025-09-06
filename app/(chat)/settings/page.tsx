@@ -8,7 +8,6 @@ import { Progress } from "@/components/ui/progress";
 import { useSidebar } from "@/components/ui/sidebar";
 import { UsageDashboard } from "@/components/usage/usage-dashboard";
 import { useSupabaseAuth } from "@/hooks/use-supabase-auth";
-import { useUsage } from "@/hooks/use-usage";
 import { fetcher } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -42,7 +41,15 @@ export default function SettingsPage() {
   const { user, loading } = useSupabaseAuth();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>("history");
-  const { plan, usageHistory, mutate: mutateUsage } = useUsage();
+  // Use new usage tracking system instead of legacy useUsage hook
+  const { data: usageData, mutate: mutateUsage } = useSWR(
+    "/api/usage?page=1&limit=100", // Get enough records to calculate daily usage
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      refreshInterval: 30000, // Sync with dashboard refresh rate
+    }
+  );
 
   // Check for refresh parameter to force fresh billing status check
   const shouldRefreshBilling = searchParams.get("refresh") === "billing";
@@ -86,10 +93,38 @@ export default function SettingsPage() {
     }
   }, [billingStatus?.hasRecentPurchaseCredit, mutateUsage]);
 
-  const usage = usageHistory;
+  // Extract plan-like data from new usage system
+  const plan = usageData
+    ? {
+        type: usageData.limits?.type || "daily",
+        quota: usageData.limits?.quota || 50,
+        // Calculate daily message count from usage records (each record = 1 message)
+        used: (() => {
+          if (!usageData.items) return 0;
+          const today = new Date();
+          const todayStr = today.toDateString();
+          return usageData.items.filter((item: any) => {
+            const itemDate = new Date(item.createdAt);
+            return itemDate.toDateString() === todayStr;
+          }).length;
+        })(),
+        remaining: (() => {
+          const quota = usageData.limits?.quota || 50;
+          const todayUsed = usageData.items
+            ? usageData.items.filter((item: any) => {
+                const itemDate = new Date(item.createdAt);
+                const today = new Date();
+                return itemDate.toDateString() === today.toDateString();
+              }).length
+            : 0;
+          return Math.max(0, quota - todayUsed);
+        })(),
+        resetInfo: usageData.limits?.resetInfo || "",
+      }
+    : null;
 
-  // Rely solely on API plan data; avoid default flash
-  if (!plan) {
+  // Rely solely on API usage data; avoid default flash
+  if (!usageData || !plan) {
     return (
       <div className="min-h-screen bg-background">
         <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
@@ -132,10 +167,10 @@ export default function SettingsPage() {
       </div>
 
       <div className="w-full max-w-7xl mx-auto p-4 sm:px-6 sm:py-8 overflow-hidden">
-        {/* Mobile-first responsive grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-          {/* Usage and Upgrade (main focus) */}
-          <div className="space-y-4 lg:space-y-6 lg:col-span-4 order-2 lg:order-1">
+        {/* Mobile: Priority content first, Desktop: Sidebar layout */}
+        <div className="flex flex-col lg:grid lg:grid-cols-12 lg:gap-8 gap-6">
+          {/* Mobile: User info and usage at top, Desktop: Sidebar */}
+          <div className="space-y-4 lg:space-y-6 lg:col-span-4 lg:order-2 order-1">
             {/* Compact Profile Header */}
             <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
               <div className="size-10 rounded-full bg-gradient-to-br from-blue-500 to-green-500 flex items-center justify-center text-white text-sm font-bold">
@@ -338,38 +373,60 @@ export default function SettingsPage() {
           </div>
 
           {/* Main Content */}
-          <div className="lg:col-span-8 order-1 lg:order-2">
-            {/* Tab Navigation - mobile scrollable, desktop segmented */}
-            <div
-              role="tablist"
-              aria-label="Settings sections"
-              className="mb-4 sm:mb-6"
-            >
-              <div className="bg-muted p-1 rounded-lg -mx-4 px-4 lg:mx-0 lg:px-1">
-                <div className="flex gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0">
-                  {tabs.map((tab) => {
-                    const selected = activeTab === tab.id;
-                    const tabId = `tab-${tab.id}`;
-                    const panelId = `panel-${tab.id}`;
-                    return (
-                      <button
-                        key={tab.id}
-                        id={tabId}
-                        role="tab"
-                        aria-selected={selected}
-                        aria-controls={panelId}
-                        type="button"
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-colors whitespace-nowrap shrink-0 min-w-fit ${
-                          selected
-                            ? "bg-background text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    );
-                  })}
+          <div className="lg:col-span-8 lg:order-1 order-2">
+            {/* Mobile: Dropdown selector, Desktop: Tab navigation */}
+            <div className="mb-4 sm:mb-6">
+              {/* Mobile: Simple dropdown */}
+              <div className="lg:hidden">
+                <label htmlFor="mobile-tab-select" className="sr-only">
+                  Select settings section
+                </label>
+                <select
+                  id="mobile-tab-select"
+                  value={activeTab}
+                  onChange={(e) => setActiveTab(e.target.value as TabId)}
+                  className="w-full p-3 rounded-lg border border-border bg-background text-foreground text-base font-medium shadow-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                >
+                  {tabs.map((tab) => (
+                    <option key={tab.id} value={tab.id}>
+                      {tab.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Desktop: Traditional tab navigation */}
+              <div
+                role="tablist"
+                aria-label="Settings sections"
+                className="hidden lg:block"
+              >
+                <div className="bg-muted p-1 rounded-lg">
+                  <div className="flex gap-1">
+                    {tabs.map((tab) => {
+                      const selected = activeTab === tab.id;
+                      const tabId = `tab-${tab.id}`;
+                      const panelId = `panel-${tab.id}`;
+                      return (
+                        <button
+                          key={tab.id}
+                          id={tabId}
+                          role="tab"
+                          aria-selected={selected}
+                          aria-controls={panelId}
+                          type="button"
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap flex-1 ${
+                            selected
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -381,7 +438,7 @@ export default function SettingsPage() {
               aria-labelledby="tab-history"
               hidden={activeTab !== "history"}
             >
-              <HistoryTab usage={usage} />
+              <HistoryTab />
             </section>
             <section
               id="panel-models"
@@ -446,7 +503,7 @@ export default function SettingsPage() {
   );
 }
 
-function HistoryTab({ usage }: { usage: any[] }) {
+function HistoryTab() {
   return (
     <div className="space-y-6">
       <div>
