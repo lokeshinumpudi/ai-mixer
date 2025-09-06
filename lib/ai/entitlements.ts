@@ -20,7 +20,7 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
   anonymous: {
     maxMessagesPerDay: PRICING.ANONYMOUS_TIER.dailyMessages,
     maxTokens: 5000, // ~20 messages worth of tokens
-    maxCost: 1.0, // $1.00 cost limit
+    maxCost: 0.5, // $0.50 cost limit
     warningThreshold: 0.8, // Warn at 80% usage
     getAllowedModelIds: () => [...FREE_MODELS],
     planName: 'Guest',

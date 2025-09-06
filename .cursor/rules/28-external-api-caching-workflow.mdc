@@ -1,0 +1,548 @@
+---
+alwaysApply: false
+description: "Complete workflow for implementing external API caching with Supabase Edge Functions."
+---
+
+# 28: External API Caching Workflow
+
+## Overview
+
+Complete end-to-end workflow for implementing database-level caching for expensive external APIs. This workflow transforms 1200ms API responses into 50ms cached responses while maintaining data freshness.
+
+## Workflow Steps
+
+### Phase 1: Assessment & Planning
+
+#### 1.1 Identify Cache Candidates
+
+```typescript
+// Analyze API usage patterns
+const apiAnalysis = {
+  // Vercel Gateway (Our Implementation)
+  vercelGateway: {
+    responseTime: "~1200ms",
+    callFrequency: "Every request",
+    dataVolatility: "Low (model changes rare)",
+    cachePotential: "High",
+  },
+
+  // Other potential candidates
+  pricingAPI: {
+    responseTime: "~800ms",
+    callFrequency: "Every session",
+    dataVolatility: "Medium (weekly changes)",
+    cachePotential: "High",
+  },
+
+  userPreferences: {
+    responseTime: "~200ms",
+    callFrequency: "Every request",
+    dataVolatility: "High (per-user)",
+    cachePotential: "Low",
+  },
+};
+```
+
+#### 1.2 Determine Cache Strategy
+
+```typescript
+const cacheStrategy = {
+  // For stable external data
+  stableData: {
+    expiry: "7 days",
+    refresh: "daily",
+    fallback: "database → memory → live API",
+  },
+
+  // For volatile data
+  volatileData: {
+    expiry: "30 minutes",
+    refresh: "hourly",
+    fallback: "memory → live API",
+  },
+
+  // For real-time data
+  realtimeData: {
+    expiry: "0 (no cache)",
+    refresh: "none",
+    fallback: "live API only",
+  },
+};
+```
+
+### Phase 2: Database Design
+
+#### 2.1 Schema Creation
+
+```sql
+-- Base cache table structure
+CREATE TABLE ${tableName} (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  data JSONB NOT NULL,
+  lastRefreshedAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expiresAt TIMESTAMPTZ NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'active',
+  metadata JSONB DEFAULT '{}'
+);
+
+-- Performance indexes
+CREATE INDEX idx_${tableName}_status_expiry
+ON ${tableName}(status, expiresAt DESC)
+WHERE status = 'active';
+
+CREATE INDEX idx_${tableName}_refreshed
+ON ${tableName}(lastRefreshedAt DESC);
+```
+
+#### 2.2 Migration Script
+
+```sql
+-- Migration for new cache table
+BEGIN;
+
+CREATE TABLE model_cache (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  models JSONB NOT NULL,
+  lastRefreshedAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expiresAt TIMESTAMPTZ NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'active'
+);
+
+CREATE INDEX idx_model_cache_lookup
+ON model_cache(status, expiresAt DESC, lastRefreshedAt DESC);
+
+COMMIT;
+```
+
+### Phase 3: Edge Function Implementation
+
+#### 3.1 Function Template
+
+```typescript
+// Type declarations for Deno runtime
+declare const Deno: {
+  env: { get(key: string): string | undefined };
+  serve: (handler: (req: Request) => Promise<Response>) => void;
+};
+
+// @ts-ignore: ESM imports work in Deno runtime
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// @ts-ignore: ESM imports work in Deno runtime
+import { externalAPI } from "https://esm.sh/external-api-package";
+
+Deno.serve(async (req: Request) => {
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      {
+        global: {
+          headers: { Authorization: req.headers.get("Authorization")! },
+        },
+      }
+    );
+
+    // Fetch fresh data
+    const freshData = await externalAPI.fetchData();
+
+    // Calculate expiry
+    const expiresAt = new Date(Date.now() + CACHE_DURATION);
+
+    // Store in cache
+    const { error } = await supabase.from("cache_table").insert({
+      data: freshData,
+      expiresAt: expiresAt.toISOString(),
+      status: "active",
+    });
+
+    if (error) throw error;
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        cached_records: freshData.length,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }
+    );
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: errorMessage,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 500,
+      }
+    );
+  }
+});
+```
+
+#### 3.2 Environment Variables
+
+```typescript
+// Required environment variables
+const requiredEnvVars = [
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "EXTERNAL_API_KEY",
+  "CACHE_DURATION_HOURS",
+];
+
+// Validation
+requiredEnvVars.forEach((envVar) => {
+  if (!Deno.env.get(envVar)) {
+    throw new Error(`Missing required environment variable: ${envVar}`);
+  }
+});
+```
+
+### Phase 4: API Integration
+
+#### 4.1 Cache-First Endpoint Pattern
+
+```typescript
+export const GET = authenticatedRoute(async (req, context, user) => {
+  const supabase = await createClient();
+
+  // Level 1: Database cache
+  const { data: cache } = await supabase
+    .from("cache_table")
+    .select("data")
+    .eq("status", "active")
+    .gt("expiresAt", new Date().toISOString())
+    .order("lastRefreshedAt", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (cache) {
+    return NextResponse.json({
+      data: cache.data,
+      cache_status: "hit",
+      cache_age: Date.now() - new Date(cache.lastRefreshedAt).getTime(),
+    });
+  }
+
+  // Level 2: Memory cache (optional)
+  const memoryCache = getMemoryCache();
+  if (memoryCache) {
+    return NextResponse.json({
+      data: memoryCache,
+      cache_status: "memory",
+    });
+  }
+
+  // Level 3: Live API (fallback)
+  const freshData = await externalAPI.fetchData();
+
+  return NextResponse.json({
+    data: freshData,
+    cache_status: "miss",
+  });
+});
+```
+
+#### 4.2 Cache Status Tracking
+
+```typescript
+// Add cache status to responses
+const response = {
+  data: cachedData,
+  cache_status: "hit", // "hit" | "miss" | "memory"
+  cache_age: ageInMilliseconds,
+  cache_expires: expiresAt,
+  last_refresh: lastRefreshedAt,
+};
+```
+
+### Phase 5: Cron Job Setup
+
+#### 5.1 Schedule Selection
+
+```typescript
+const cronSchedules = {
+  // For stable data (models, pricing)
+  stable: "0 2 * * *", // Daily at 2 AM
+
+  // For moderately volatile data
+  moderate: "0 */6 * * *", // Every 6 hours
+
+  // For volatile data
+  volatile: "*/30 * * * *", // Every 30 minutes
+
+  // For testing
+  test: "*/5 * * * *", // Every 5 minutes
+};
+```
+
+#### 5.2 Supabase Dashboard Configuration
+
+1. **Navigate**: Supabase Dashboard → Edge Functions → Cron Jobs
+2. **Create Job**:
+   - **Name**: `refresh-${cacheType}-cache`
+   - **Schedule**: Selected from above
+   - **Function**: `refresh-${cacheType}-cache`
+   - **Enable**: Toggle on
+
+#### 5.3 Cron Job Validation
+
+```typescript
+// Test cron job execution
+const testCron = async () => {
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/refresh-model-cache`
+  );
+  const result = await response.json();
+
+  console.log("Cron test result:", result);
+  return result.success === true;
+};
+```
+
+### Phase 6: Testing & Validation
+
+#### 6.1 Cache Performance Tests
+
+```typescript
+describe("Cache Performance", () => {
+  test("cache hit response time < 100ms", async () => {
+    const startTime = Date.now();
+
+    const response = await fetch("/api/models");
+    const data = await response.json();
+
+    const responseTime = Date.now() - startTime;
+
+    expect(data.cache_status).toBe("hit");
+    expect(responseTime).toBeLessThan(100);
+  });
+
+  test("cache miss fallback works", async () => {
+    // Clear cache
+    await supabase.from("model_cache").delete();
+
+    const response = await fetch("/api/models");
+    const data = await response.json();
+
+    expect(data.cache_status).toBe("miss");
+    expect(data.data).toBeDefined();
+  });
+});
+```
+
+#### 6.2 Cache Freshness Tests
+
+```typescript
+describe("Cache Freshness", () => {
+  test("cache expires correctly", async () => {
+    // Insert expired cache entry
+    await supabase.from("model_cache").insert({
+      data: oldData,
+      expiresAt: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+      status: "active",
+    });
+
+    const response = await fetch("/api/models");
+    const data = await response.json();
+
+    expect(data.cache_status).toBe("miss");
+  });
+
+  test("cron job refreshes cache", async () => {
+    // Trigger cron job
+    await fetch(`${supabaseUrl}/functions/v1/refresh-model-cache`);
+
+    // Wait for completion
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Check cache was updated
+    const { data: cache } = await supabase
+      .from("model_cache")
+      .select("*")
+      .single();
+
+    expect(cache).toBeDefined();
+    expect(new Date(cache.lastRefreshedAt).getTime()).toBeGreaterThan(
+      Date.now() - 10000
+    );
+  });
+});
+```
+
+### Phase 7: Monitoring & Maintenance
+
+#### 7.1 Health Checks
+
+```typescript
+const monitorCacheHealth = async () => {
+  const metrics = {
+    cacheHitRate: 0,
+    averageResponseTime: 0,
+    cacheStaleness: 0,
+    lastRefresh: null,
+    errorCount: 0,
+  };
+
+  // Query recent requests
+  const { data: logs } = await supabase
+    .from("audit_logs")
+    .select("*")
+    .eq("operation", "cache_hit")
+    .gte("created_at", new Date(Date.now() - 3600000).toISOString()); // Last hour
+
+  // Calculate metrics
+  if (logs && logs.length > 0) {
+    metrics.cacheHitRate = logs.length / totalRequests;
+    metrics.averageResponseTime =
+      logs.reduce((sum, log) => sum + log.execution_time_ms, 0) / logs.length;
+  }
+
+  return metrics;
+};
+```
+
+#### 7.2 Automated Cleanup
+
+```typescript
+// Remove expired cache entries
+const cleanupExpiredCache = async () => {
+  const { count } = await supabase
+    .from("cache_table")
+    .delete()
+    .lt("expiresAt", new Date().toISOString());
+
+  console.log(`Cleaned up ${count} expired cache entries`);
+};
+
+// Remove old audit logs
+const cleanupOldLogs = async () => {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const { count } = await supabase
+    .from("audit_logs")
+    .delete()
+    .lt("created_at", thirtyDaysAgo.toISOString());
+
+  console.log(`Cleaned up ${count} old audit log entries`);
+};
+```
+
+### Phase 8: Deployment & Scaling
+
+#### 8.1 Deployment Checklist
+
+```typescript
+const deploymentChecklist = {
+  database: {
+    schemaCreated: false,
+    indexesCreated: false,
+    initialDataLoaded: false,
+  },
+  edgeFunction: {
+    codeDeployed: false,
+    environmentVariables: false,
+    cronJobConfigured: false,
+  },
+  api: {
+    endpointUpdated: false,
+    cacheLogic: false,
+    errorHandling: false,
+  },
+  monitoring: {
+    healthChecks: false,
+    alertsConfigured: false,
+    logging: false,
+  },
+};
+```
+
+#### 8.2 Rollback Plan
+
+```typescript
+const rollbackPlan = {
+  edgeFunction: {
+    disableCronJob: "supabase functions cron disable refresh-cache",
+    removeFunction: "supabase functions delete refresh-cache",
+  },
+  database: {
+    removeTable: "DROP TABLE IF EXISTS model_cache;",
+    removeIndexes: "DROP INDEX IF EXISTS idx_model_cache_lookup;",
+  },
+  api: {
+    revertEndpoint: "git checkout HEAD~1 app/api/models/route.ts",
+  },
+};
+```
+
+## Performance Expectations
+
+### Target Metrics
+
+| Metric                 | Target      | Current Implementation        |
+| ---------------------- | ----------- | ----------------------------- |
+| **Response Time**      | < 100ms     | ~50ms (96% improvement)       |
+| **Cache Hit Rate**     | > 95%       | > 99.9% (7-day expiry)        |
+| **API Call Reduction** | > 90%       | ~99.9% (daily vs per-request) |
+| **Error Rate**         | < 1%        | Near zero (cached responses)  |
+| **Data Freshness**     | < 24h stale | < 2h stale (daily refresh)    |
+
+### Scaling Considerations
+
+1. **Multiple Cache Tables**: Separate tables for different data types
+2. **Partitioning**: For large datasets with time-based partitions
+3. **CDN Integration**: For global cache distribution
+4. **Load Balancing**: Distribute refresh load across multiple functions
+
+## Cost Optimization
+
+### API Cost Reduction
+
+```typescript
+// Before: Every user request = 1 API call
+const beforeCost = usersPerDay * externalAPICostPerCall;
+
+// After: 1 daily refresh = 1 API call
+const afterCost = 1 * externalAPICostPerCall;
+
+// Savings calculation
+const savings = beforeCost - afterCost;
+const savingsPercentage = (savings / beforeCost) * 100;
+```
+
+### Database Cost Optimization
+
+```sql
+-- Efficient queries with proper indexes
+SELECT data FROM cache_table
+WHERE status = 'active'
+  AND expiresAt > NOW()
+ORDER BY lastRefreshedAt DESC
+LIMIT 1;
+```
+
+## Best Practices Summary
+
+### ✅ Always Implement
+
+- **Appropriate expiry times** based on data volatility
+- **Multi-level fallback** (database → memory → live API)
+- **Conservative refresh schedules** (daily for stable data)
+- **Comprehensive error handling** (cache failures don't break UX)
+- **Performance monitoring** (response times, hit rates)
+- **Automated cleanup** (expired entries, old logs)
+
+### ❌ Avoid
+
+- **Over-caching volatile data** (real-time requirements)
+- **Frequent refresh schedules** for stable data
+- **Missing fallback logic** (cache failures break UX)
+- **Hardcoded credentials** (use environment variables)
+- **Large cache payloads** (memory and storage limits)
+- **Skipping health monitoring** (silent failures)
+
+This workflow transforms expensive external API calls into sub-100ms cached responses while maintaining data freshness and system reliability.

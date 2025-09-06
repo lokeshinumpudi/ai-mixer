@@ -7,7 +7,7 @@
 **Key Benefits:**
 
 - ⚡ **~96% faster responses** (1200ms → ~50ms)
-- 🔄 **Auto-refresh every 15 minutes**
+- 🔄 **Auto-refresh daily at 12 AM**
 - 🛠️ **5-minute setup** - Single table, simple edge function
 
 ## Quick Start
@@ -25,8 +25,8 @@ CREATE TABLE model_cache (
 ### 2. Edge Function (Ultra Simple)
 
 ```typescript
-import { createClient } from "@supabase/supabase-js";
-import { createGatewayProvider } from "@ai-sdk/gateway";
+import { createClient } from "npm:@supabase/supabase-js";
+import { createGatewayProvider } from "npm:@ai-sdk/gateway";
 
 export async function handler(req: Request) {
   const supabase = createClient(
@@ -34,15 +34,20 @@ export async function handler(req: Request) {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const gateway = createGatewayProvider({});
+  const gateway = createGatewayProvider({
+    apiKey: "api_key_vercel_getawy",
+  });
   const { models } = await gateway.getAvailableModels();
 
-  // Replace entire cache (delete old, insert new)
-  await supabase
-    .from("model_cache")
-    .delete()
-    .neq("id", "00000000-0000-0000-0000-000000000000");
-  await supabase.from("model_cache").insert({ models });
+  // Insert new cache entry with expiration
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  const { error } = await supabase.from("ModelCache").insert({
+    models,
+    lastRefreshedAt: new Date().toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    status: "active",
+  });
 
   return new Response("OK");
 }
@@ -75,7 +80,22 @@ export const GET = authenticatedRoute(async (req, context, user) => {
 
 **Supabase Dashboard** → Edge Functions → Cron Jobs
 
-- **Schedule**: `*/15 * * * *` (every 15 minutes)
+Choose your refresh frequency:
+
+#### **Conservative Schedule (Recommended)**
+
+- **Schedule**: `0 2 * * *` (daily at 2 AM)
+- **Why**: Model data rarely changes, daily refresh is sufficient
+- **Cache Expiry**: 7 days (matches our current setup)
+
+#### **Moderate Schedule**
+
+- **Schedule**: `0 */12 * * *` (twice daily)
+- **Why**: Balance between freshness and API calls
+
+#### **Current Setup**
+
+- **Schedule**: `0 2 * * *` (daily at 2 AM)
 - **Function**: `refresh-model-cache`
 
 ## Architecture
@@ -91,18 +111,24 @@ export const GET = authenticatedRoute(async (req, context, user) => {
 ## Troubleshooting
 
 ### Cache not working?
+
 ```bash
 # Check if cron job is running
 supabase functions logs refresh-model-cache
 
 # Manual refresh
-curl -X POST https://your-project.supabase.co/functions/v1/refresh-model-cache
+ curl -L -X POST 'https://yqrvjoulpxwoczdieaoz.supabase.co/functions/v1/refresh-model-cache' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxcnZqb3VscHh3b2N6ZGllYW96Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYxMDkwNzgsImV4cCI6MjA3MTY4NTA3OH0.Bl5b4_CO1hhcBtpaSoMcGvs5i-NyM0YBsNGB0tM92n4' \
+  -H 'Content-Type: application/json' \
+  --data '{"name":"Functions"}'
+
 
 # Check database
 supabase db inspect
 ```
 
 ### Slow responses?
+
 - **Check database indexes** are created
 - **Verify cron job** is running every 15 minutes
 - **Monitor Supabase logs** for edge function errors
@@ -116,155 +142,113 @@ supabase db inspect
 3. ✅ **Update API endpoint** (6 lines)
 4. ✅ **Setup cron job** (2 minutes)
 
-**Result:** 96% faster responses, 5-minute setup, zero maintenance complexity! 🎉
+## Manual Deployment (if CLI login fails)
 
-## Edge Function
+### 1. Deploy Edge Function via Supabase Dashboard
 
-### Core Implementation
+1. **Go to**: [Supabase Dashboard](https://supabase.com/dashboard) → Your Project → Edge Functions
+2. **Create Function**: Click "Create Function"
+3. **Name**: `refresh-model-cache`
+4. **Paste Code**: Copy the code from `supabase/functions/refresh-model-cache/index.ts`
+5. **Deploy**: Click "Deploy"
 
-```typescript
-import { createClient } from "@supabase/supabase-js";
-import { createGatewayProvider } from "@ai-sdk/gateway";
+### 2. Setup Cron Job
 
-export async function handler(req: Request) {
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
+1. **Go to**: Supabase Dashboard → Edge Functions → Cron Jobs
+2. **Create Job**:
+   - **Name**: `Refresh Model Cache`
+   - **Schedule**: `*/15 * * * *` (every 15 minutes)
+   - **Command**: `supabase functions invoke refresh-model-cache`
+   - **Enable**: Toggle on
 
-  try {
-    const gateway = createGatewayProvider({});
-    const { models } = await gateway.getAvailableModels();
+### 3. Initial Cache Population
 
-    // Store in cache
-    await supabase.from("gateway_cache").upsert({
-      cache_key: "models",
-      data: { models },
-      updated_at: new Date().toISOString(),
-    });
-
-    // Update health status
-    await supabase.from("cache_health").upsert({
-      cache_key: "models",
-      status: "healthy",
-      last_refresh: new Date().toISOString(),
-    });
-
-    return new Response(JSON.stringify({ success: true }));
-  } catch (error) {
-    await supabase.from("cache_health").upsert({
-      cache_key: "models",
-      status: "failed",
-      last_refresh: new Date().toISOString(),
-      error_message: error.message,
-    });
-
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-    });
-  }
-}
+```bash
+# Manual trigger to populate cache initially
+curl -X POST https://your-project.supabase.co/functions/v1/refresh-model-cache
 ```
 
-## Monitoring & Health
+## Testing the Cache
 
-### Cache Health Check
+### Manual Test Script
 
-```typescript
-// Check cache status
-const { data: health } = await supabase
-  .from("cache_health")
-  .select("*")
-  .eq("cache_key", "models")
-  .single();
+```bash
+#!/bin/bash
+# test-cache.sh
 
-if (health) {
-  console.log(`Cache Status: ${health.status}`);
-  console.log(`Last Refresh: ${health.last_refresh}`);
-}
+echo "Testing Vercel Gateway Cache..."
+
+# Test 1: Check if API returns models quickly
+echo "Test 1: API Response Time"
+time curl -s https://your-app.com/api/models > /dev/null
+echo "Response time should be < 100ms with cache"
+
+# Test 2: Check cache status
+echo "Test 2: Cache Status"
+curl -s https://your-app.com/api/models | jq '.cache_status'
+echo "Should show 'hit' if cache is working"
+
+# Test 3: Manual cache refresh
+echo "Test 3: Manual Cache Refresh"
+curl -X POST https://your-project.supabase.co/functions/v1/refresh-model-cache
+echo "Should return success message"
+
+echo "Cache testing complete!"
 ```
 
-### Cache Validation
+### Performance Verification
 
-```typescript
-function isCacheValid(cache: any): boolean {
-  if (!cache) return false;
-  const age = Date.now() - new Date(cache.updated_at).getTime();
-  return age < 30 * 60 * 1000; // 30 minutes
-}
+Run the test script multiple times:
+
+- **First run**: Might be slower (fallback to gateway)
+- **Subsequent runs**: Should be ~50ms (cache hit)
+- **After 15+ minutes**: Cron job should refresh automatically
+
+## Expected Results
+
+### Before Cache:
+
+```
+API Response: ~1200ms
+Gateway Calls: Every request
+Error Rate: High (timeouts)
 ```
 
-## API Integration
+### After Cache:
 
-### Modified `/api/models` Endpoint
-
-```typescript
-export const GET = authenticatedRoute(async (req, context, user) => {
-  // Try database cache first
-  const { data: cache } = await supabase
-    .from("gateway_cache")
-    .select("*")
-    .eq("cache_key", "models")
-    .single();
-
-  if (cache && isCacheValid(cache)) {
-    return NextResponse.json({
-      models: cache.data.models,
-      cache_status: "hit",
-      cache_age: Date.now() - new Date(cache.updated_at).getTime(),
-    });
-  }
-
-  // Fallback to direct gateway call
-  const gateway = createGatewayProvider({});
-  const { models } = await gateway.getAvailableModels();
-
-  return NextResponse.json({
-    models,
-    cache_status: "miss",
-  });
-});
+```
+API Response: ~50ms (96% faster!)
+Gateway Calls: Once daily (2 AM)
+Error Rate: Near zero
+Cache Hit Rate: >99.9% (7-day expiry)
 ```
 
 ## Troubleshooting
 
-### Common Issues
-
-**Cache not updating:**
+### Cache Not Working?
 
 ```bash
-# Check cron job status
+# Check Supabase function logs
 supabase functions logs refresh-model-cache
 
-# Manual refresh
-curl -X POST https://your-app.com/api/cache/refresh
+# Check database for cache entries
+supabase db inspect
 ```
 
-**Slow responses:**
+### Slow Responses?
 
-```typescript
-// Check cache health
-const { data: health } = await supabase
-  .from("cache_health")
-  .select("*")
-  .eq("cache_key", "models")
-  .single();
-```
+- Verify cron job is running daily at 2 AM
+- Check database indexes are created
+- Monitor Supabase function execution time
+- Cache should remain valid for 7 days
 
-### Performance Tuning
+## Maintenance
 
-- **Reduce refresh frequency** if models don't change often
-- **Add more indexes** for better query performance
-- **Implement cache warming** for frequently accessed models
+### Monthly Checks:
 
-## Summary
+- ✅ Monitor cache hit rate (>90%)
+- ✅ Verify cron job execution
+- ✅ Check error logs
+- ✅ Clean up old cache entries if needed
 
-The Model Caching System provides:
-
-- ⚡ **96% faster API responses** (1200ms → ~50ms)
-- 🔄 **Automatic refresh** every 15 minutes
-- 🛡️ **Intelligent fallbacks** for reliability
-- 📊 **Health monitoring** and alerting
-- 🛠️ **Simple setup** with Supabase Edge Functions
-
-This solution eliminates Vercel AI Gateway latency bottlenecks while maintaining data freshness and system reliability.
+**Result:** 96% faster responses, daily refresh, 7-day cache validity! 🎉

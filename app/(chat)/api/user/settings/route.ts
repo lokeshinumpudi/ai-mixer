@@ -13,7 +13,12 @@ export const GET = authenticatedRoute(async (request, context, user) => {
     const settings = await getUserSettings(user.id);
     const settingsData = settings?.settings || {};
 
-    return Response.json(settingsData, { status: 200 });
+    return Response.json(settingsData, {
+      status: 200,
+      headers: {
+        'Cache-Control': 'private, max-age=120, stale-while-revalidate=120',
+      },
+    });
   } catch (error) {
     console.error('Failed to get user settings:', error);
     return new ChatSDKError(

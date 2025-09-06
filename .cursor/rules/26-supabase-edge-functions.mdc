@@ -1,0 +1,310 @@
+---
+alwaysApply: false
+description: "Supabase Edge Functions patterns, Deno compatibility, and deployment workflows."
+---
+
+# 26: Supabase Edge Functions
+
+## Overview
+
+Supabase Edge Functions run on Deno runtime, enabling serverless functions with TypeScript support. Use for background tasks, API proxies, and scheduled jobs that don't require persistent server state.
+
+## Core Patterns
+
+### Function Structure
+
+```typescript
+// Type declarations for Deno runtime
+declare const Deno: {
+  env: { get(key: string): string | undefined };
+  serve: (handler: (req: Request) => Promise<Response>) => void;
+};
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+Deno.serve(async (req: Request) => {
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      {
+        global: {
+          headers: { Authorization: req.headers.get("Authorization")! },
+        },
+      }
+    );
+
+    // Function logic here
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { "Content-Type": "application/json" },
+      status: 200,
+    });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: errorMessage,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 500,
+      }
+    );
+  }
+});
+```
+
+### Import Strategies
+
+#### ✅ ESM.sh (Recommended for Supabase)
+
+```typescript
+// @ts-ignore: ESM imports work in Deno runtime
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// @ts-ignore: ESM imports work in Deno runtime
+import { createGatewayProvider } from "https://esm.sh/@ai-sdk/gateway@1.0.12";
+```
+
+#### ❌ Avoid These (TypeScript Issues)
+
+```typescript
+// Don't use these - they cause TypeScript compilation errors
+import { createClient } from "@supabase/supabase-js"; // ❌
+import { createClient } from "npm:@supabase/supabase-js@2"; // ❌
+```
+
+### Environment Variables
+
+```typescript
+// Secure environment access
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const apiKey = Deno.env.get("AI_GATEWAY_API_KEY") ?? "";
+
+// Never hardcode sensitive values
+// ✅ const apiKey = Deno.env.get("API_KEY") ?? "";
+// ❌ const apiKey = "sk-1234567890";
+```
+
+### Cron Jobs
+
+```typescript
+// Cron job schedules (Supabase Dashboard)
+const schedules = {
+  // Every 15 minutes
+  frequent: "*/15 * * * *",
+
+  // Daily at 2 AM
+  daily: "0 2 * * *",
+
+  // Twice daily (9 AM and 9 PM)
+  twiceDaily: "0 9,21 * * *",
+
+  // Hourly
+  hourly: "0 * * * *",
+};
+```
+
+## Common Use Cases
+
+### 1. Cache Refresh (Our Implementation)
+
+```typescript
+Deno.serve(async (req: Request) => {
+  const supabase = createClient(/* credentials */);
+  const gateway = createGatewayProvider({});
+
+  const { models } = await gateway.getAvailableModels();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  await supabase.from("ModelCache").insert({
+    models,
+    expiresAt,
+    status: "active",
+  });
+
+  return new Response("Cache refreshed successfully");
+});
+```
+
+### 2. Data Processing
+
+```typescript
+Deno.serve(async (req: Request) => {
+  const supabase = createClient(/* credentials */);
+
+  // Process large datasets
+  const { data: users } = await supabase.from("users").select("*").limit(1000);
+
+  // Perform computations
+  const processedData = users.map((user) => ({
+    ...user,
+    processed_at: new Date().toISOString(),
+  }));
+
+  // Store results
+  await supabase.from("processed_users").insert(processedData);
+
+  return new Response(
+    JSON.stringify({
+      processed: users.length,
+      timestamp: new Date().toISOString(),
+    })
+  );
+});
+```
+
+### 3. External API Proxy
+
+```typescript
+Deno.serve(async (req: Request) => {
+  const apiKey = Deno.env.get("EXTERNAL_API_KEY") ?? "";
+
+  const response = await fetch("https://api.external-service.com/data", {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const data = await response.json();
+
+  // Transform and store
+  const supabase = createClient(/* credentials */);
+  await supabase.from("external_data").insert(data);
+
+  return new Response(JSON.stringify(data));
+});
+```
+
+## Best Practices
+
+### ✅ Do
+
+- **Use ESM.sh imports** with @ts-ignore for external libraries
+- **Handle errors properly** with instanceof Error checks
+- **Use environment variables** for all sensitive data
+- **Return consistent JSON responses** with success/error states
+- **Use appropriate cron schedules** based on data volatility
+- **Log important operations** for debugging
+
+### ❌ Don't
+
+- **Hardcode API keys** or sensitive credentials
+- **Use Node.js specific APIs** (fs, path, etc.)
+- **Import Node.js packages directly** (use esm.sh instead)
+- **Skip error handling** - always wrap in try/catch
+- **Use synchronous operations** - Deno prefers async
+- **Forget TypeScript declarations** for Deno APIs
+
+### Performance Considerations
+
+1. **Bundle Size**: Keep functions lightweight (< 1MB)
+2. **Cold Starts**: Functions may have startup latency
+3. **Memory Limits**: Respect Deno's memory constraints
+4. **Execution Time**: Keep functions under 30 seconds
+5. **Concurrent Requests**: Design for horizontal scaling
+
+### Security Patterns
+
+```typescript
+// Validate requests
+const isValidRequest = (req: Request) => {
+  const authHeader = req.headers.get("Authorization");
+  return authHeader?.startsWith("Bearer ") ?? false;
+};
+
+// Rate limiting
+const rateLimit = async (identifier: string) => {
+  const supabase = createClient(/* credentials */);
+  const { count } = await supabase
+    .from("rate_limits")
+    .select("*", { count: "exact" })
+    .eq("identifier", identifier)
+    .gt("created_at", new Date(Date.now() - 60000).toISOString()); // Last minute
+
+  return count < 100; // Max 100 requests per minute
+};
+```
+
+### Deployment Workflow
+
+```bash
+# 1. Deploy via CLI (if authenticated)
+supabase functions deploy function-name
+
+# 2. Or deploy via Supabase Dashboard:
+# - Go to Edge Functions
+# - Create new function
+# - Copy/paste code
+# - Set environment variables
+# - Configure cron jobs (if needed)
+```
+
+### Testing Edge Functions
+
+```typescript
+// Local testing
+import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+
+Deno.test("Edge function test", async () => {
+  const req = new Request("http://localhost:54321/functions/v1/test");
+  const response = await handler(req);
+  const data = await response.json();
+
+  assertEquals(data.success, true);
+});
+```
+
+## Integration with Application
+
+### Calling from Next.js API Routes
+
+```typescript
+// app/api/webhook/route.ts
+export async function POST(req: Request) {
+  const supabase = createClient(/* credentials */);
+
+  // Trigger edge function
+  const { data, error } = await supabase.functions.invoke("process-webhook", {
+    body: await req.json(),
+  });
+
+  if (error) {
+    console.error("Edge function error:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+
+  return new Response(JSON.stringify(data));
+}
+```
+
+### Scheduled Tasks
+
+```typescript
+// Daily cleanup function
+Deno.serve(async (req: Request) => {
+  const supabase = createClient(/* credentials */);
+
+  // Clean old cache entries
+  await supabase
+    .from("cache_entries")
+    .delete()
+    .lt("expires_at", new Date().toISOString());
+
+  // Clean old logs
+  await supabase
+    .from("audit_logs")
+    .delete()
+    .lt(
+      "created_at",
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    ); // 30 days
+
+  return new Response("Cleanup completed");
+});
+```
+
+This rule establishes patterns for Supabase Edge Functions, ensuring consistent implementation across the codebase while leveraging Deno's capabilities for serverless workloads.

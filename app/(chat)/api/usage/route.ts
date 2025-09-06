@@ -3,10 +3,8 @@ import { getUserUsageWithValidation } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 import { apiLogger } from '@/lib/logger';
 
-export const dynamic = 'force-dynamic';
+// Removed force-dynamic to allow cache headers to work
 
-// Ultra-minimal, cost-conscious usage API
-// Returns raw data for client-side computation + server validation context
 export const GET = authenticatedRoute(async (request, _context, user) => {
   try {
     const url = new URL(request.url);
@@ -58,7 +56,11 @@ export const GET = authenticatedRoute(async (request, _context, user) => {
       'Usage data retrieved successfully',
     );
 
-    return Response.json(usageData);
+    return Response.json(usageData, {
+      headers: {
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=60',
+      },
+    });
   } catch (error) {
     const parsedError =
       error instanceof Error ? error : new Error(String(error));

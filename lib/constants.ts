@@ -33,21 +33,21 @@ export const PRICING = {
 
 // Free models (available to all users)
 export const FREE_MODELS = [
-  'openai/gpt-oss-20b',
-  'google/gemini-2.5-flash-lite',
-  'openai/gpt-5-nano',
+  'amazon/nova-lite',
+  'google/gemini-2.0-flash',
+  'anthropic/claude-3.5-haiku',
 ] as const;
 
 // Pro models (require paid subscription)
 export const PRO_MODELS = [
   ...FREE_MODELS,
   'moonshotai/kimi-k2',
-  'alibaba/qwen-3-32b',
-  'openai/gpt-5-mini',
-  'openai/gpt-oss-120b',
-  'xai/grok-code-fast-1',
-  'google/gemini-2.5-flash-image-preview',
-  'openai/gpt-4o-mini',
+  // "alibaba/qwen-3-32b",
+  // "openai/gpt-5-mini",
+  // "openai/gpt-oss-120b",
+  // "xai/grok-code-fast-1",
+  // "google/gemini-2.5-flash-image-preview",
+  // "openai/gpt-4o-mini",
 ] as const;
 
 export const DEFAULT_MODEL = FREE_MODELS[0];
@@ -56,11 +56,29 @@ export const DEFAULT_IMAGE_MODEL = 'xai/grok-2-image-1212';
 
 // Minimal model configuration - only business controls we need
 export const MODEL_CONFIG = {
-  'google/gemini-2.5-flash-lite': {
+  'amazon/nova-lite': {
     enabled: true,
-    allowFileUploads: true,
+    allowFileUploads: false,
+    supportsVision: true,
+    supportsReasoning: true,
+    supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
+  },
+  'anthropic/claude-3.5-haiku': {
+    enabled: true,
+    allowFileUploads: false,
     supportsVision: true,
     supportsReasoning: false,
+    supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: false,
+  },
+  'google/gemini-2.0-flash': {
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: true,
+    supportsReasoning: true,
     supportsArtifacts: true,
     supportsToolCalling: true,
     supportsPdf: true,

@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { compareLogger } from "@/lib/logger";
-import { fetcher } from "@/lib/utils";
-import { useCallback, useEffect, useRef, useState } from "react";
-import useSWR from "swr";
+import { compareLogger } from '@/lib/logger';
+import { fetcher } from '@/lib/utils';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import useSWR from 'swr';
 
 export interface CompareModelState {
-  status: "pending" | "running" | "completed" | "canceled" | "failed";
+  status: 'pending' | 'running' | 'completed' | 'canceled' | 'failed';
   content: string;
   reasoning?: string; // AI reasoning/thinking content
   usage?: any;
@@ -21,9 +21,10 @@ export interface CompareRunState {
   runId: string | null;
   prompt: string;
   modelIds: string[];
-  status: "idle" | "running" | "completed" | "canceled" | "failed";
+  status: 'idle' | 'running' | 'completed' | 'canceled' | 'failed';
   byModelId: Record<string, CompareModelState>;
   isRunning: boolean;
+  isTransitioning: boolean; // Prevents UI flashes during completion
 }
 
 interface CompareRunsListResponse {
@@ -33,29 +34,32 @@ interface CompareRunsListResponse {
 }
 
 const initialModelState: CompareModelState = {
-  status: "pending",
-  content: "",
-  reasoning: "",
+  status: 'pending',
+  content: '',
+  reasoning: '',
 };
 
 export function useCompareRun(
   chatId: string,
-  options?: { listOnMount?: boolean }
+  options?: { listOnMount?: boolean },
 ) {
   compareLogger.debug(
     {
       chatId,
     },
-    "useCompareRun hook initialized"
+    'useCompareRun hook initialized',
   );
+
+  const pendingHandoffRunIdRef = useRef<string | null>(null);
 
   const [state, setState] = useState<CompareRunState>({
     runId: null,
-    prompt: "",
+    prompt: '',
     modelIds: [],
-    status: "idle",
+    status: 'idle',
     byModelId: {},
     isRunning: false,
+    isTransitioning: false,
   });
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -74,8 +78,28 @@ export function useCompareRun(
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: true,
-    }
+    },
   );
+
+  // Handoff: when compareRuns updates and includes the pending completed run, clear active state
+  useEffect(() => {
+    const pendingId = pendingHandoffRunIdRef.current;
+    if (!pendingId) return;
+
+    const exists = !!compareRuns?.items?.some((r: any) => r.id === pendingId);
+    if (exists) {
+      setState({
+        runId: null,
+        prompt: '',
+        modelIds: [],
+        status: 'idle',
+        byModelId: {},
+        isRunning: false,
+        isTransitioning: false,
+      });
+      pendingHandoffRunIdRef.current = null;
+    }
+  }, [compareRuns?.items]);
 
   // Start a new compare run
   const startCompare = useCallback(
@@ -86,7 +110,7 @@ export function useCompareRun(
           modelCount: modelIds.length,
           chatId,
         },
-        "Starting compare run"
+        'Starting compare run',
       );
 
       if (!chatId || modelIds.length === 0) {
@@ -95,32 +119,36 @@ export function useCompareRun(
             chatId,
             modelIdsLength: modelIds.length,
           },
-          "Invalid parameters for startCompare"
+          'Invalid parameters for startCompare',
         );
         return;
       }
 
       // Reset state
-      const initialByModelId = modelIds.reduce((acc, modelId) => {
-        acc[modelId] = { ...initialModelState, status: "running" };
-        return acc;
-      }, {} as Record<string, CompareModelState>);
+      const initialByModelId = modelIds.reduce(
+        (acc, modelId) => {
+          acc[modelId] = { ...initialModelState, status: 'running' };
+          return acc;
+        },
+        {} as Record<string, CompareModelState>,
+      );
 
       compareLogger.debug(
         {
           modelCount: modelIds.length,
           chatId,
         },
-        "Setting initial compare state"
+        'Setting initial compare state',
       );
 
       setState({
         runId: null,
         prompt,
         modelIds,
-        status: "running",
+        status: 'running',
         byModelId: initialByModelId,
         isRunning: true,
+        isTransitioning: false,
       });
 
       try {
@@ -133,12 +161,12 @@ export function useCompareRun(
             modelIds,
             promptLength: prompt.length,
           },
-          "Starting fetch to compare stream API"
+          'Starting fetch to compare stream API',
         );
         // Start SSE stream
-        const response = await fetch("/api/compare/stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        const response = await fetch('/api/compare/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chatId, prompt, modelIds }),
           signal: abortControllerRef.current.signal,
         });
@@ -149,13 +177,13 @@ export function useCompareRun(
             statusText: response.statusText,
             chatId,
           },
-          "Fetch response received"
+          'Fetch response received',
         );
 
         if (!response.ok) {
           // Try to parse error response for specific error types
           let errorData: any = null;
-          let errorText = "";
+          let errorText = '';
           try {
             errorText = await response.text();
             errorData = JSON.parse(errorText);
@@ -168,7 +196,7 @@ export function useCompareRun(
                 errorText: errorText.substring(0, 200), // First 200 chars
                 parseError: parseError.message,
               },
-              "Failed to parse error response as JSON"
+              'Failed to parse error response as JSON',
             );
           }
 
@@ -182,11 +210,11 @@ export function useCompareRun(
               hasErrorData: !!errorData,
               errorTextLength: errorText.length,
             },
-            "Fetch failed"
+            'Fetch failed',
           );
 
           // Special handling for login-required errors
-          if (errorData?.code === "login_required:compare") {
+          if (errorData?.code === 'login_required:compare') {
             compareLogger.info(
               {
                 chatId,
@@ -194,13 +222,13 @@ export function useCompareRun(
                 errorCode: errorData.code,
                 errorMessage: errorData.message,
               },
-              "Showing login prompt for anonymous user rate limit"
+              'Showing login prompt for anonymous user rate limit',
             );
-            throw new Error("LOGIN_REQUIRED_COMPARE");
+            throw new Error('LOGIN_REQUIRED_COMPARE');
           }
 
           // Special handling for rate limit errors
-          if (errorData?.code === "rate_limit:chat") {
+          if (errorData?.code === 'rate_limit:chat') {
             compareLogger.info(
               {
                 chatId,
@@ -208,9 +236,9 @@ export function useCompareRun(
                 errorCode: errorData.code,
                 errorMessage: errorData.message,
               },
-              "Showing upgrade prompt for authenticated user rate limit"
+              'Showing upgrade prompt for authenticated user rate limit',
             );
-            throw new Error("RATE_LIMIT_CHAT");
+            throw new Error('RATE_LIMIT_CHAT');
           }
 
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -221,29 +249,29 @@ export function useCompareRun(
             {
               chatId,
             },
-            "No response body from server"
+            'No response body from server',
           );
-          throw new Error("No response body");
+          throw new Error('No response body');
         }
 
         compareLogger.debug(
           {
             chatId,
           },
-          "Response body available, starting SSE reader"
+          'Response body available, starting SSE reader',
         );
 
         // Create EventSource-like reader for SSE
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = "";
+        let buffer = '';
         let eventCount = 0;
 
         compareLogger.debug(
           {
             chatId,
           },
-          "Starting SSE reading loop"
+          'Starting SSE reading loop',
         );
 
         while (true) {
@@ -254,7 +282,7 @@ export function useCompareRun(
                 eventCount,
                 chatId,
               },
-              "Processed SSE events"
+              'Processed SSE events',
             );
           }
           const { done, value } = await reader.read();
@@ -264,12 +292,12 @@ export function useCompareRun(
           buffer += decoder.decode(value, { stream: true });
 
           // Process complete lines
-          const lines = buffer.split("\n");
+          const lines = buffer.split('\n');
           // Keep the last line in buffer (might be incomplete)
-          buffer = lines.pop() || "";
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
+            if (line.startsWith('data: ')) {
               try {
                 const event = JSON.parse(line.slice(6));
                 compareLogger.debug(
@@ -278,7 +306,7 @@ export function useCompareRun(
                     runId: event.runId,
                     modelId: event.modelId,
                   },
-                  "Received SSE event"
+                  'Received SSE event',
                 );
                 handleSSEEvent(event);
               } catch (err) {
@@ -287,65 +315,65 @@ export function useCompareRun(
                     error: err instanceof Error ? err.message : String(err),
                     line: line.substring(0, 200), // First 200 chars for debugging
                   },
-                  "Failed to parse SSE event"
+                  'Failed to parse SSE event',
                 );
               }
             }
           }
         }
       } catch (error: any) {
-        if (error.name !== "AbortError") {
+        if (error.name !== 'AbortError') {
           // Special handling for login-required errors
-          if (error.message === "LOGIN_REQUIRED_COMPARE") {
+          if (error.message === 'LOGIN_REQUIRED_COMPARE') {
             compareLogger.info(
               {
                 chatId,
                 modelCount: modelIds.length,
               },
-              "Showing login toast for anonymous user rate limit"
+              'Showing login toast for anonymous user rate limit',
             );
 
             // Show login prompt instead of error
-            const { upgradeToast } = await import("@/components/toast");
+            const { upgradeToast } = await import('@/components/toast');
 
             upgradeToast({
-              title: "Sign in to unlock unlimited comparisons",
+              title: 'Sign in to unlock unlimited comparisons',
               description:
-                "Create an account to compare multiple AI models and get higher usage limits.",
-              actionText: "Sign In",
+                'Create an account to compare multiple AI models and get higher usage limits.',
+              actionText: 'Sign In',
             });
 
             setState((prev) => ({
               ...prev,
-              status: "idle", // Reset to idle instead of failed
+              status: 'idle', // Reset to idle instead of failed
               isRunning: false,
             }));
             return;
           }
 
           // Special handling for rate limit errors (logged-in users)
-          if (error.message === "RATE_LIMIT_CHAT") {
+          if (error.message === 'RATE_LIMIT_CHAT') {
             compareLogger.info(
               {
                 chatId,
                 modelCount: modelIds.length,
               },
-              "Showing upgrade toast for authenticated user rate limit"
+              'Showing upgrade toast for authenticated user rate limit',
             );
 
             // Show upgrade prompt instead of error
-            const { upgradeToast } = await import("@/components/toast");
+            const { upgradeToast } = await import('@/components/toast');
 
             upgradeToast({
               title: "You've reached your daily message limit",
               description:
-                "Upgrade to Pro for unlimited AI conversations and premium model access.",
-              actionText: "Upgrade to Pro",
+                'Upgrade to Pro for unlimited AI conversations and premium model access.',
+              actionText: 'Upgrade to Pro',
             });
 
             setState((prev) => ({
               ...prev,
-              status: "idle", // Reset to idle instead of failed
+              status: 'idle', // Reset to idle instead of failed
               isRunning: false,
             }));
             return;
@@ -358,18 +386,18 @@ export function useCompareRun(
               chatId,
               modelCount: modelIds.length,
             },
-            "Compare run failed"
+            'Compare run failed',
           );
 
           setState((prev) => ({
             ...prev,
-            status: "failed",
+            status: 'failed',
             isRunning: false,
           }));
         }
       }
     },
-    [chatId]
+    [chatId],
   );
 
   // Handle SSE events
@@ -381,35 +409,35 @@ export function useCompareRun(
           runId: event.runId,
           modelId: event.modelId,
         },
-        "Processing SSE event"
+        'Processing SSE event',
       );
 
       switch (event.type) {
-        case "run_start":
+        case 'run_start':
           setState((prev) => ({
             ...prev,
             runId: event.runId,
           }));
           break;
 
-        case "model_start":
+        case 'model_start':
           setState((prev) => ({
             ...prev,
             byModelId: {
               ...prev.byModelId,
               [event.modelId]: {
                 ...prev.byModelId[event.modelId],
-                status: "running",
+                status: 'running',
                 serverStartedAt: event.serverStartedAt,
               },
             },
           }));
           break;
 
-        case "delta":
+        case 'delta':
           setState((prev) => {
             const newContent =
-              (prev.byModelId[event.modelId]?.content || "") + event.textDelta;
+              (prev.byModelId[event.modelId]?.content || '') + event.textDelta;
             return {
               ...prev,
               byModelId: {
@@ -423,10 +451,10 @@ export function useCompareRun(
           });
           break;
 
-        case "reasoning_delta":
+        case 'reasoning_delta':
           setState((prev) => {
             const newReasoning =
-              (prev.byModelId[event.modelId]?.reasoning || "") +
+              (prev.byModelId[event.modelId]?.reasoning || '') +
               event.reasoningDelta;
             return {
               ...prev,
@@ -441,7 +469,7 @@ export function useCompareRun(
           });
           break;
 
-        case "model_end":
+        case 'model_end':
           setState((prev) => {
             const modelState = prev.byModelId[event.modelId];
 
@@ -451,7 +479,7 @@ export function useCompareRun(
                 ...prev.byModelId,
                 [event.modelId]: {
                   ...modelState,
-                  status: "completed",
+                  status: 'completed',
                   usage: event.usage,
                   serverCompletedAt: event.serverCompletedAt,
                   inferenceTimeMs: event.inferenceTimeMs,
@@ -461,76 +489,71 @@ export function useCompareRun(
           });
           break;
 
-        case "model_error":
+        case 'model_error':
           setState((prev) => ({
             ...prev,
             byModelId: {
               ...prev.byModelId,
               [event.modelId]: {
                 ...prev.byModelId[event.modelId],
-                status: "failed",
+                status: 'failed',
                 error: event.error,
               },
             },
           }));
           break;
 
-        case "run_end": {
+        case 'run_end': {
           compareLogger.info(
             {
               runId: event.runId,
               chatId,
               modelCount: event.results?.length || 0,
             },
-            "Compare run completed"
+            'Compare run completed',
           );
 
           // Capture the current state for optimistic updates
           let capturedState: CompareRunState | null = null;
           setState((prev) => {
-            capturedState = {
+            const newState = {
               ...prev,
-              status: "completed",
+              status: 'completed' as const,
               isRunning: false,
+              isTransitioning: true, // Prevent UI flashes during transition
             };
-            return capturedState;
+            capturedState = newState;
+            return newState;
           });
 
-          console.log(
-            `[COMPARE_HOOK] Captured final state for optimistic update`
-          );
-
-          // Optimistically add the completed run to the list instead of refreshing
-          // This prevents layout shifts and provides smooth transitions
-          setTimeout(() => {
-            if (!capturedState) return;
-
+          // Immediately add the completed run to cache to prevent gap
+          if (capturedState) {
             // Create the completed run object from captured state
             const completedRun = {
-              id: capturedState.runId,
-              prompt: capturedState.prompt,
-              modelIds: capturedState.modelIds,
-              status: "completed" as const,
+              id: (capturedState as CompareRunState).runId,
+              prompt: (capturedState as CompareRunState).prompt,
+              modelIds: (capturedState as CompareRunState).modelIds,
+              status: 'completed' as const,
               createdAt: new Date().toISOString(),
-              results: Object.entries(capturedState.byModelId).map(
-                ([modelId, modelState]) => ({
-                  modelId,
-                  status: (modelState as CompareModelState).status,
-                  content: (modelState as CompareModelState).content,
-                  reasoning: (modelState as CompareModelState).reasoning,
-                  usage: (modelState as CompareModelState).usage,
-                  error: (modelState as CompareModelState).error,
-                  serverStartedAt: (modelState as CompareModelState)
-                    .serverStartedAt,
-                  serverCompletedAt: (modelState as CompareModelState)
-                    .serverCompletedAt,
-                  inferenceTimeMs: (modelState as CompareModelState)
-                    .inferenceTimeMs,
-                })
-              ),
+              results: Object.entries(
+                (capturedState as CompareRunState).byModelId,
+              ).map(([modelId, modelState]) => ({
+                modelId,
+                status: (modelState as CompareModelState).status,
+                content: (modelState as CompareModelState).content,
+                reasoning: (modelState as CompareModelState).reasoning,
+                usage: (modelState as CompareModelState).usage,
+                error: (modelState as CompareModelState).error,
+                serverStartedAt: (modelState as CompareModelState)
+                  .serverStartedAt,
+                serverCompletedAt: (modelState as CompareModelState)
+                  .serverCompletedAt,
+                inferenceTimeMs: (modelState as CompareModelState)
+                  .inferenceTimeMs,
+              })),
             };
 
-            // Optimistically update the compareRuns cache
+            // Optimistically update the compareRuns cache immediately
             mutateCompareRuns(
               (currentData: CompareRunsListResponse | undefined) => {
                 if (!currentData) return currentData;
@@ -541,28 +564,23 @@ export function useCompareRun(
                   items: [...currentData.items, completedRun],
                 };
               },
-              false // Don't revalidate from server
+              false, // Don't revalidate from server
             );
 
-            // Clear the active state
-            setState({
-              runId: null,
-              prompt: "",
-              modelIds: [],
-              status: "idle",
-              byModelId: {},
-              isRunning: false,
-            });
-          }, 500);
+            // Mark this run for handoff: keep active UI until we see it in history
+            pendingHandoffRunIdRef.current = (
+              capturedState as CompareRunState
+            ).runId;
+          }
           break;
         }
 
-        case "heartbeat":
+        case 'heartbeat':
           // Keep-alive, no action needed
           break;
       }
     },
-    [mutateCompareRuns]
+    [mutateCompareRuns],
   );
 
   // Cancel specific model
@@ -571,9 +589,9 @@ export function useCompareRun(
       if (!state.runId) return;
 
       try {
-        await fetch("/api/compare/cancel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        await fetch('/api/compare/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ runId: state.runId, modelId }),
         });
 
@@ -583,15 +601,15 @@ export function useCompareRun(
             ...prev.byModelId,
             [modelId]: {
               ...prev.byModelId[modelId],
-              status: "canceled",
+              status: 'canceled',
             },
           },
         }));
       } catch (error) {
-        console.error("Failed to cancel model:", error);
+        console.error('Failed to cancel model:', error);
       }
     },
-    [state.runId]
+    [state.runId],
   );
 
   // Cancel all models
@@ -603,27 +621,27 @@ export function useCompareRun(
       abortControllerRef.current?.abort();
 
       // Cancel on server
-      await fetch("/api/compare/cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      await fetch('/api/compare/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ runId: state.runId }),
       });
 
       setState((prev) => ({
         ...prev,
-        status: "canceled",
+        status: 'canceled',
         isRunning: false,
         byModelId: Object.fromEntries(
           Object.entries(prev.byModelId).map(([modelId, modelState]) => [
             modelId,
-            modelState.status === "running"
-              ? { ...modelState, status: "canceled" as const }
+            modelState.status === 'running'
+              ? { ...modelState, status: 'canceled' as const }
               : modelState,
-          ])
+          ]),
         ),
       }));
     } catch (error) {
-      console.error("Failed to cancel compare run:", error);
+      console.error('Failed to cancel compare run:', error);
     }
   }, [state.runId]);
 
@@ -631,7 +649,7 @@ export function useCompareRun(
   const loadCompareRun = useCallback(async (runId: string) => {
     try {
       const response = await fetch(`/api/compare/${runId}`);
-      if (!response.ok) throw new Error("Failed to load compare run");
+      if (!response.ok) throw new Error('Failed to load compare run');
 
       const { run, results } = await response.json();
 
@@ -639,8 +657,8 @@ export function useCompareRun(
         (acc: Record<string, CompareModelState>, result: any) => {
           acc[result.modelId] = {
             status: result.status,
-            content: result.content || "",
-            reasoning: result.reasoning || "",
+            content: result.content || '',
+            reasoning: result.reasoning || '',
             usage: result.usage,
             error: result.error,
             serverStartedAt: result.serverStartedAt,
@@ -649,7 +667,7 @@ export function useCompareRun(
           };
           return acc;
         },
-        {}
+        {},
       );
 
       setState({
@@ -658,10 +676,11 @@ export function useCompareRun(
         modelIds: run.modelIds,
         status: run.status,
         byModelId,
-        isRunning: run.status === "running",
+        isRunning: run.status === 'running',
+        isTransitioning: false,
       });
     } catch (error) {
-      console.error("Failed to load compare run:", error);
+      console.error('Failed to load compare run:', error);
     }
   }, []);
 

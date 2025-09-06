@@ -200,20 +200,14 @@ const CompareResultCard = memo(function CompareResultCard({
             <div className="flex items-center gap-1">
               {/* Expand button */}
               {onExpand && (
-                <MobileFriendlyTooltip
-                  content="Open in full-screen modal for better readability"
-                  side="top"
-                  showIcon={false}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onExpand}
+                  className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
                 >
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onExpand}
-                    className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                  >
-                    <Maximize2 className="size-3" />
-                  </Button>
-                </MobileFriendlyTooltip>
+                  <Maximize2 className="size-3" />
+                </Button>
               )}
 
               {/* Cancel button */}
@@ -331,20 +325,14 @@ const CompareResultCard = memo(function CompareResultCard({
           <div className="flex items-center gap-1">
             {/* Expand button */}
             {onExpand && (
-              <MobileFriendlyTooltip
-                content="Open in full-screen modal for better readability"
-                side="top"
-                showIcon={false}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onExpand}
+                className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
               >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onExpand}
-                  className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                >
-                  <Maximize2 className="size-3" />
-                </Button>
-              </MobileFriendlyTooltip>
+                <Maximize2 className="size-3" />
+              </Button>
             )}
 
             {/* Cancel button */}

@@ -1,31 +1,31 @@
-import { useMessages } from "@/hooks/use-messages";
-import type { Vote } from "@/lib/db/schema";
-import type { ChatMessage } from "@/lib/types";
-import { cn } from "@/lib/utils";
-import type { UseChatHelpers } from "@ai-sdk/react";
-import equal from "fast-deep-equal";
-import { motion } from "framer-motion";
-import { memo, useEffect, useRef } from "react";
-import { CompareMessage, type CompareMessageData } from "./compare-message";
-import { useDataStream } from "./data-stream-provider";
-import { Greeting } from "./greeting";
-import { PreviewMessage, ThinkingMessage } from "./message";
-import { SuggestedActions } from "./suggested-actions";
+import { useMessages } from '@/hooks/use-messages';
+import type { Vote } from '@/lib/db/schema';
+import type { ChatMessage } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import equal from 'fast-deep-equal';
+import { motion } from 'framer-motion';
+import { memo, useEffect, useRef } from 'react';
+import { CompareMessage, type CompareMessageData } from './compare-message';
+import { useDataStream } from './data-stream-provider';
+import { Greeting } from './greeting';
+import { PreviewMessage, ThinkingMessage } from './message';
+import { SuggestedActions } from './suggested-actions';
 
 interface MessagesProps {
   chatId: string;
-  status: UseChatHelpers<ChatMessage>["status"];
+  status: UseChatHelpers<ChatMessage>['status'];
   votes: Array<Vote> | undefined;
   messages: ChatMessage[];
-  setMessages: UseChatHelpers<ChatMessage>["setMessages"];
-  regenerate: UseChatHelpers<ChatMessage>["regenerate"];
+  setMessages: UseChatHelpers<ChatMessage>['setMessages'];
+  regenerate: UseChatHelpers<ChatMessage>['regenerate'];
   isReadonly: boolean;
   isArtifactVisible: boolean;
   // Compare state props
   compareState: {
     runId: string | null;
     prompt: string;
-    status: "idle" | "running" | "completed" | "canceled" | "failed";
+    status: 'idle' | 'running' | 'completed' | 'canceled' | 'failed';
     modelIds: string[];
     byModelId: Record<
       string,
@@ -37,6 +37,7 @@ interface MessagesProps {
         error?: string;
       }
     >;
+    isTransitioning?: boolean;
   };
   compareRuns: any[];
   cancelModel: (modelId: string) => void;
@@ -48,8 +49,8 @@ interface MessagesProps {
   loadMore?: () => Promise<void>;
   isLoadingMore?: boolean;
   // SuggestedActions props
-  sendMessage?: UseChatHelpers<ChatMessage>["sendMessage"];
-  selectedVisibilityType: "private" | "public";
+  sendMessage?: UseChatHelpers<ChatMessage>['sendMessage'];
+  selectedVisibilityType: 'private' | 'public';
   selectedModelIds?: string[];
   onStartCompare?: (prompt: string, modelIds: string[]) => void;
 }
@@ -92,16 +93,27 @@ function PureMessages({
 
   useDataStream();
   // Create compare message data from active compare state
-  const activeCompareMessage: CompareMessageData | null =
-    compareState.status !== "idle"
-      ? {
-          id: compareState.runId || "active-compare",
-          prompt: compareState.prompt || "",
-          modelIds: compareState.modelIds,
-          status: compareState.status,
-          results: compareState.byModelId as any, // Type cast for now
-        }
-      : null;
+  const activeCompareMessage: CompareMessageData | null = (() => {
+    if (compareState.status === 'idle') return null;
+
+    const activeId = compareState.runId;
+    const existsInHistory = activeId
+      ? compareRuns?.some((r: any) => r.id === activeId)
+      : false;
+
+    if (existsInHistory && compareState.status === 'completed') {
+      // Handoff complete: don't render active card
+      return null;
+    }
+
+    return {
+      id: activeId ? `active-${activeId}` : 'active-compare',
+      prompt: compareState.prompt || '',
+      modelIds: compareState.modelIds,
+      status: compareState.status,
+      results: compareState.byModelId as any, // Type cast for now
+    };
+  })();
 
   // Smart scroll management for compare messages
   const prevActiveMessageRef = useRef<CompareMessageData | null>(null);
@@ -110,15 +122,15 @@ function PureMessages({
     // Scroll to active compare message when it first appears or when it starts running
     if (activeCompareMessage && !prevActiveMessageRef.current) {
       // New active compare message appeared - scroll to it
-      setTimeout(() => scrollToBottom("smooth"), 100);
+      setTimeout(() => scrollToBottom('smooth'), 100);
     } else if (
       activeCompareMessage &&
       prevActiveMessageRef.current &&
-      activeCompareMessage.status === "running" &&
-      prevActiveMessageRef.current.status !== "running"
+      activeCompareMessage.status === 'running' &&
+      prevActiveMessageRef.current.status !== 'running'
     ) {
       // Compare message transitioned to running state - scroll to it
-      setTimeout(() => scrollToBottom("smooth"), 100);
+      setTimeout(() => scrollToBottom('smooth'), 100);
     }
 
     // Update ref for next comparison
@@ -137,7 +149,7 @@ function PureMessages({
           loadMore();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
 
     if (topRef.current) {
@@ -167,7 +179,8 @@ function PureMessages({
       {messages.length === 0 &&
         compareRuns.length === 0 &&
         !activeCompareMessage &&
-        !isLoadingRuns && (
+        !isLoadingRuns &&
+        !compareState.isTransitioning && (
           <div className="flex flex-col items-center gap-8 py-8">
             <Greeting />
             <div className="w-full max-w-2xl px-4">
@@ -187,7 +200,7 @@ function PureMessages({
           key={message.id}
           chatId={chatId}
           message={message}
-          isLoading={status === "streaming" && messages.length - 1 === index}
+          isLoading={status === 'streaming' && messages.length - 1 === index}
           vote={
             votes
               ? votes.find((vote) => vote.messageId === message.id)
@@ -205,7 +218,7 @@ function PureMessages({
       {/* Historical compare runs (older first) */}
       {compareRuns.map((run) => (
         <motion.div
-          key={run.id}
+          key={`historical-${run.id}`}
           initial={{ y: 8, opacity: 0, scale: 0.98 }}
           animate={{
             y: 0,
@@ -217,11 +230,11 @@ function PureMessages({
             },
           }}
           className={cn(
-            "w-full mx-auto",
+            'w-full mx-auto',
             // For single model, use full width on mobile, max-width on desktop
             run.modelIds.length === 1
-              ? "max-w-[100vw] px-2 md:max-w-4xl md:px-4"
-              : "max-w-5xl px-4"
+              ? 'max-w-[100vw] px-2 md:max-w-4xl md:px-4'
+              : 'max-w-5xl px-4',
           )}
         >
           <CompareMessage
@@ -232,11 +245,11 @@ function PureMessages({
               status: run.status,
               results:
                 run.results?.reduce(
-                  (acc: CompareMessageData["results"], result: any) => {
+                  (acc: CompareMessageData['results'], result: any) => {
                     acc[result.modelId] = {
                       status: result.status,
-                      content: result.content || "",
-                      reasoning: result.reasoning || "",
+                      content: result.content || '',
+                      reasoning: result.reasoning || '',
                       usage: result.usage,
                       error: result.error,
                       serverStartedAt: result.serverStartedAt,
@@ -245,7 +258,7 @@ function PureMessages({
                     };
                     return acc;
                   },
-                  {} as CompareMessageData["results"]
+                  {} as CompareMessageData['results'],
                 ) || {},
             }}
           />
@@ -255,6 +268,7 @@ function PureMessages({
       {/* Active compare run (always at bottom) */}
       {activeCompareMessage && (
         <motion.div
+          key={`active-${activeCompareMessage.id}`}
           initial={{ y: 8, opacity: 0, scale: 0.98 }}
           animate={{
             y: 0,
@@ -266,11 +280,11 @@ function PureMessages({
             },
           }}
           className={cn(
-            "w-full mx-auto",
+            'w-full mx-auto',
             // For single model, use full width on mobile, max-width on desktop
             activeCompareMessage.modelIds.length === 1
-              ? "max-w-[100vw] px-2 md:max-w-4xl md:px-4"
-              : "max-w-5xl px-4"
+              ? 'max-w-[100vw] px-2 md:max-w-4xl md:px-4'
+              : 'max-w-5xl px-4',
           )}
         >
           <CompareMessage
@@ -287,9 +301,9 @@ function PureMessages({
         </motion.div>
       )}
 
-      {status === "submitted" &&
+      {status === 'submitted' &&
         messages.length > 0 &&
-        messages[messages.length - 1].role === "user" && <ThinkingMessage />}
+        messages[messages.length - 1].role === 'user' && <ThinkingMessage />}
 
       <motion.div
         ref={messagesEndRef}

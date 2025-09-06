@@ -38,6 +38,12 @@ export const GET = authenticatedRoute(
       endingBefore,
     });
 
-    return Response.json(chats);
+    return Response.json(chats, {
+      headers: {
+        // 🚀 PERFORMANCE: Aggressive caching for chat history
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
+        'X-Performance-Optimized': 'true',
+      },
+    });
   },
 );

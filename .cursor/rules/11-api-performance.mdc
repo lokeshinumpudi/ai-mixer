@@ -32,6 +32,33 @@ Note: Some code paths still reference `/api/models/public` as a protected endpoi
 
 ## Caching Strategy
 
+### Multi-Level Caching Architecture
+
+1. **Database Cache**: For expensive external APIs (Vercel Gateway) - 7-day expiry, daily refresh
+2. **SWR Cache**: For API responses - configurable TTL based on data volatility
+3. **Memory Cache**: For frequently accessed data - session-based, immediate expiry
+
+### Database Caching Pattern
+
+```typescript
+// For stable external data (model info, pricing)
+const { data: cache } = await supabase
+  .from("model_cache")
+  .select("models")
+  .gt("expiresAt", new Date().toISOString())
+  .single();
+
+if (cache) {
+  return NextResponse.json({ models: cache.models }); // ~50ms response
+}
+
+// Fallback to live API only if cache miss
+const { models } = await gateway.getAvailableModels();
+return NextResponse.json({ models }); // ~1200ms response
+```
+
+### SWR Configuration
+
 SWR is configured with appropriate caching strategies to reduce redundant requests:
 
 - **`revalidateOnFocus: false`**: Prevents excessive refetching when users switch tabs.
