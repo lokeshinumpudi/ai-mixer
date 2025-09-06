@@ -1,12 +1,18 @@
-"use client";
+'use client';
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetcher } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, DollarSign, Zap } from "lucide-react";
-import { useState } from "react";
-import useSWR from "swr";
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { fetcher } from '@/lib/utils';
+import { ChevronLeft, ChevronRight, DollarSign, Info, Zap } from 'lucide-react';
+import { useState } from 'react';
+import useSWR from 'swr';
 
 interface ChatUsage {
   id: string;
@@ -29,7 +35,7 @@ interface UsageData {
     quota: number;
     used: number;
     remaining: number;
-    type: "daily" | "monthly";
+    type: 'daily' | 'monthly';
     resetInfo: string;
   };
   currentUsage: {
@@ -43,6 +49,33 @@ interface UsageData {
     message: string;
     severity: string;
   }>;
+}
+
+// Helper component for table headers with tooltips
+function TableHeaderWithTooltip({
+  children,
+  tooltip,
+  className = '',
+}: {
+  children: React.ReactNode;
+  tooltip: string;
+  className?: string;
+}) {
+  return (
+    <th className={`text-left p-3 text-sm font-medium ${className}`}>
+      <div className="flex items-center gap-1">
+        {children}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Info className="size-3 text-muted-foreground hover:text-foreground cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent>
+            <p className="text-xs">{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </th>
+  );
 }
 
 export function UsageDashboard() {
@@ -73,7 +106,7 @@ export function UsageDashboard() {
       <div className="space-y-6">
         {/* Loading skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {["messages", "tokens", "cost", "chats"].map((type) => (
+          {['messages', 'tokens', 'cost', 'chats'].map((type) => (
             <Card key={type}>
               <CardContent className="p-6">
                 <div className="h-8 bg-muted animate-pulse rounded mb-2" />
@@ -97,234 +130,294 @@ export function UsageDashboard() {
       quota: 50,
       used: 0,
       remaining: 50,
-      type: "daily" as const,
-      resetInfo: "",
+      type: 'daily' as const,
+      resetInfo: '',
     },
     currentUsage: {
-      totalTokens: "0",
+      totalTokens: '0',
       totalCost: 0,
-      totalChats: "0",
-      activeChats: "0",
+      totalChats: '0',
+      activeChats: '0',
     },
     warnings: [],
   };
 
   const usagePercentage = Math.min(
     100,
-    Math.round((limits.used / limits.quota) * 100)
+    Math.round((limits.used / limits.quota) * 100),
   );
 
   return (
-    <div className="space-y-6">
-      {/* Usage Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2">
-              <Zap className="size-4 text-orange-500" />
-              <div className="text-2xl font-bold">
-                {Number(currentUsage.totalTokens).toLocaleString()}
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">Total Tokens</p>
-            <p className="text-xs text-muted-foreground">Input + Output</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2">
-              <DollarSign className="size-4 text-green-500" />
-              <div className="text-2xl font-bold">
-                ${(currentUsage.totalCost / 100).toFixed(4)}
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">Total Cost</p>
-            <p className="text-xs text-muted-foreground">All time</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Warnings */}
-      {warnings.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg text-orange-600">
-              Usage Warnings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {warnings.map((warning) => (
-                <div
-                  key={`${warning.type}-${warning.message}`}
-                  className="p-3 rounded-lg border border-orange-200 bg-orange-50 text-orange-800"
-                >
-                  {warning.message}
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* Usage Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2">
+                <Zap className="size-4 text-orange-500" />
+                <div className="text-2xl font-bold">
+                  {Number(currentUsage.totalTokens).toLocaleString()}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              </div>
+              <p className="text-xs text-muted-foreground">Total Tokens</p>
+              <p className="text-xs text-muted-foreground">Input + Output</p>
+            </CardContent>
+          </Card>
 
-      {/* Usage History Table */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <CardTitle className="text-lg">Recent Usage</CardTitle>
-            <div className="flex items-center justify-center sm:justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page === 1}
-                className="flex items-center gap-1"
-              >
-                <ChevronLeft className="size-4" />
-                <span className="hidden sm:inline">Previous</span>
-              </Button>
-              <span className="text-sm text-muted-foreground px-2">
-                Page {page}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(page + 1)}
-                disabled={!usageData?.hasMore}
-                className="flex items-center gap-1"
-              >
-                <span className="hidden sm:inline">Next</span>
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {items.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No usage data available
-            </div>
-          ) : (
-            <>
-              {/* Mobile: Card layout */}
-              <div className="md:hidden space-y-3">
-                {items.map((item) => (
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2">
+                <DollarSign className="size-4 text-green-500" />
+                <div className="text-2xl font-bold">
+                  ${(currentUsage.totalCost / 100).toFixed(4)}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Total Cost</p>
+              <p className="text-xs text-muted-foreground">All time</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Warnings */}
+        {warnings.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg text-orange-600">
+                Usage Warnings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {warnings.map((warning) => (
                   <div
-                    key={item.id}
-                    className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                    key={`${warning.type}-${warning.message}`}
+                    className="p-3 rounded-lg border border-orange-200 bg-orange-50 text-orange-800"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="text-sm font-medium">
-                        {new Date(item.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {item.modelId.split("/")[1] || item.modelId}
-                      </Badge>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <div className="text-muted-foreground text-xs mb-1">
-                          Tokens In
-                        </div>
-                        <div className="font-medium">
-                          {item.tokensIn.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground text-xs mb-1">
-                          Tokens Out
-                        </div>
-                        <div className="font-medium">
-                          {item.tokensOut.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground text-xs mb-1">
-                          Total Tokens
-                        </div>
-                        <div className="font-medium">
-                          {(item.tokensIn + item.tokensOut).toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground text-xs mb-1">
-                          Cost
-                        </div>
-                        <div className="font-medium">
-                          ${(item.cost / 100).toFixed(4)}
-                        </div>
-                      </div>
-                    </div>
+                    {warning.message}
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
 
-              {/* Desktop: Table layout */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-3 text-sm font-medium">
-                        Date
-                      </th>
-                      <th className="text-left p-3 text-sm font-medium">
-                        Model
-                      </th>
-                      <th className="text-right p-3 text-sm font-medium">
-                        Tokens In
-                      </th>
-                      <th className="text-right p-3 text-sm font-medium">
-                        Tokens Out
-                      </th>
-                      <th className="text-right p-3 text-sm font-medium">
-                        Cost
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item) => (
-                      <tr key={item.id} className="border-b hover:bg-muted/50">
-                        <td className="p-3 text-sm">
-                          {new Date(item.createdAt).toLocaleDateString(
-                            "en-US",
-                            {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            }
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <Badge variant="secondary" className="text-xs">
-                            {item.modelId.split("/")[1] || item.modelId}
-                          </Badge>
-                        </td>
-                        <td className="p-3 text-sm text-right">
-                          {item.tokensIn.toLocaleString()}
-                        </td>
-                        <td className="p-3 text-sm text-right">
-                          {item.tokensOut.toLocaleString()}
-                        </td>
-                        <td className="p-3 text-sm text-right">
-                          ${(item.cost / 100).toFixed(4)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        {/* Usage History Table */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <CardTitle className="text-lg">Recent Usage</CardTitle>
+              <div className="flex items-center justify-center sm:justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="flex items-center gap-1"
+                >
+                  <ChevronLeft className="size-4" />
+                  <span className="hidden sm:inline">Previous</span>
+                </Button>
+                <span className="text-sm text-muted-foreground px-2">
+                  Page {page}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page + 1)}
+                  disabled={!usageData?.hasMore}
+                  className="flex items-center gap-1"
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight className="size-4" />
+                </Button>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {items.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No usage data available
+              </div>
+            ) : (
+              <>
+                {/* Mobile: Card layout */}
+                <div className="md:hidden space-y-3">
+                  {items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm font-medium">
+                          {new Date(item.createdAt).toLocaleDateString(
+                            'en-US',
+                            {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            },
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="secondary" className="text-xs">
+                            {item.modelId.split('/')[1] || item.modelId}
+                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">
+                                AI labs name these models
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <div className="text-muted-foreground text-xs mb-1 flex items-center gap-1">
+                            Tokens In
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">
+                                  Input tokens sent to the AI model
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <div className="font-medium">
+                            {item.tokensIn.toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground text-xs mb-1 flex items-center gap-1">
+                            Tokens Out
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">
+                                  Output tokens generated by the AI model
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <div className="font-medium">
+                            {item.tokensOut.toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground text-xs mb-1">
+                            Total Tokens
+                          </div>
+                          <div className="font-medium">
+                            {(item.tokensIn + item.tokensOut).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground text-xs mb-1 flex items-center gap-1">
+                            Cost
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="size-2.5 text-muted-foreground hover:text-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">
+                                  Compute cost that's being offset by AI
+                                  providers
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <div className="font-medium">
+                            ${(item.cost / 100).toFixed(4)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop: Table layout */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-3 text-sm font-medium">
+                          Date
+                        </th>
+                        <TableHeaderWithTooltip tooltip="AI labs name these models">
+                          Model
+                        </TableHeaderWithTooltip>
+                        <TableHeaderWithTooltip
+                          tooltip="Input tokens sent to the AI model"
+                          className="text-right"
+                        >
+                          Tokens In
+                        </TableHeaderWithTooltip>
+                        <TableHeaderWithTooltip
+                          tooltip="Output tokens generated by the AI model"
+                          className="text-right"
+                        >
+                          Tokens Out
+                        </TableHeaderWithTooltip>
+                        <TableHeaderWithTooltip
+                          tooltip="Compute cost that's being offset by AI providers"
+                          className="text-right"
+                        >
+                          Cost
+                        </TableHeaderWithTooltip>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item) => (
+                        <tr
+                          key={item.id}
+                          className="border-b hover:bg-muted/50"
+                        >
+                          <td className="p-3 text-sm">
+                            {new Date(item.createdAt).toLocaleDateString(
+                              'en-US',
+                              {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              },
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <Badge variant="secondary" className="text-xs">
+                              {item.modelId.split('/')[1] || item.modelId}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-sm text-right">
+                            {item.tokensIn.toLocaleString()}
+                          </td>
+                          <td className="p-3 text-sm text-right">
+                            {item.tokensOut.toLocaleString()}
+                          </td>
+                          <td className="p-3 text-sm text-right">
+                            ${(item.cost / 100).toFixed(4)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
   );
 }
