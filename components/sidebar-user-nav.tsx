@@ -22,6 +22,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { LoaderIcon } from './icons';
 import { toast } from './toast';
+import { MobileFriendlyTooltip } from './ui/mobile-friendly-tooltip';
 export function SidebarUserNav({ user }: { user: any }) {
   const router = useRouter();
   const { loading, signOut } = useSupabaseAuth();
@@ -70,27 +71,41 @@ export function SidebarUserNav({ user }: { user: any }) {
             side="top"
             className="w-[--radix-popper-anchor-width]"
           >
-            <DropdownMenuItem
-              data-testid="user-nav-item-theme"
-              className="cursor-pointer"
-              onSelect={() =>
-                setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
-              }
+            <MobileFriendlyTooltip
+              content={`Switch to ${
+                resolvedTheme === 'light' ? 'dark' : 'light'
+              } theme for better viewing experience`}
+              side="left"
+              showIcon={false}
             >
-              {`Toggle ${resolvedTheme === 'light' ? 'dark' : 'light'} mode`}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              data-testid="user-nav-item-settings"
-              className="cursor-pointer"
-              onSelect={() => {
-                // Close the left panel on both mobile and desktop before navigating
-                setOpen(false);
-                setOpenMobile(false);
-                router.push('/settings');
-              }}
+              <DropdownMenuItem
+                data-testid="user-nav-item-theme"
+                className="cursor-pointer"
+                onSelect={() =>
+                  setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
+                }
+              >
+                {`Toggle ${resolvedTheme === 'light' ? 'dark' : 'light'} mode`}
+              </DropdownMenuItem>
+            </MobileFriendlyTooltip>
+            <MobileFriendlyTooltip
+              content="Access your account settings, usage analytics, and customization options"
+              side="left"
+              showIcon={false}
             >
-              Settings
-            </DropdownMenuItem>
+              <DropdownMenuItem
+                data-testid="user-nav-item-settings"
+                className="cursor-pointer"
+                onSelect={() => {
+                  // Close the left panel on both mobile and desktop before navigating
+                  setOpen(false);
+                  setOpenMobile(false);
+                  router.push('/settings');
+                }}
+              >
+                Settings
+              </DropdownMenuItem>
+            </MobileFriendlyTooltip>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild data-testid="user-nav-item-auth">
               <button

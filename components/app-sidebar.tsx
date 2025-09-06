@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { PlusIcon } from '@/components/icons';
-import { SidebarHistory } from '@/components/sidebar-history';
-import { SidebarUserNav } from '@/components/sidebar-user-nav';
-import { Button } from '@/components/ui/button';
+import { PlusIcon } from "@/components/icons";
+import { SidebarHistory } from "@/components/sidebar-history";
+import { SidebarUserNav } from "@/components/sidebar-user-nav";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -11,13 +11,12 @@ import {
   SidebarHeader,
   SidebarMenu,
   useSidebar,
-} from '@/components/ui/sidebar';
-import { useAnonymousAuth } from '@/hooks/use-anonymous-auth';
-import { useModels } from '@/hooks/use-models';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { GoogleLoginCTA } from './google-login-cta';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+} from "@/components/ui/sidebar";
+import { useAnonymousAuth } from "@/hooks/use-anonymous-auth";
+import { useModels } from "@/hooks/use-models";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { GoogleLoginCTA } from "./google-login-cta";
 
 export function AppSidebar() {
   const router = useRouter();
@@ -41,32 +40,28 @@ export function AppSidebar() {
                 Chatbot
               </span>
             </Link>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  type="button"
-                  className="p-2 h-fit"
-                  onClick={async () => {
-                    setOpenMobile(false);
-                    // Force revalidation of models data for fresh user settings
-                    console.log(
-                      '🔄 Sidebar: Clicking New Chat, triggering mutateModels...',
-                    );
-                    const freshData = await mutateModels();
-                    console.log(
-                      '✅ Sidebar: Fresh models data received:',
-                      freshData,
-                    );
-                    router.push('/');
-                    router.refresh();
-                  }}
-                >
-                  <PlusIcon />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent align="end">New Chat</TooltipContent>
-            </Tooltip>
+
+            <Button
+              variant="ghost"
+              type="button"
+              className="p-2 h-fit"
+              onClick={async () => {
+                setOpenMobile(false);
+                // Force revalidation of models data for fresh user settings
+                console.log(
+                  "🔄 Sidebar: Clicking New Chat, triggering mutateModels..."
+                );
+                const freshData = await mutateModels();
+                console.log(
+                  "✅ Sidebar: Fresh models data received:",
+                  freshData
+                );
+                router.push("/");
+                router.refresh();
+              }}
+            >
+              <PlusIcon />
+            </Button>
           </div>
         </SidebarMenu>
       </SidebarHeader>

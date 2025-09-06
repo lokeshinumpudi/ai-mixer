@@ -5,6 +5,7 @@ import { SystemPromptForm } from "@/components/settings/SystemPromptForm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MobileFriendlyTooltip } from "@/components/ui/mobile-friendly-tooltip";
 import { Progress } from "@/components/ui/progress";
 import { useSidebar } from "@/components/ui/sidebar";
 import { UsageDashboard } from "@/components/usage/usage-dashboard";
@@ -345,13 +346,24 @@ export default function SettingsPage() {
                 <CardTitle className="text-base">Keyboard Shortcuts</CardTitle>
               </CardHeader>
               <CardContent className="p-4 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span>Search</span>
-                  <div className="flex gap-1">
-                    <kbd className="px-2 py-1 bg-muted rounded text-xs">⌘</kbd>
-                    <kbd className="px-2 py-1 bg-muted rounded text-xs">K</kbd>
+                <MobileFriendlyTooltip
+                  content="Quickly search through your chat history and conversations"
+                  side="left"
+                  showIcon={false}
+                >
+                  <div className="flex justify-between text-sm">
+                    <span>Search</span>
+                    <div className="flex gap-1">
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs">
+                        ⌘
+                      </kbd>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs">
+                        K
+                      </kbd>
+                    </div>
                   </div>
-                </div>
+                </MobileFriendlyTooltip>
+
                 <div className="flex justify-between text-sm">
                   <span>New Chat</span>
                   <div className="flex gap-1">
@@ -362,13 +374,24 @@ export default function SettingsPage() {
                     <kbd className="px-2 py-1 bg-muted rounded text-xs">O</kbd>
                   </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span>Toggle Sidebar</span>
-                  <div className="flex gap-1">
-                    <kbd className="px-2 py-1 bg-muted rounded text-xs">⌘</kbd>
-                    <kbd className="px-2 py-1 bg-muted rounded text-xs">B</kbd>
+
+                <MobileFriendlyTooltip
+                  content="Show or hide the sidebar with your chat history"
+                  side="left"
+                  showIcon={false}
+                >
+                  <div className="flex justify-between text-sm">
+                    <span>Toggle Sidebar</span>
+                    <div className="flex gap-1">
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs">
+                        ⌘
+                      </kbd>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs">
+                        B
+                      </kbd>
+                    </div>
                   </div>
-                </div>
+                </MobileFriendlyTooltip>
               </CardContent>
             </Card>
           </div>

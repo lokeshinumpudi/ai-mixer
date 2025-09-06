@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useModels } from "@/hooks/use-models";
-import { SYSTEM_PROMPT_LIMITS } from "@/lib/validations";
-import { X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useModels } from '@/hooks/use-models';
+import { SYSTEM_PROMPT_LIMITS } from '@/lib/validations';
+import { X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 interface SystemPromptFormProps {
   className?: string;
@@ -20,13 +20,13 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
 
   // Form state
   const [formData, setFormData] = useState({
-    name: "",
-    profession: "",
+    name: '',
+    profession: '',
     traits: [] as string[],
-    preferences: "",
+    preferences: '',
   });
 
-  const [newTrait, setNewTrait] = useState("");
+  const [newTrait, setNewTrait] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -34,10 +34,10 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
   useEffect(() => {
     if (systemPrompt) {
       setFormData({
-        name: systemPrompt.name || "",
-        profession: systemPrompt.profession || "",
+        name: systemPrompt.name || '',
+        profession: systemPrompt.profession || '',
         traits: systemPrompt.traits || [],
-        preferences: systemPrompt.preferences || "",
+        preferences: systemPrompt.preferences || '',
       });
     }
   }, [systemPrompt]);
@@ -45,10 +45,10 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
   // Track changes
   useEffect(() => {
     const originalData = {
-      name: systemPrompt?.name || "",
-      profession: systemPrompt?.profession || "",
+      name: systemPrompt?.name || '',
+      profession: systemPrompt?.profession || '',
       traits: systemPrompt?.traits || [],
-      preferences: systemPrompt?.preferences || "",
+      preferences: systemPrompt?.preferences || '',
     };
 
     const hasChanged =
@@ -69,20 +69,20 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
 
     if (newTrait.length > SYSTEM_PROMPT_LIMITS.TRAIT_MAX_LENGTH) {
       toast.error(
-        `Trait must be ${SYSTEM_PROMPT_LIMITS.TRAIT_MAX_LENGTH} characters or less`
+        `Trait must be ${SYSTEM_PROMPT_LIMITS.TRAIT_MAX_LENGTH} characters or less`,
       );
       return;
     }
 
     if (formData.traits.length >= SYSTEM_PROMPT_LIMITS.TRAITS_MAX_COUNT) {
       toast.error(
-        `Maximum ${SYSTEM_PROMPT_LIMITS.TRAITS_MAX_COUNT} traits allowed`
+        `Maximum ${SYSTEM_PROMPT_LIMITS.TRAITS_MAX_COUNT} traits allowed`,
       );
       return;
     }
 
     if (formData.traits.includes(newTrait.trim())) {
-      toast.error("This trait already exists");
+      toast.error('This trait already exists');
       return;
     }
 
@@ -90,7 +90,7 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
       ...prev,
       traits: [...prev.traits, newTrait.trim()],
     }));
-    setNewTrait("");
+    setNewTrait('');
   }, [newTrait, formData.traits]);
 
   const handleRemoveTrait = useCallback((index: number) => {
@@ -102,22 +102,22 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
 
   const handleKeyPress = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") {
+      if (e.key === 'Enter') {
         e.preventDefault();
         handleAddTrait();
       }
     },
-    [handleAddTrait]
+    [handleAddTrait],
   );
 
   const handleSave = async () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/user/settings", {
-        method: "PATCH",
+      const response = await fetch('/api/user/settings', {
+        method: 'PATCH',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           systemPrompt: {
@@ -129,18 +129,18 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || "Failed to save system prompt");
+        throw new Error(error.message || 'Failed to save system prompt');
       }
 
       // Refresh the models data to get updated system prompt
       await mutate();
 
-      toast.success("System prompt saved successfully!");
+      toast.success('System prompt saved successfully!');
       setHasChanges(false);
     } catch (error) {
-      console.error("Failed to save system prompt:", error);
+      console.error('Failed to save system prompt:', error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to save system prompt"
+        error instanceof Error ? error.message : 'Failed to save system prompt',
       );
     } finally {
       setIsLoading(false);
@@ -150,17 +150,17 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
   const handleReset = () => {
     if (systemPrompt) {
       setFormData({
-        name: systemPrompt.name || "",
-        profession: systemPrompt.profession || "",
+        name: systemPrompt.name || '',
+        profession: systemPrompt.profession || '',
         traits: systemPrompt.traits || [],
-        preferences: systemPrompt.preferences || "",
+        preferences: systemPrompt.preferences || '',
       });
     } else {
       setFormData({
-        name: "",
-        profession: "",
+        name: '',
+        profession: '',
         traits: [],
-        preferences: "",
+        preferences: '',
       });
     }
     setHasChanges(false);
@@ -176,7 +176,7 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
             id="name"
             placeholder="How should the AI address you?"
             value={formData.name}
-            onChange={(e) => handleInputChange("name", e.target.value)}
+            onChange={(e) => handleInputChange('name', e.target.value)}
             maxLength={SYSTEM_PROMPT_LIMITS.NAME_MAX}
           />
           <p className="text-xs text-muted-foreground">
@@ -191,11 +191,11 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
             id="profession"
             placeholder="e.g., Software Engineer, Teacher, Student"
             value={formData.profession}
-            onChange={(e) => handleInputChange("profession", e.target.value)}
+            onChange={(e) => handleInputChange('profession', e.target.value)}
             maxLength={SYSTEM_PROMPT_LIMITS.PROFESSION_MAX}
           />
           <p className="text-xs text-muted-foreground">
-            {formData.profession.length}/{SYSTEM_PROMPT_LIMITS.PROFESSION_MAX}{" "}
+            {formData.profession.length}/{SYSTEM_PROMPT_LIMITS.PROFESSION_MAX}{' '}
             characters
           </p>
         </div>
@@ -249,7 +249,7 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
             )}
 
             <p className="text-xs text-muted-foreground">
-              {formData.traits.length}/{SYSTEM_PROMPT_LIMITS.TRAITS_MAX_COUNT}{" "}
+              {formData.traits.length}/{SYSTEM_PROMPT_LIMITS.TRAITS_MAX_COUNT}{' '}
               traits
               {newTrait &&
                 ` • ${newTrait.length}/${SYSTEM_PROMPT_LIMITS.TRAIT_MAX_LENGTH} characters`}
@@ -266,13 +266,13 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
             id="preferences"
             placeholder="Describe how you want the AI to communicate with you, what style to use, what to focus on, etc."
             value={formData.preferences}
-            onChange={(e) => handleInputChange("preferences", e.target.value)}
+            onChange={(e) => handleInputChange('preferences', e.target.value)}
             maxLength={SYSTEM_PROMPT_LIMITS.PREFERENCES_MAX}
             rows={4}
             className="resize-none"
           />
           <p className="text-xs text-muted-foreground">
-            {formData.preferences.length}/{SYSTEM_PROMPT_LIMITS.PREFERENCES_MAX}{" "}
+            {formData.preferences.length}/{SYSTEM_PROMPT_LIMITS.PREFERENCES_MAX}{' '}
             characters
           </p>
         </div>
@@ -284,7 +284,7 @@ export function SystemPromptForm({ className }: SystemPromptFormProps) {
             disabled={!hasChanges || isLoading}
             className="flex-1"
           >
-            {isLoading ? "Saving..." : "Save Changes"}
+            {isLoading ? 'Saving...' : 'Save Changes'}
           </Button>
           <Button
             variant="outline"

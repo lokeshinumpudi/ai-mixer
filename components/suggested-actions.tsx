@@ -12,8 +12,7 @@ interface SuggestedActionsProps {
   chatId: string;
   sendMessage?: UseChatHelpers<ChatMessage>["sendMessage"];
   selectedVisibilityType: VisibilityType;
-  // Compare mode props
-  isCompareMode?: boolean;
+  // Unified compare architecture props
   selectedModelIds?: string[];
   onStartCompare?: (prompt: string, modelIds: string[]) => void;
 }
@@ -22,7 +21,6 @@ function PureSuggestedActions({
   chatId,
   sendMessage,
   selectedVisibilityType,
-  isCompareMode = false,
   selectedModelIds = [],
   onStartCompare,
 }: SuggestedActionsProps) {
@@ -105,7 +103,6 @@ export const SuggestedActions = memo(
     if (prevProps.chatId !== nextProps.chatId) return false;
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
-    if (prevProps.isCompareMode !== nextProps.isCompareMode) return false;
     if (
       prevProps.selectedModelIds?.length !== nextProps.selectedModelIds?.length
     )

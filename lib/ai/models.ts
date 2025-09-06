@@ -1,21 +1,21 @@
-import { FREE_MODELS, MODEL_CONFIG, PRO_MODELS } from "@/lib/constants";
-import type { UserType } from "@/lib/supabase/types";
+import { FREE_MODELS, MODEL_CONFIG, PRO_MODELS } from '@/lib/constants';
+import type { UserType } from '@/lib/supabase/types';
 
 // Get default model based on user plan
 export const getDefaultModelForUser = (userType: UserType): string => {
   switch (userType) {
-    case "free":
+    case 'free':
       // Return the first available free model, fallback to DEFAULT_MODEL
       return FREE_MODELS[0];
-    case "pro": {
+    case 'pro': {
       // For pro users, prefer a premium model that's not in the free tier
       // Find the first pro-only model (not in FREE_MODELS)
       const proOnlyModels = PRO_MODELS.filter(
-        (model) => !FREE_MODELS.includes(model as any)
+        (model) => !FREE_MODELS.includes(model as any),
       );
       return proOnlyModels[0] || PRO_MODELS[0];
     }
-    case "anonymous":
+    case 'anonymous':
       // Anonymous users get the same as free users
       return FREE_MODELS[0];
     default:
@@ -54,18 +54,18 @@ export const enrichModelWithCapabilities = (gatewayModel: any): ChatModel => {
 
   // Infer basic capabilities from gateway data
   const hasVisionSupport =
-    gatewayModel.modelType === "image" ||
-    gatewayModel.description?.toLowerCase().includes("vision");
+    gatewayModel.modelType === 'image' ||
+    gatewayModel.description?.toLowerCase().includes('vision');
 
   return {
     id: gatewayModel.id,
     name: gatewayModel.name || gatewayModel.id,
     description: gatewayModel.description || `${gatewayModel.id} model`,
-    provider: gatewayModel.id.split("/")[0] || "unknown",
+    provider: gatewayModel.id.split('/')[0] || 'unknown',
 
     // Basic capabilities inferred from gateway
     supportsVision: customConfig?.supportsVision ?? hasVisionSupport,
-    supportsImageGeneration: gatewayModel.modelType === "image",
+    supportsImageGeneration: gatewayModel.modelType === 'image',
 
     // Enhanced capabilities from our config
     supportsReasoning: customConfig?.supportsReasoning ?? false,

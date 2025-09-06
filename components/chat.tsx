@@ -1,27 +1,27 @@
-'use client';
+"use client";
 
-import { ChatHeader } from '@/components/chat-header';
+import { ChatHeader } from "@/components/chat-header";
 
-import { useAnonymousAuth } from '@/hooks/use-anonymous-auth';
-import { useArtifactSelector } from '@/hooks/use-artifact';
-import { useAutoResume } from '@/hooks/use-auto-resume';
-import { useChatVisibility } from '@/hooks/use-chat-visibility';
-import { useCompareRun } from '@/hooks/use-compare-run';
-import { getDefaultModelForUser } from '@/lib/ai/models';
-import type { Vote } from '@/lib/db/schema';
-import { uiLogger } from '@/lib/logger';
-import type { AppUser } from '@/lib/supabase/types';
-import type { Attachment, ChatMessage } from '@/lib/types';
-import { fetcher } from '@/lib/utils';
-import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
-import useSWR from 'swr';
-import { useModels } from '../hooks/use-models';
-import { Artifact } from './artifact';
-import { GoogleLoginCTA } from './google-login-cta';
-import { Messages } from './messages';
-import { MultimodalInput } from './multimodal-input';
-import { toast, upgradeToast } from './toast';
+import { useAnonymousAuth } from "@/hooks/use-anonymous-auth";
+import { useArtifactSelector } from "@/hooks/use-artifact";
+import { useAutoResume } from "@/hooks/use-auto-resume";
+import { useChatVisibility } from "@/hooks/use-chat-visibility";
+import { useCompareRun } from "@/hooks/use-compare-run";
+import { getDefaultModelForUser } from "@/lib/ai/models";
+import type { Chat as ChatType, Vote } from "@/lib/db/schema";
+import { uiLogger } from "@/lib/logger";
+import type { AppUser } from "@/lib/supabase/types";
+import type { Attachment, ChatMessage } from "@/lib/types";
+import { fetcher } from "@/lib/utils";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import useSWR from "swr";
+import { useModels } from "../hooks/use-models";
+import { Artifact } from "./artifact";
+import { GoogleLoginCTA } from "./google-login-cta";
+import { Messages } from "./messages";
+import { MultimodalInput } from "./multimodal-input";
+import { toast, upgradeToast } from "./toast";
 
 export function Chat({
   id,
@@ -33,16 +33,20 @@ export function Chat({
   hasMore,
   loadMore,
   isLoadingMore,
+  chat,
+  isOwner,
 }: {
   id: string;
   initialMessages: ChatMessage[];
-  initialVisibilityType: 'private' | 'public';
+  initialVisibilityType: "private" | "public";
   isReadonly: boolean;
   user: AppUser | null;
   autoResume: boolean;
   hasMore?: boolean;
   loadMore?: () => Promise<void>;
   isLoadingMore?: boolean;
+  chat?: ChatType | null;
+  isOwner?: boolean;
 }) {
   const { visibilityType } = useChatVisibility({
     chatId: id,
@@ -70,14 +74,16 @@ export function Chat({
   // Don't use initialChatModel while API is loading to avoid race conditions
   const currentModel =
     userSettings?.defaultModel ||
-    getDefaultModelForUser(userType ?? 'anonymous');
+    getDefaultModelForUser(userType ?? "anonymous");
 
-  const [input, setInput] = useState<string>('');
+  const [input, setInput] = useState<string>("");
 
-  // Compare mode state - default to true for seamless model selection
-  const [isCompareMode, setIsCompareMode] = useState(true);
+  // Unified compare architecture - always in compare mode
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [currentVisibility, setCurrentVisibility] = useState<
+    "private" | "public"
+  >(initialVisibilityType);
 
   // Reset initialization flag when chat changes
   useEffect(() => {
@@ -110,29 +116,28 @@ export function Chat({
     ...compareState
   } = useCompareRun(id);
 
-  // Auto-enable compare mode if this chat has compare runs (even when reloading)
+  // Auto-set models if this chat has compare runs (even when reloading)
   useEffect(() => {
-    if (!isLoadingRuns && compareRuns.length > 0 && !isCompareMode) {
-      setIsCompareMode(true);
-      // Also set the selected models from the first compare run
+    if (!isLoadingRuns && compareRuns.length > 0) {
+      // Set the selected models from the first compare run if none are selected
       if (compareRuns[0]?.modelIds && selectedModelIds.length === 0) {
         setSelectedModelIds(compareRuns[0].modelIds);
       }
     }
-  }, [isLoadingRuns, compareRuns, isCompareMode, selectedModelIds.length, id]);
+  }, [isLoadingRuns, compareRuns, selectedModelIds.length, id]);
 
   // For unified compare architecture, we don't need the regular useChat hook
   // since all interactions go through compare infrastructure
   const messages = initialMessages;
   const setMessages = () => {}; // No-op since we don't use regular chat
   const sendMessage = async (_message?: any) => Promise.resolve(); // No-op since we don't use regular chat
-  const status = 'ready' as const;
+  const status = "ready" as const;
   const stop = async () => {};
   const regenerate = async () => {};
   const resumeStream = async () => {};
 
   const searchParams = useSearchParams();
-  const query = searchParams.get('query');
+  const query = searchParams.get("query");
 
   const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
 
@@ -145,30 +150,14 @@ export function Chat({
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
-    fetcher,
+    fetcher
   );
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
 
-  // Compare mode handlers
-  const handleCompareModeChange = (enabled: boolean) => {
-    setIsCompareMode(enabled);
-    if (!enabled) {
-      // When disabling compare mode (rare case), keep only the current model selected
-      setSelectedModelIds(currentModel ? [currentModel] : []);
-    } else {
-      // When enabling compare mode, ensure current model is selected
-      if (currentModel && !selectedModelIds.includes(currentModel)) {
-        setSelectedModelIds((prev) =>
-          prev.length > 0 ? [...prev, currentModel] : [currentModel],
-        );
-      }
-    }
-  };
-
+  // Model selection handler - unified compare architecture
   const handleSelectedModelIdsChange = (modelIds: string[]) => {
     setSelectedModelIds(modelIds);
-    // Keep compare mode enabled - users can select 1, 2, or 3 models as needed
   };
 
   const handleStartCompare = useCallback(
@@ -177,7 +166,7 @@ export function Chat({
         // Always use compare infrastructure for unified architecture (1-N models)
         await startCompare({ prompt, modelIds });
         // Clear input after starting
-        setInput('');
+        setInput("");
       } catch (error: any) {
         uiLogger.error(
           {
@@ -187,26 +176,26 @@ export function Chat({
             modelIds,
             promptLength: prompt.length,
           },
-          'Failed to start chat/comparison',
+          "Failed to start chat/comparison"
         );
 
         // Check if it's a rate limit error for compare functionality
-        if (error instanceof Error && error.message.includes('429')) {
+        if (error instanceof Error && error.message.includes("429")) {
           upgradeToast({
-            title: 'Compare limit reached',
+            title: "Compare limit reached",
             description:
-              'Upgrade to Pro for unlimited model comparisons and 1000 messages per month.',
-            actionText: 'Upgrade to Pro',
+              "Upgrade to Pro for unlimited model comparisons and 1000 messages per month.",
+            actionText: "Upgrade to Pro",
           });
         } else {
           toast({
-            type: 'error',
-            description: 'Failed to start chat. Please try again.',
+            type: "error",
+            description: "Failed to start chat. Please try again.",
           });
         }
       }
     },
-    [startCompare, setInput],
+    [startCompare, setInput]
   );
 
   // Handle query parameter from URL (e.g., shared links)
@@ -217,13 +206,13 @@ export function Chat({
         handleStartCompare(query, selectedModelIds);
       } else {
         sendMessage({
-          role: 'user' as const,
-          parts: [{ type: 'text', text: query }],
+          role: "user" as const,
+          parts: [{ type: "text", text: query }],
         });
       }
 
       setHasAppendedQuery(true);
-      window.history.replaceState({}, '', `/chat/${id}`);
+      window.history.replaceState({}, "", `/chat/${id}`);
     }
   }, [
     query,
@@ -248,10 +237,45 @@ export function Chat({
       <div className="flex flex-col min-w-0 h-dvh bg-background">
         <ChatHeader
           chatId={id}
-          selectedVisibilityType={initialVisibilityType}
+          selectedVisibilityType={currentVisibility}
           isReadonly={isReadonly}
           user={user}
+          chat={chat}
+          isOwner={isOwner}
+          onVisibilityChange={setCurrentVisibility}
         />
+
+        {/* Read-only indicator for shared chats */}
+        {!isOwner && chat?.visibility === "public" && (
+          <div className="mx-auto px-6 py-3 w-full md:max-w-3xl">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-blue-700">
+                <svg
+                  className="size-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                  />
+                </svg>
+                <span className="text-sm font-medium">
+                  Viewing shared chat (read-only)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Messages
           chatId={id}
@@ -272,7 +296,6 @@ export function Chat({
           loadMore={loadMore}
           isLoadingMore={isLoadingMore}
           selectedVisibilityType={visibilityType}
-          isCompareMode={isCompareMode}
           selectedModelIds={selectedModelIds}
           onStartCompare={handleStartCompare}
         />
@@ -288,7 +311,7 @@ export function Chat({
                   </h3>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
                     {messageCount >= 10
-                      ? 'Sign in with Google to continue chatting with unlimited messages.'
+                      ? "Sign in with Google to continue chatting with unlimited messages."
                       : `${
                           10 - messageCount
                         } messages remaining. Sign in for unlimited access to all models.`}
@@ -322,13 +345,11 @@ export function Chat({
                 selectedVisibilityType={visibilityType}
                 user={user}
                 selectedModelId={currentModel}
-                isCompareMode={isCompareMode}
-                onCompareModeChange={handleCompareModeChange}
                 selectedModelIds={selectedModelIds}
                 onSelectedModelIdsChange={handleSelectedModelIdsChange}
                 onStartCompare={handleStartCompare}
                 compareRuns={compareRuns}
-                activeCompareMessage={compareState.status !== 'idle'}
+                activeCompareMessage={compareState.status !== "idle"}
                 isModelsLoading={isModelsLoading}
                 isLoadingRuns={isLoadingRuns}
               />

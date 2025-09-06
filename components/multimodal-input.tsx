@@ -25,13 +25,14 @@ import type { Attachment, ChatMessage } from "@/lib/types";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import equal from "fast-deep-equal";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowDown, GitCompare, X } from "lucide-react";
+import { ArrowDown, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "./icons";
 import { ModelPicker } from "./model-picker";
 import { PreviewAttachment } from "./preview-attachment";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { MobileFriendlyTooltip } from "./ui/mobile-friendly-tooltip";
 import { Textarea } from "./ui/textarea";
 
 // Provider-based color mapping for model chips
@@ -73,8 +74,6 @@ function PureMultimodalInput({
   selectedVisibilityType,
   user,
   selectedModelId,
-  isCompareMode = false,
-  onCompareModeChange,
   selectedModelIds = [],
   onSelectedModelIdsChange,
   onStartCompare,
@@ -97,8 +96,6 @@ function PureMultimodalInput({
   selectedVisibilityType: "private" | "public";
   user: AppUser | null;
   selectedModelId: string;
-  isCompareMode?: boolean;
-  onCompareModeChange?: (enabled: boolean) => void;
   selectedModelIds?: string[];
   onSelectedModelIdsChange?: (modelIds: string[]) => void;
   onStartCompare?: (prompt: string, modelIds: string[]) => void;
@@ -249,7 +246,6 @@ function PureMultimodalInput({
     chatId,
     usageData,
     router,
-    isCompareMode,
     selectedModelIds,
     onStartCompare,
   ]);
@@ -408,50 +404,48 @@ function PureMultimodalInput({
       )}
 
       <div className={cx("relative luxury-input glass rounded-3xl", className)}>
-        {/* Model chips display when in compare mode */}
-        {isCompareMode && (
-          <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
-            {isModelsLoading ? (
-              // Loading state - show skeleton chips
-              <div className="flex gap-2">
-                <div className="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse" />
-                <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse" />
-              </div>
-            ) : selectedModelIds.length > 0 ? (
-              // Loaded state - show actual model chips
-              selectedModelIds.map((modelId) => (
-                <Badge
-                  key={modelId}
-                  variant="outline"
-                  className={`flex items-center gap-1 text-xs font-medium border ${getModelChipColor(
-                    modelId
-                  )}`}
-                >
-                  {modelId.split("/").pop()}
-                  {onSelectedModelIdsChange && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onSelectedModelIdsChange(
-                          selectedModelIds.filter((id) => id !== modelId)
-                        );
-                      }}
-                      className="ml-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5 transition-colors"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  )}
-                </Badge>
-              ))
-            ) : null}
-          </div>
-        )}
+        {/* Model chips display - always show in unified compare architecture */}
+        <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
+          {isModelsLoading ? (
+            // Loading state - show skeleton chips
+            <div className="flex gap-2">
+              <div className="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse" />
+              <div className="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse" />
+            </div>
+          ) : selectedModelIds.length > 0 ? (
+            // Loaded state - show actual model chips
+            selectedModelIds.map((modelId) => (
+              <Badge
+                key={modelId}
+                variant="outline"
+                className={`flex items-center gap-1 text-xs font-medium border ${getModelChipColor(
+                  modelId
+                )}`}
+              >
+                {modelId.split("/").pop()}
+                {onSelectedModelIdsChange && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectedModelIdsChange(
+                        selectedModelIds.filter((id) => id !== modelId)
+                      );
+                    }}
+                    className="ml-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5 transition-colors"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </Badge>
+            ))
+          ) : null}
+        </div>
 
         <Textarea
           data-testid="multimodal-input"
           ref={textareaRef}
           placeholder={
-            isCompareMode && selectedModelIds.length > 1
+            selectedModelIds.length > 1
               ? `Compare with ${selectedModelIds.length} models...`
               : "Send a message..."
           }
@@ -459,7 +453,7 @@ function PureMultimodalInput({
           onChange={handleInput}
           className={cx(
             "min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none text-base bg-transparent pb-10 md:pb-12 px-4 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 focus:shadow-none border-0",
-            isCompareMode && selectedModelIds.length > 0 ? "pt-2" : "pt-4"
+            selectedModelIds.length > 0 ? "pt-2" : "pt-4"
           )}
           rows={2}
           autoFocus
@@ -486,34 +480,11 @@ function PureMultimodalInput({
       <div className="absolute bottom-0 left-0 p-2 md:p-3 w-fit flex flex-row justify-start items-center gap-2">
         <AttachmentsButton fileInputRef={fileInputRef} status={status} />
 
-        {/* Compare Mode Toggle */}
-        {user && !user.is_anonymous && onCompareModeChange && (
-          <Button
-            type="button"
-            variant={isCompareMode ? "default" : "ghost"}
-            size="sm"
-            onClick={() => onCompareModeChange(!isCompareMode)}
-            disabled={status !== "ready"}
-            className="gap-1.5 h-8 px-2"
-            title={
-              isCompareMode
-                ? "Switch to single model"
-                : "Compare multiple models"
-            }
-          >
-            <GitCompare className="size-3.5" />
-            {isCompareMode && selectedModelIds.length > 1 && (
-              <span className="text-xs">{selectedModelIds.length}</span>
-            )}
-          </Button>
-        )}
-
         <ModelPicker
           user={user}
           selectedModelId={selectedModelId}
           disabled={status !== "ready"}
           compact={true}
-          isCompareMode={isCompareMode}
           selectedModelIds={selectedModelIds}
           onSelectedModelIdsChange={onSelectedModelIdsChange}
         />
@@ -543,7 +514,6 @@ export const MultimodalInput = memo(
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
     if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
-    if (prevProps.isCompareMode !== nextProps.isCompareMode) return false;
     if (!equal(prevProps.selectedModelIds, nextProps.selectedModelIds))
       return false;
 
@@ -559,18 +529,24 @@ function PureAttachmentsButton({
   status: UseChatHelpers<ChatMessage>["status"];
 }) {
   return (
-    <Button
-      data-testid="attachments-button"
-      className="luxury-button rounded-xl p-2 size-9 border-0 hover:bg-accent/80"
-      onClick={(event) => {
-        event.preventDefault();
-        fileInputRef.current?.click();
-      }}
-      disabled={status !== "ready"}
-      variant="ghost"
+    <MobileFriendlyTooltip
+      content="Attach files, images, or documents to your message"
+      side="top"
+      showIcon={false}
     >
-      <PaperclipIcon size={16} />
-    </Button>
+      <Button
+        data-testid="attachments-button"
+        className="luxury-button rounded-xl p-2 size-9 border-0 hover:bg-accent/80"
+        onClick={(event) => {
+          event.preventDefault();
+          fileInputRef.current?.click();
+        }}
+        disabled={status !== "ready"}
+        variant="ghost"
+      >
+        <PaperclipIcon size={16} />
+      </Button>
+    </MobileFriendlyTooltip>
   );
 }
 
@@ -584,17 +560,23 @@ function PureStopButton({
   setMessages: UseChatHelpers<ChatMessage>["setMessages"];
 }) {
   return (
-    <Button
-      data-testid="stop-button"
-      className="luxury-button rounded-full p-2 size-9 border border-border/50 bg-background hover:bg-destructive hover:text-destructive-foreground"
-      onClick={(event) => {
-        event.preventDefault();
-        stop();
-        setMessages((messages) => messages);
-      }}
+    <MobileFriendlyTooltip
+      content="Stop the current AI response generation"
+      side="top"
+      showIcon={false}
     >
-      <StopIcon size={16} />
-    </Button>
+      <Button
+        data-testid="stop-button"
+        className="luxury-button rounded-full p-2 size-9 border border-border/50 bg-background hover:bg-destructive hover:text-destructive-foreground"
+        onClick={(event) => {
+          event.preventDefault();
+          stop();
+          setMessages((messages) => messages);
+        }}
+      >
+        <StopIcon size={16} />
+      </Button>
+    </MobileFriendlyTooltip>
   );
 }
 
@@ -613,23 +595,35 @@ function PureSendButton({
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <Button
-      ref={buttonRef}
-      data-testid="send-button"
-      className={cx(
-        "luxury-button rounded-full p-2 h-9 w-9 border-0 transition-all duration-300",
-        canSend
-          ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
-          : "bg-muted text-muted-foreground cursor-not-allowed"
-      )}
-      onClick={(event) => {
-        event.preventDefault();
-        if (canSend) submitForm();
-      }}
-      disabled={!canSend}
+    <MobileFriendlyTooltip
+      content={
+        !canSend
+          ? uploadQueue.length > 0
+            ? "Wait for file uploads to complete"
+            : "Type a message to send"
+          : "Send your message to AI models"
+      }
+      side="top"
+      showIcon={false}
     >
-      <ArrowUpIcon size={16} />
-    </Button>
+      <Button
+        ref={buttonRef}
+        data-testid="send-button"
+        className={cx(
+          "luxury-button rounded-full p-2 h-9 w-9 border-0 transition-all duration-300",
+          canSend
+            ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
+            : "bg-muted text-muted-foreground cursor-not-allowed"
+        )}
+        onClick={(event) => {
+          event.preventDefault();
+          if (canSend) submitForm();
+        }}
+        disabled={!canSend}
+      >
+        <ArrowUpIcon size={16} />
+      </Button>
+    </MobileFriendlyTooltip>
   );
 }
 

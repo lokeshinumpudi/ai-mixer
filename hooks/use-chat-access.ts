@@ -73,7 +73,12 @@ export function useChatAccess(
 // Hook for determining read-only status
 export function useChatReadOnly(chat: Chat | null, user: any): boolean {
   if (!chat || !user) return true;
-  return chat.userId !== user.id;
+
+  // Chat owner can always edit
+  if (chat.userId === user.id) return false;
+
+  // Non-owners can only view public chats in read-only mode
+  return chat.visibility !== 'public';
 }
 
 // Hook for creating new chats with proper navigation

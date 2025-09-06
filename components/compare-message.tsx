@@ -20,6 +20,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Markdown } from './markdown';
 import { ExpandableModal } from './ui/expandable-modal';
+import { MobileFriendlyTooltip } from './ui/mobile-friendly-tooltip';
 import { MobileScrollContainer } from './ui/mobile-scroll-container';
 
 // Provider-based color mapping for model chips - memoized for performance
@@ -178,11 +179,19 @@ const CompareResultCard = memo(function CompareResultCard({
 
                 {/* Time indicator - only show for completed states */}
                 {result.status === 'completed' && result.inferenceTimeMs && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <span className="font-mono">
-                      {`${(result.inferenceTimeMs / 1000).toFixed(1)}s`}
-                    </span>
-                  </div>
+                  <MobileFriendlyTooltip
+                    content={`Response generated in ${(
+                      result.inferenceTimeMs / 1000
+                    ).toFixed(2)} seconds`}
+                    side="top"
+                    showIcon={false}
+                  >
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <span className="font-mono">
+                        {`${(result.inferenceTimeMs / 1000).toFixed(1)}s`}
+                      </span>
+                    </div>
+                  </MobileFriendlyTooltip>
                 )}
               </div>
             </div>
@@ -191,28 +200,38 @@ const CompareResultCard = memo(function CompareResultCard({
             <div className="flex items-center gap-1">
               {/* Expand button */}
               {onExpand && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onExpand}
-                  className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                  title="Expand for better readability"
+                <MobileFriendlyTooltip
+                  content="Open in full-screen modal for better readability"
+                  side="top"
+                  showIcon={false}
                 >
-                  <Maximize2 className="size-3" />
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onExpand}
+                    className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                  >
+                    <Maximize2 className="size-3" />
+                  </Button>
+                </MobileFriendlyTooltip>
               )}
 
               {/* Cancel button */}
               {canCancel && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onCancel}
-                  className="size-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                  title="Cancel this model"
+                <MobileFriendlyTooltip
+                  content="Stop this AI model from generating a response"
+                  side="top"
+                  showIcon={false}
                 >
-                  <X className="size-3" />
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onCancel}
+                    className="size-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                  >
+                    <X className="size-3" />
+                  </Button>
+                </MobileFriendlyTooltip>
               )}
             </div>
           </div>
@@ -280,17 +299,31 @@ const CompareResultCard = memo(function CompareResultCard({
             {/* Time indicator - only show for running or completed states */}
             {((result.status === 'completed' && result.inferenceTimeMs) ||
               (result.status === 'running' && result.serverStartedAt)) && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground ml-2">
-                <span className="font-mono">
-                  {result.status === 'running' && result.serverStartedAt ? (
-                    <LiveTimer startTime={result.serverStartedAt} />
-                  ) : result.inferenceTimeMs ? (
-                    `${(result.inferenceTimeMs / 1000).toFixed(2)}s`
-                  ) : (
-                    '0.00s'
-                  )}
-                </span>
-              </div>
+              <MobileFriendlyTooltip
+                content={
+                  result.status === 'running'
+                    ? 'Time elapsed since AI started processing your request'
+                    : `Response generated in ${
+                        result.inferenceTimeMs
+                          ? (result.inferenceTimeMs / 1000).toFixed(2)
+                          : '0.00'
+                      } seconds`
+                }
+                side="top"
+                showIcon={false}
+              >
+                <div className="flex items-center gap-1 text-xs text-muted-foreground ml-2">
+                  <span className="font-mono">
+                    {result.status === 'running' && result.serverStartedAt ? (
+                      <LiveTimer startTime={result.serverStartedAt} />
+                    ) : result.inferenceTimeMs ? (
+                      `${(result.inferenceTimeMs / 1000).toFixed(2)}s`
+                    ) : (
+                      '0.00s'
+                    )}
+                  </span>
+                </div>
+              </MobileFriendlyTooltip>
             )}
           </div>
 
@@ -298,28 +331,38 @@ const CompareResultCard = memo(function CompareResultCard({
           <div className="flex items-center gap-1">
             {/* Expand button */}
             {onExpand && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onExpand}
-                className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                title="Expand for better readability"
+              <MobileFriendlyTooltip
+                content="Open in full-screen modal for better readability"
+                side="top"
+                showIcon={false}
               >
-                <Maximize2 className="size-3" />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onExpand}
+                  className="size-7 p-0 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                >
+                  <Maximize2 className="size-3" />
+                </Button>
+              </MobileFriendlyTooltip>
             )}
 
             {/* Cancel button */}
             {canCancel && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onCancel}
-                className="size-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                title="Cancel this model"
+              <MobileFriendlyTooltip
+                content="Stop this AI model from generating a response"
+                side="top"
+                showIcon={false}
               >
-                <X className="size-3" />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCancel}
+                  className="size-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                >
+                  <X className="size-3" />
+                </Button>
+              </MobileFriendlyTooltip>
             )}
           </div>
         </div>
@@ -422,20 +465,32 @@ const ModalHeaderContent = memo(function ModalHeaderContent({
       {result.usage && (
         <div className="flex items-center gap-2 text-sm">
           {tokenCounts.inTokens && (
-            <span className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">↑</span>
-              <span className="font-mono">
-                {tokenCounts.inTokens.toLocaleString()}
+            <MobileFriendlyTooltip
+              content="Input tokens: Number of tokens in your message and context"
+              side="bottom"
+              showIcon={false}
+            >
+              <span className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground">↑</span>
+                <span className="font-mono">
+                  {tokenCounts.inTokens.toLocaleString()}
+                </span>
               </span>
-            </span>
+            </MobileFriendlyTooltip>
           )}
           {tokenCounts.outTokens && (
-            <span className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">↓</span>
-              <span className="font-mono">
-                {tokenCounts.outTokens.toLocaleString()}
+            <MobileFriendlyTooltip
+              content="Output tokens: Number of tokens in the AI's response"
+              side="bottom"
+              showIcon={false}
+            >
+              <span className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground">↓</span>
+                <span className="font-mono">
+                  {tokenCounts.outTokens.toLocaleString()}
+                </span>
               </span>
-            </span>
+            </MobileFriendlyTooltip>
           )}
         </div>
       )}

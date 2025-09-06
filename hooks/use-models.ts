@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
-import type { ChatModel } from "@/lib/ai/models";
-import { fetcher } from "@/lib/utils";
-import useSWR from "swr";
+import type { ChatModel } from '@/lib/ai/models';
+import { fetcher } from '@/lib/utils';
+import useSWR from 'swr';
 
 interface ModelsResponse {
   models: ChatModel[];
-  userType: "free" | "pro";
+  userType: 'free' | 'pro';
   userSettings?: {
     defaultModel?: string;
     compareModels?: string[];
-    mode?: "single" | "compare";
+    mode?: 'single' | 'compare';
     theme?: string;
     systemPrompt?: {
       name?: string;
@@ -25,7 +25,7 @@ interface ModelsResponse {
 
 export function useModels() {
   const { data, error, isLoading, mutate } = useSWR<ModelsResponse>(
-    "/api/models",
+    '/api/models',
     fetcher,
     {
       revalidateOnMount: true,
@@ -36,18 +36,18 @@ export function useModels() {
       // Periodic background refresh is still fine but make it lighter
       refreshInterval: 15 * 60 * 1000, // 15 minutes
       dedupingInterval: 60 * 60 * 1000, // 1 hour
-    }
+    },
   );
 
   return {
     models: data?.models ?? [],
-    userType: data?.userType ?? "free",
+    userType: data?.userType ?? 'free',
     userSettings: data?.userSettings ?? {},
     systemPrompt: data?.userSettings?.systemPrompt ?? null,
     // Extract specific settings for convenience
     defaultModel: data?.userSettings?.defaultModel,
     compareModels: data?.userSettings?.compareModels ?? [],
-    mode: data?.userSettings?.mode ?? "single",
+    mode: data?.userSettings?.mode ?? 'single',
     isLoading,
     error,
     mutate,

@@ -1,19 +1,19 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 // System Prompt Validation Schema
 export const systemPromptSchema = z.object({
-  name: z.string().max(100, "Name must be 100 characters or less").optional(),
+  name: z.string().max(100, 'Name must be 100 characters or less').optional(),
   profession: z
     .string()
-    .max(200, "Profession must be 200 characters or less")
+    .max(200, 'Profession must be 200 characters or less')
     .optional(),
   traits: z
-    .array(z.string().max(100, "Each trait must be 100 characters or less"))
-    .max(50, "Maximum 50 traits allowed")
+    .array(z.string().max(100, 'Each trait must be 100 characters or less'))
+    .max(50, 'Maximum 50 traits allowed')
     .optional(),
   preferences: z
     .string()
-    .max(3000, "Preferences must be 3000 characters or less")
+    .max(3000, 'Preferences must be 3000 characters or less')
     .optional(),
   updatedAt: z.string().optional(),
 });
