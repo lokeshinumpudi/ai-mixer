@@ -4,10 +4,12 @@ import { useAuth } from '@/components/auth-provider';
 import { Chat } from '@/components/chat';
 import { DataStreamHandler } from '@/components/data-stream-handler';
 import { generateUUID } from '@/lib/utils';
+import { useMemo } from 'react';
 
 export default function Page() {
   const { user } = useAuth();
-  const id = generateUUID();
+  // Generate UUID only once per component lifecycle to prevent chat replacement
+  const id = useMemo(() => generateUUID(), []);
 
   return (
     <>

@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
-import { AppSidebar } from "@/components/app-sidebar";
-import { DataStreamProvider } from "@/components/data-stream-provider";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import Script from "next/script";
-import MyStatsig from "../my-statsig";
+import { AppSidebar } from '@/components/app-sidebar';
+import { DataStreamProvider } from '@/components/data-stream-provider';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import Script from 'next/script';
+import MyStatsig from '../my-statsig';
 
 // Hook for managing sidebar state
 function useSidebarState() {
@@ -15,9 +15,9 @@ function useSidebarState() {
 
   useEffect(() => {
     // Load sidebar state from localStorage or cookies
-    const savedState = localStorage.getItem("sidebar:state");
+    const savedState = localStorage.getItem('sidebar:state');
     if (savedState !== null) {
-      setIsCollapsed(savedState !== "true");
+      setIsCollapsed(savedState !== 'true');
     }
     setIsLoaded(true);
   }, []);
@@ -25,7 +25,7 @@ function useSidebarState() {
   const toggleSidebar = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
-    localStorage.setItem("sidebar:state", (!newState).toString());
+    localStorage.setItem('sidebar:state', (!newState).toString());
   };
 
   return { isCollapsed, isLoaded, toggleSidebar };

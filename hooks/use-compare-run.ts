@@ -379,6 +379,33 @@ export function useCompareRun(
             return;
           }
 
+          // Special handling for forbidden chat access (read-only shared chats)
+          if (error.message === 'forbidden:chat') {
+            compareLogger.info(
+              {
+                chatId,
+                modelCount: modelIds.length,
+              },
+              'Showing read-only toast for guest user accessing shared chat',
+            );
+
+            // Show read-only prompt instead of error
+            const { toast } = await import('sonner');
+
+            toast.error('Read-only chat', {
+              description:
+                'This shared chat is read-only. You can view messages but cannot send new ones.',
+              duration: 5000,
+            });
+
+            setState((prev) => ({
+              ...prev,
+              status: 'idle', // Reset to idle instead of failed
+              isRunning: false,
+            }));
+            return;
+          }
+
           compareLogger.error(
             {
               error: error.message,
@@ -513,7 +540,7 @@ export function useCompareRun(
             'Compare run completed',
           );
 
-          // Capture the current state for optimistic updates
+          // Capture the current state for stream-first updates
           let capturedState: CompareRunState | null = null;
           setState((prev) => {
             const newState = {
@@ -526,7 +553,7 @@ export function useCompareRun(
             return newState;
           });
 
-          // Immediately add the completed run to cache to prevent gap
+          // 🚀 STREAM-FIRST ARCHITECTURE: Add to client state immediately
           if (capturedState) {
             // Create the completed run object from captured state
             const completedRun = {
@@ -553,7 +580,17 @@ export function useCompareRun(
               })),
             };
 
-            // Optimistically update the compareRuns cache immediately (unless disabled)
+            // 🎯 NEW: Notify parent component about completed run (stream-first)
+            // This will be handled by the stream-first chat hook
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+              window.dispatchEvent(
+                new CustomEvent('compare-run-completed', {
+                  detail: { chatId, completedRun },
+                }),
+              );
+            }
+
+            // Legacy: Still update SWR cache for backward compatibility
             if (!options?.disableOptimisticUpdates) {
               mutateCompareRuns(
                 (currentData: CompareRunsListResponse | undefined) => {
@@ -570,10 +607,19 @@ export function useCompareRun(
             }
 
             // Preserve active card after completion; no auto-clear.
-            // Still record for potential future uses (e.g., manual clear).
             pendingHandoffRunIdRef.current = (
               capturedState as CompareRunState
             ).runId;
+
+            // Minimal sidebar refresh (only history, not data API)
+            setTimeout(() => {
+              const { mutate } = require('swr');
+              // Only refresh history API, not data API (stream-first handles data)
+              mutate(
+                (key: string) =>
+                  typeof key === 'string' && key.startsWith('/api/history'),
+              );
+            }, 1000); // Shorter delay since no DB dependency
           }
           break;
         }

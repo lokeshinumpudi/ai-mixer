@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useAuth } from "@/components/auth-provider";
-import { ChevronUp } from "lucide-react";
-import { useTheme } from "next-themes";
-import Image from "next/image";
+import { useAuth } from '@/components/auth-provider';
+import { ChevronUp } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import Image from 'next/image';
 
 import {
   DropdownMenu,
@@ -11,16 +11,16 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@/components/ui/dropdown-menu';
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar";
-import { useRouter } from "next/navigation";
-import { LoaderIcon } from "./icons";
-import { toast } from "./toast";
+} from '@/components/ui/sidebar';
+import { useRouter } from 'next/navigation';
+import { LoaderIcon } from './icons';
+import { toast } from './toast';
 export function SidebarUserNav({ user }: { user: any }) {
   const router = useRouter();
   const { loading, signOut } = useAuth();
@@ -51,7 +51,7 @@ export function SidebarUserNav({ user }: { user: any }) {
               >
                 <Image
                   src={`https://avatar.vercel.sh/${user.email}`}
-                  alt={user.email ?? "User Avatar"}
+                  alt={user.email ?? 'User Avatar'}
                   width={24}
                   height={24}
                   className="rounded-full"
@@ -72,10 +72,10 @@ export function SidebarUserNav({ user }: { user: any }) {
               data-testid="user-nav-item-theme"
               className="cursor-pointer"
               onSelect={() =>
-                setTheme(resolvedTheme === "dark" ? "light" : "dark")
+                setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
               }
             >
-              {`Toggle ${resolvedTheme === "light" ? "dark" : "light"} mode`}
+              {`Toggle ${resolvedTheme === 'light' ? 'dark' : 'light'} mode`}
             </DropdownMenuItem>
 
             <DropdownMenuItem
@@ -85,7 +85,7 @@ export function SidebarUserNav({ user }: { user: any }) {
                 // Close the left panel on both mobile and desktop before navigating
                 setOpen(false);
                 setOpenMobile(false);
-                router.push("/settings");
+                router.push('/settings');
               }}
             >
               Settings
@@ -99,9 +99,9 @@ export function SidebarUserNav({ user }: { user: any }) {
                 onClick={async () => {
                   if (loading) {
                     toast({
-                      type: "error",
+                      type: 'error',
                       description:
-                        "Checking authentication status, please try again!",
+                        'Checking authentication status, please try again!',
                     });
 
                     return;
@@ -111,8 +111,8 @@ export function SidebarUserNav({ user }: { user: any }) {
                   const { error } = await signOut();
                   if (error) {
                     toast({
-                      type: "error",
-                      description: "Failed to sign out. Please try again.",
+                      type: 'error',
+                      description: 'Failed to sign out. Please try again.',
                     });
                   }
                 }}

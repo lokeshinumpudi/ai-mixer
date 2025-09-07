@@ -1,31 +1,31 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { useAnimeOnMount } from "@/hooks/use-anime";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { useAnimeOnMount } from '@/hooks/use-anime';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
-import { useAuth } from "@/components/auth-provider";
-import { LoginCTA } from "@/components/login-cta";
+import { useAuth } from '@/components/auth-provider';
+import { LoginCTA } from '@/components/login-cta';
 import {
   MobileFriendlyTooltip,
   MobileFriendlyTooltipProvider,
-} from "@/components/ui/mobile-friendly-tooltip";
-import { isModelEnabled, useModels } from "@/hooks/use-models";
-import type { ChatModel } from "@/lib/ai/models";
-import { getDefaultModelForUser } from "@/lib/ai/models";
-import { COMPARE_MAX_MODELS } from "@/lib/constants";
-import type { AppUser } from "@/lib/supabase/types";
-import { cn } from "@/lib/utils";
+} from '@/components/ui/mobile-friendly-tooltip';
+import { isModelEnabled, useModels } from '@/hooks/use-models';
+import type { ChatModel } from '@/lib/ai/models';
+import { getDefaultModelForUser } from '@/lib/ai/models';
+import { COMPARE_MAX_MODELS } from '@/lib/constants';
+import type { AppUser } from '@/lib/supabase/types';
+import { cn } from '@/lib/utils';
 import {
   BrainIcon,
   CheckIcon,
@@ -35,40 +35,40 @@ import {
   SearchIcon,
   SparklesIcon,
   StarIcon,
-} from "./icons";
+} from './icons';
 
 // Provider icons mapping
 const getProviderIcon = (provider: string) => {
   switch (provider.toLowerCase()) {
-    case "xai":
-      return "✨";
-    case "openai":
-      return "🤖";
-    case "anthropic":
-      return "🧠";
-    case "google":
-      return "🔍";
-    case "meta":
-      return "📘";
-    case "mistral":
-      return "🌪️";
-    case "amazon":
-      return "📦";
+    case 'xai':
+      return '✨';
+    case 'openai':
+      return '🤖';
+    case 'anthropic':
+      return '🧠';
+    case 'google':
+      return '🔍';
+    case 'meta':
+      return '📘';
+    case 'mistral':
+      return '🌪️';
+    case 'amazon':
+      return '📦';
     default:
-      return "🤖";
+      return '🤖';
   }
 };
 
 // Mock favorites - in real app this would come from user preferences
-const mockFavorites = ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku"];
+const mockFavorites = ['openai/gpt-4o-mini', 'anthropic/claude-3.5-haiku'];
 
 // localStorage utilities for model selection persistence
-const MODEL_SELECTION_KEY = "user-model-selection";
+const MODEL_SELECTION_KEY = 'user-model-selection';
 
 const safeLocalStorage = {
   get: (key: string): any => {
     try {
-      if (typeof window === "undefined") return null;
+      if (typeof window === 'undefined') return null;
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : null;
     } catch (error) {
@@ -78,7 +78,7 @@ const safeLocalStorage = {
   },
   set: (key: string, value: any): void => {
     try {
-      if (typeof window === "undefined") return;
+      if (typeof window === 'undefined') return;
       localStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
       console.warn(`Failed to write to localStorage: ${key}`, error);
@@ -86,7 +86,7 @@ const safeLocalStorage = {
   },
   remove: (key: string): void => {
     try {
-      if (typeof window === "undefined") return;
+      if (typeof window === 'undefined') return;
       localStorage.removeItem(key);
     } catch (error) {
       console.warn(`Failed to remove from localStorage: ${key}`, error);
@@ -115,15 +115,15 @@ function ModelCard({
 
   // Determine if model supports image analysis (vision capabilities)
   const supportsImageAnalysis =
-    model.description.toLowerCase().includes("vision") ||
-    model.description.toLowerCase().includes("image");
+    model.description.toLowerCase().includes('vision') ||
+    model.description.toLowerCase().includes('image');
 
   return (
     <MobileFriendlyTooltip
       content={`${model.name} - ${model.description}${
-        model.supportsVision ? " • Vision" : ""
-      }${model.supportsReasoning ? " • Reasoning" : ""}${
-        model.supportsArtifacts ? " • Code Generation" : ""
+        model.supportsVision ? ' • Vision' : ''
+      }${model.supportsReasoning ? ' • Reasoning' : ''}${
+        model.supportsArtifacts ? ' • Code Generation' : ''
       }`}
       side="top"
       showIcon={false}
@@ -131,40 +131,40 @@ function ModelCard({
       <Card
         data-testid={`model-selector-item-${model.id}`}
         className={cn(
-          "relative transition-all duration-200 h-full",
-          "cursor-pointer hover:shadow-md",
-          "border-2",
-          isSelected && enabled && "border-primary bg-primary/5 shadow-md",
+          'relative transition-all duration-200 h-full',
+          'cursor-pointer hover:shadow-md',
+          'border-2',
+          isSelected && enabled && 'border-primary bg-primary/5 shadow-md',
           !enabled &&
-            "border-dashed border-muted-foreground/30 bg-muted/30 opacity-75 hover:opacity-90",
+            'border-dashed border-muted-foreground/30 bg-muted/30 opacity-75 hover:opacity-90',
           enabled &&
             !isSelected &&
-            "border-border hover:border-primary/30 hover:shadow-sm"
+            'border-border hover:border-primary/30 hover:shadow-sm',
         )}
         onClick={
           enabled
             ? onSelect
             : () => {
                 const paymentUrl =
-                  process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
+                  process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
                 if (paymentUrl) {
-                  window.open(paymentUrl, "_blank");
+                  window.open(paymentUrl, '_blank');
                 } else {
                   console.error(
-                    "Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL."
+                    'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
                   );
-                  router.push("/settings");
+                  router.push('/settings');
                 }
               }
         }
       >
-        <CardContent className="p-3 md:p-4 flex flex-col h-28 md:h-32">
+        <CardContent className="p-4 flex flex-col h-32">
           {/* Header with provider icon and favorite */}
-          <div className="flex items-center justify-between mb-1.5 md:mb-2">
+          <div className="flex items-center justify-between mb-2">
             <span
               className={cn(
-                "text-lg transition-opacity",
-                !enabled && "opacity-60"
+                'text-lg transition-opacity',
+                !enabled && 'opacity-60',
               )}
             >
               {providerIcon}
@@ -183,13 +183,13 @@ function ModelCard({
                 }}
                 disabled={!enabled}
                 className={cn(
-                  "p-1 rounded transition-colors",
-                  enabled && "hover:bg-accent",
+                  'p-1 rounded transition-colors',
+                  enabled && 'hover:bg-accent',
                   isFavorite && enabled
-                    ? "text-amber-500"
+                    ? 'text-amber-500'
                     : enabled
-                    ? "text-muted-foreground hover:text-amber-500"
-                    : "text-muted-foreground/40 cursor-not-allowed"
+                      ? 'text-muted-foreground hover:text-amber-500'
+                      : 'text-muted-foreground/40 cursor-not-allowed',
                 )}
               >
                 <StarIcon size={12} />
@@ -201,8 +201,8 @@ function ModelCard({
           <div className="flex-1 flex items-start min-h-0">
             <h3
               className={cn(
-                "font-medium text-sm leading-tight flex-1 line-clamp-2",
-                enabled ? "text-foreground" : "text-muted-foreground"
+                'font-medium text-sm leading-tight flex-1 line-clamp-2',
+                enabled ? 'text-foreground' : 'text-muted-foreground',
               )}
             >
               {model.name}
@@ -215,7 +215,7 @@ function ModelCard({
           </div>
 
           {/* Bottom capabilities and badges row */}
-          <div className="flex items-center justify-between mt-1.5 md:mt-2 pt-1.5 md:pt-2 border-t border-border/50">
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
             <div className="flex items-center gap-1.5">
               {supportsImageAnalysis && enabled && (
                 <div className="text-purple-600 bg-purple-100 dark:bg-purple-500/20 dark:text-purple-400 rounded p-1">
@@ -241,12 +241,12 @@ function ModelCard({
                   <span className="font-medium">Pro</span>
                 </div>
               )}
-              {model.id.includes("mini") && enabled && (
+              {model.id.includes('mini') && enabled && (
                 <div className="text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded font-medium">
                   Fast
                 </div>
               )}
-              {model.id.includes("pro") && enabled && (
+              {model.id.includes('pro') && enabled && (
                 <div className="text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded flex items-center gap-1">
                   <SparklesIcon size={8} />
                   <span className="font-medium">Pro</span>
@@ -283,7 +283,7 @@ export function ModelPicker({
   const { user: authUser } = useAuth();
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState({
     fast: false,
     vision: false,
@@ -310,7 +310,7 @@ export function ModelPicker({
 
   // Get localStorage model as immediate fallback
   const [localModel, setLocalModel] = useState<string | null>(() =>
-    safeLocalStorage.get(MODEL_SELECTION_KEY)
+    safeLocalStorage.get(MODEL_SELECTION_KEY),
   );
 
   // Get plan-based default model as ultimate fallback
@@ -336,7 +336,7 @@ export function ModelPicker({
     // If selectedModelId prop is provided, use it (for backward compatibility)
     if (selectedModelId) {
       const modelExists = allModels.some(
-        (model) => model.id === selectedModelId
+        (model) => model.id === selectedModelId,
       );
       if (modelExists) return selectedModelId;
     }
@@ -371,14 +371,14 @@ export function ModelPicker({
     // If selectedModelIds prop is provided, use it (for backward compatibility)
     if (selectedModelIds && selectedModelIds.length > 0) {
       return selectedModelIds.filter((modelId) =>
-        allModels.some((model) => model.id === modelId)
+        allModels.some((model) => model.id === modelId),
       );
     }
 
     // Use server compare models (authoritative)
     if (compareModels && compareModels.length > 0) {
       return compareModels.filter((modelId) =>
-        allModels.some((model) => model.id === modelId)
+        allModels.some((model) => model.id === modelId),
       );
     }
 
@@ -388,7 +388,7 @@ export function ModelPicker({
 
   const selectedModel = useMemo(
     () => allModels.find((model) => model.id === effectiveModelId),
-    [effectiveModelId, allModels]
+    [effectiveModelId, allModels],
   );
 
   // Filter models based on search
@@ -399,7 +399,7 @@ export function ModelPicker({
         (model) =>
           model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           model.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          model.provider.toLowerCase().includes(searchQuery.toLowerCase())
+          model.provider.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
 
@@ -407,9 +407,9 @@ export function ModelPicker({
     if (filters.fast)
       list = list.filter(
         (m) =>
-          m.id.includes("mini") ||
-          m.id.includes("flash") ||
-          m.id.includes("fast")
+          m.id.includes('mini') ||
+          m.id.includes('flash') ||
+          m.id.includes('fast'),
       );
     if (filters.vision) list = list.filter((m) => m.supportsVision);
     if (filters.reasoning) list = list.filter((m) => m.supportsReasoning);
@@ -428,12 +428,12 @@ export function ModelPicker({
   // Separate favorites and others
   const favoriteModels = useMemo(
     () => filteredModels.filter((model) => favorites.includes(model.id)),
-    [filteredModels, favorites]
+    [filteredModels, favorites],
   );
 
   const otherModels = useMemo(
     () => filteredModels.filter((model) => !favorites.includes(model.id)),
-    [filteredModels, favorites]
+    [filteredModels, favorites],
   );
 
   // Compact view models: favorites + top models (unique)
@@ -480,23 +480,23 @@ export function ModelPicker({
       // Save compare models to settings if user is authenticated
       if (user && !user.is_anonymous && newSelection.length > 0) {
         try {
-          const response = await fetch("/api/user/settings", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+          const response = await fetch('/api/user/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               compareModels: newSelection,
-              mode: "compare",
+              mode: 'compare',
             }),
           });
 
           if (!response.ok) {
-            throw new Error("Failed to update settings");
+            throw new Error('Failed to update settings');
           }
 
           // Refresh models data to get updated user settings from server
           await mutateModels();
         } catch (error) {
-          console.error("Failed to save compare models to server:", error);
+          console.error('Failed to save compare models to server:', error);
         }
       }
 
@@ -517,23 +517,23 @@ export function ModelPicker({
         return;
       }
       // Update user settings via PATCH API
-      const response = await fetch("/api/user/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           defaultModel: modelId,
-          mode: "single",
+          mode: 'single',
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update settings");
+        throw new Error('Failed to update settings');
       }
 
       // Refresh models data to get updated user settings from server
       await mutateModels();
     } catch (error) {
-      console.error("Failed to save model selection to server:", error);
+      console.error('Failed to save model selection to server:', error);
       // Note: localStorage was already updated for immediate feedback
       // Server sync will happen on next page load or when API recovers
     }
@@ -543,13 +543,13 @@ export function ModelPicker({
     setFavorites((prev) =>
       prev.includes(modelId)
         ? prev.filter((id) => id !== modelId)
-        : [...prev, modelId]
+        : [...prev, modelId],
     );
   };
 
   // Determine anonymous status using live auth state first, falling back to props/models
   const isAnonymousUser = Boolean(
-    authUser?.is_anonymous ?? user?.is_anonymous ?? false
+    authUser?.is_anonymous ?? user?.is_anonymous ?? false,
   );
 
   return (
@@ -558,12 +558,12 @@ export function ModelPicker({
         <DialogTrigger asChild>
           <Button
             data-testid="model-selector"
-            variant={compact ? "ghost" : "outline"}
+            variant={compact ? 'ghost' : 'outline'}
             className={cn(
               compact
-                ? "rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200 text-xs max-w-[100px] flex items-center gap-1"
-                : "flex items-center gap-2 min-w-[180px] justify-between",
-              className
+                ? 'rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200 text-xs max-w-[100px] flex items-center gap-1'
+                : 'flex items-center gap-2 min-w-[180px] justify-between',
+              className,
             )}
             disabled={disabled}
           >
@@ -572,7 +572,7 @@ export function ModelPicker({
                 <span className="truncate text-xs">
                   {effectiveCompareModelIds.length > 0
                     ? `${effectiveCompareModelIds.length} models`
-                    : selectedModel?.name || "Select Model"}
+                    : selectedModel?.name || 'Select Model'}
                 </span>
                 <SearchIcon size={12} />
               </>
@@ -580,10 +580,10 @@ export function ModelPicker({
               <>
                 <div className="flex items-center gap-2">
                   <span>
-                    {getProviderIcon(selectedModel?.provider || "openai")}
+                    {getProviderIcon(selectedModel?.provider || 'openai')}
                   </span>
                   <span className="truncate">
-                    {selectedModel?.name || "Select Model"}
+                    {selectedModel?.name || 'Select Model'}
                   </span>
                 </div>
                 <SearchIcon size={16} />
@@ -594,23 +594,23 @@ export function ModelPicker({
 
         <DialogContent
           className={cn(
-            "flex flex-col transition-all duration-300 p-3 md:p-6",
-            isExpanded ? "max-w-6xl max-h-[90vh]" : "max-w-md max-h-[75vh]"
+            'flex flex-col transition-all duration-300',
+            isExpanded ? 'max-w-6xl max-h-[90vh]' : 'max-w-md max-h-[70vh]',
           )}
           ref={useAnimeOnMount({
             opacity: [0, 1],
             translateY: [12, 0],
             scale: [0.98, 1],
             duration: 220,
-            ease: "outQuad",
+            ease: 'outQuad',
           })}
         >
-          <DialogHeader className="space-y-2 md:space-y-3">
-            <DialogTitle className="text-lg md:text-xl">
+          <DialogHeader className="space-y-3">
+            <DialogTitle>
               <span>Select Models to Compare</span>
             </DialogTitle>
 
-            <div className="text-xs md:text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               Select up to {COMPARE_MAX_MODELS} models to compare responses
               side-by-side.
               {effectiveCompareModelIds.length > 0 && (
@@ -619,15 +619,15 @@ export function ModelPicker({
                 </span>
               )}
             </div>
-            {userType === "free" && (
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-2 md:p-3 rounded-lg border border-amber-200/50 dark:border-amber-800/30">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1 md:gap-2 min-w-0">
-                    <span className="text-xs text-muted-foreground truncate">
+            {userType === 'free' && (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 p-3 rounded-lg border border-amber-200/50 dark:border-amber-800/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
                       Unlock all models + higher limits
                     </span>
-                    <div className="flex items-center gap-0.5">
-                      <span className="text-sm md:text-lg font-bold text-primary">
+                    <div className="flex items-center gap-1">
+                      <span className="text-lg font-bold text-primary">
                         ₹249
                       </span>
                       <span className="text-xs text-muted-foreground">
@@ -637,18 +637,18 @@ export function ModelPicker({
                   </div>
                   <Button
                     size="sm"
-                    className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 text-xs h-6 md:h-7 px-2 md:px-3 shrink-0"
+                    className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 text-xs h-7"
                     onClick={() => {
                       setOpen(false);
                       const paymentUrl =
-                        process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
+                        process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
                       if (paymentUrl) {
-                        window.open(paymentUrl, "_blank");
+                        window.open(paymentUrl, '_blank');
                       } else {
                         console.error(
-                          "Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL."
+                          'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
                         );
-                        router.push("/settings");
+                        router.push('/settings');
                       }
                     }}
                   >
@@ -661,7 +661,7 @@ export function ModelPicker({
 
           {/* Guest CTA - only show for anonymous users */}
           {isAnonymousUser && (
-            <div className="mb-2 md:mb-3">
+            <div className="mb-3">
               <div className="text-xs text-muted-foreground mb-1">
                 Sign in to save chats and unlock more models.
               </div>
@@ -671,7 +671,7 @@ export function ModelPicker({
 
           {/* Search - only in expanded mode */}
           {isExpanded && (
-            <div className="relative mb-3 md:mb-4">
+            <div className="relative mb-4">
               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                 <SearchIcon size={16} />
               </div>
@@ -679,10 +679,10 @@ export function ModelPicker({
                 placeholder="Search models..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-9"
+                className="pl-10"
               />
               {/* Capability filters */}
-              <div className="mt-2 md:mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 md:gap-2">
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                 <MobileFriendlyTooltip
                   content="Show models optimized for speed and quick responses"
                   side="bottom"
@@ -690,8 +690,8 @@ export function ModelPicker({
                 >
                   <Button
                     type="button"
-                    variant={filters.fast ? "default" : "outline"}
-                    className="h-7 md:h-8 text-xs px-2 md:px-3"
+                    variant={filters.fast ? 'default' : 'outline'}
+                    className="h-8 text-xs"
                     onClick={() => setFilters((f) => ({ ...f, fast: !f.fast }))}
                   >
                     Fast
@@ -704,8 +704,8 @@ export function ModelPicker({
                 >
                   <Button
                     type="button"
-                    variant={filters.vision ? "default" : "outline"}
-                    className="h-7 md:h-8 text-xs px-2 md:px-3"
+                    variant={filters.vision ? 'default' : 'outline'}
+                    className="h-8 text-xs"
                     onClick={() =>
                       setFilters((f) => ({ ...f, vision: !f.vision }))
                     }
@@ -720,8 +720,8 @@ export function ModelPicker({
                 >
                   <Button
                     type="button"
-                    variant={filters.reasoning ? "default" : "outline"}
-                    className="h-7 md:h-8 text-xs px-2 md:px-3"
+                    variant={filters.reasoning ? 'default' : 'outline'}
+                    className="h-8 text-xs"
                     onClick={() =>
                       setFilters((f) => ({ ...f, reasoning: !f.reasoning }))
                     }
@@ -736,8 +736,8 @@ export function ModelPicker({
                 >
                   <Button
                     type="button"
-                    variant={filters.image ? "default" : "outline"}
-                    className="h-7 md:h-8 text-xs px-2 md:px-3"
+                    variant={filters.image ? 'default' : 'outline'}
+                    className="h-8 text-xs"
                     onClick={() =>
                       setFilters((f) => ({ ...f, image: !f.image }))
                     }
@@ -752,8 +752,8 @@ export function ModelPicker({
                 >
                   <Button
                     type="button"
-                    variant={filters.tools ? "default" : "outline"}
-                    className="h-7 md:h-8 text-xs px-2 md:px-3"
+                    variant={filters.tools ? 'default' : 'outline'}
+                    className="h-8 text-xs"
                     onClick={() =>
                       setFilters((f) => ({ ...f, tools: !f.tools }))
                     }
@@ -768,8 +768,8 @@ export function ModelPicker({
                 >
                   <Button
                     type="button"
-                    variant={filters.pdf ? "default" : "outline"}
-                    className="h-7 md:h-8 text-xs px-2 md:px-3"
+                    variant={filters.pdf ? 'default' : 'outline'}
+                    className="h-8 text-xs"
                     onClick={() => setFilters((f) => ({ ...f, pdf: !f.pdf }))}
                   >
                     PDF
@@ -779,19 +779,17 @@ export function ModelPicker({
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto px-0.5 md:px-1 -mx-0.5 md:-mx-1">
+          <div className="flex-1 overflow-y-auto px-1 -mx-1">
             {!isExpanded ? (
               /* Minimal Vertical List View */
               <div>
-                <div className="flex items-center justify-between mb-2 md:mb-4">
-                  <h3 className="font-medium text-sm md:text-base">
-                    Choose Model
-                  </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium">Choose Model</h3>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setIsExpanded(true)}
-                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 h-6 md:h-8 px-2"
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                   >
                     <span>Show all</span>
                     <svg
@@ -809,21 +807,21 @@ export function ModelPicker({
                     </svg>
                   </Button>
                 </div>
-                <div className="space-y-1 md:space-y-1.5">
+                <div className="space-y-1.5">
                   {filteredModels.slice(0, 8).map((model) => {
                     const enabled =
                       isModelEnabled(model) &&
                       allModels.some((m) => m.id === model.id);
                     const isSelected = effectiveCompareModelIds.includes(
-                      model.id
+                      model.id,
                     );
                     const providerIcon = getProviderIcon(model.provider);
 
                     // Determine capabilities
                     const supportsImageAnalysis =
-                      model.id.includes("vision") ||
-                      model.description.toLowerCase().includes("vision") ||
-                      model.description.toLowerCase().includes("image");
+                      model.id.includes('vision') ||
+                      model.description.toLowerCase().includes('vision') ||
+                      model.description.toLowerCase().includes('image');
 
                     return (
                       <button
@@ -836,32 +834,32 @@ export function ModelPicker({
                                 const paymentUrl =
                                   process.env
                                     .NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL ||
-                                  "";
+                                  '';
                                 if (paymentUrl) {
-                                  window.open(paymentUrl, "_blank");
+                                  window.open(paymentUrl, '_blank');
                                 } else {
                                   console.error(
-                                    "Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL."
+                                    'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
                                   );
-                                  router.push("/settings");
+                                  router.push('/settings');
                                 }
                               }
                         }
                         className={cn(
-                          "flex items-center gap-2 md:gap-2.5 p-2 md:p-2.5 rounded-lg border-2 transition-all duration-200 cursor-pointer w-full text-left",
+                          'flex items-center gap-2.5 p-2.5 rounded-lg border-2 transition-all duration-200 cursor-pointer w-full text-left',
                           isSelected &&
                             enabled &&
-                            "border-primary bg-primary/5 shadow-sm",
+                            'border-primary bg-primary/5 shadow-sm',
                           !enabled &&
-                            "border-dashed border-muted-foreground/30 opacity-75 hover:opacity-90",
+                            'border-dashed border-muted-foreground/30 opacity-75 hover:opacity-90',
                           enabled &&
                             !isSelected &&
-                            "border-border hover:border-primary/30 hover:bg-muted/50"
+                            'border-border hover:border-primary/30 hover:bg-muted/50',
                         )}
                       >
                         {/* Provider Icon */}
                         <span
-                          className={cn("text-base", !enabled && "opacity-60")}
+                          className={cn('text-base', !enabled && 'opacity-60')}
                         >
                           {providerIcon}
                         </span>
@@ -870,10 +868,10 @@ export function ModelPicker({
                         <div className="flex-1 min-w-0">
                           <h4
                             className={cn(
-                              "font-medium text-sm truncate",
+                              'font-medium text-sm truncate',
                               enabled
-                                ? "text-foreground"
-                                : "text-muted-foreground"
+                                ? 'text-foreground'
+                                : 'text-muted-foreground',
                             )}
                           >
                             {model.name}
@@ -930,7 +928,7 @@ export function ModelPicker({
                               </div>
                             </MobileFriendlyTooltip>
                           )}
-                          {model.id.includes("mini") && enabled && (
+                          {model.id.includes('mini') && enabled && (
                             <div className="text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded font-medium">
                               Fast
                             </div>
@@ -1007,7 +1005,7 @@ export function ModelPicker({
                           key={model.id}
                           model={model}
                           isSelected={effectiveCompareModelIds.includes(
-                            model.id
+                            model.id,
                           )}
                           isFavorite={true}
                           onSelect={() => handleModelSelect(model.id)}
@@ -1022,7 +1020,7 @@ export function ModelPicker({
                 {otherModels.length > 0 && (
                   <div>
                     <h3 className="font-medium mb-3">
-                      {favoriteModels.length > 0 ? "Others" : "All Models"}
+                      {favoriteModels.length > 0 ? 'Others' : 'All Models'}
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                       {otherModels.map((model) => (
@@ -1030,7 +1028,7 @@ export function ModelPicker({
                           key={model.id}
                           model={model}
                           isSelected={effectiveCompareModelIds.includes(
-                            model.id
+                            model.id,
                           )}
                           isFavorite={false}
                           onSelect={() => handleModelSelect(model.id)}

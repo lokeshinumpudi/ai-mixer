@@ -1,15 +1,14 @@
-"use client";
+'use client';
 
-import { initialArtifactData, useArtifact } from "@/hooks/use-artifact";
-import { uiLogger } from "@/lib/logger";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
-import { artifactDefinitions } from "./artifact";
-import { useDataStream } from "./data-stream-provider";
-import { upgradeToast } from "./toast";
+import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
+import { uiLogger } from '@/lib/logger';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useRef } from 'react';
+import { artifactDefinitions } from './artifact';
+import { useDataStream } from './data-stream-provider';
+import { upgradeToast } from './toast';
 
-import { sidebarHistoryActions } from "@/hooks/use-sidebar-history";
-import { mutate } from "swr";
+import { mutate } from 'swr';
 
 export function DataStreamHandler() {
   const { dataStream } = useDataStream();
@@ -18,29 +17,31 @@ export function DataStreamHandler() {
   // Function to invalidate usage cache when usage updates come through stream
   const invalidateUsageCache = () => {
     // Targeted invalidation only when a stream is active; removes need for polling
-    mutate((key) => typeof key === "string" && key.startsWith("/api/usage"));
+    mutate((key) => typeof key === 'string' && key.startsWith('/api/usage'));
   };
 
   const invalidateHistoryCache = () => {
-    sidebarHistoryActions.refresh();
+    // Simple approach: just refresh the sidebar history API
+    mutate((key) => typeof key === 'string' && key.startsWith('/api/history'));
   };
 
-  // Optimistically update sidebar history title for the current chat
-  const optimisticUpdateHistoryTitle = (newTitle: string) => {
+  // Simple title update - just refresh the sidebar
+  const updateHistoryTitle = (newTitle: string) => {
     if (!chatId) return;
-    sidebarHistoryActions.updateChatTitle(chatId, newTitle);
+    // Just refresh the sidebar - no complex optimistic updates needed
+    invalidateHistoryCache();
   };
 
   uiLogger.debug(
     {
-      chatId: pathname.startsWith("/chat/") ? pathname.slice(6) : "none",
+      chatId: pathname.startsWith('/chat/') ? pathname.slice(6) : 'none',
       pathname,
     },
-    "DataStreamHandler initialized"
+    'DataStreamHandler initialized',
   );
 
   // Extract chatId from pathname (e.g., /chat/123 -> 123)
-  const chatId = pathname.startsWith("/chat/") ? pathname.slice(6) : undefined;
+  const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
 
   const { artifact, setArtifact, setMetadata } = useArtifact(chatId);
   const lastProcessedIndex = useRef(-1);
@@ -55,7 +56,7 @@ export function DataStreamHandler() {
         totalDeltas: dataStream.length,
         chatId,
       },
-      "Processing new data stream deltas"
+      'Processing new data stream deltas',
     );
 
     const newDeltas = dataStream.slice(lastProcessedIndex.current + 1);
@@ -67,12 +68,12 @@ export function DataStreamHandler() {
         deltaCount: newDeltas.length,
         chatId,
       },
-      "Processing data deltas"
+      'Processing data deltas',
     );
 
     newDeltas.forEach((delta) => {
       // Handle usage updates
-      if (delta.type === "data-usageUpdate" && delta.data) {
+      if (delta.type === 'data-usageUpdate' && delta.data) {
         const usageInfo = delta.data;
 
         // Invalidate usage cache to trigger refresh with new data
@@ -84,28 +85,28 @@ export function DataStreamHandler() {
           if (!hasShownRateLimitToast.current) {
             hasShownRateLimitToast.current = true;
             upgradeToast({
-              title: "Running low on messages",
+              title: 'Running low on messages',
               description: `You have ${
                 usageInfo.remaining
               } messages remaining this ${
-                usageInfo.type === "daily" ? "day" : "month"
+                usageInfo.type === 'daily' ? 'day' : 'month'
               }. Upgrade to Pro for unlimited access to all models.`,
-              actionText: "Upgrade to Pro",
+              actionText: 'Upgrade to Pro',
             });
           }
         } else if (usageInfo.remaining <= 5 && usageInfo.remaining > 0) {
           // Final warning
           upgradeToast({
-            title: "Almost out of messages!",
+            title: 'Almost out of messages!',
             description: `Only ${usageInfo.remaining} messages left! Upgrade to Pro for unlimited access.`,
-            actionText: "Upgrade to Pro",
+            actionText: 'Upgrade to Pro',
           });
         } else if (usageInfo.isOverLimit) {
           // Over limit - show error toast
           upgradeToast({
-            title: "Message limit reached",
+            title: 'Message limit reached',
             description: `You've used all your ${usageInfo.type} messages. Upgrade to Pro for unlimited access.`,
-            actionText: "Upgrade to Pro",
+            actionText: 'Upgrade to Pro',
           });
         }
 
@@ -113,28 +114,18 @@ export function DataStreamHandler() {
       }
 
       // When title is produced or run finishes, refresh history to update chat title
-      if (delta.type === "data-title") {
-        if (typeof delta.data === "string" && delta.data.length > 0) {
-          optimisticUpdateHistoryTitle(delta.data);
+      if (delta.type === 'data-title') {
+        if (typeof delta.data === 'string' && delta.data.length > 0) {
+          updateHistoryTitle(delta.data);
         } else {
           invalidateHistoryCache();
         }
-      } else if (delta.type === "data-finish") {
-        invalidateHistoryCache();
-      } else if (delta.type === "data-chat-created") {
-        // New chat was created, refresh the sidebar to show it
-        uiLogger.debug(
-          {
-            chatId,
-            chatData: delta.data,
-          },
-          "New chat created, refreshing sidebar"
-        );
+      } else if (delta.type === 'data-finish') {
         invalidateHistoryCache();
       }
 
       const artifactDefinition = artifactDefinitions.find(
-        (artifactDefinition) => artifactDefinition.kind === artifact.kind
+        (artifactDefinition) => artifactDefinition.kind === artifact.kind,
       );
 
       if (artifactDefinition?.onStreamPart) {
@@ -147,42 +138,42 @@ export function DataStreamHandler() {
 
       setArtifact((draftArtifact) => {
         if (!draftArtifact) {
-          return { ...initialArtifactData, status: "streaming" };
+          return { ...initialArtifactData, status: 'streaming' };
         }
 
         switch (delta.type) {
-          case "data-id":
+          case 'data-id':
             return {
               ...draftArtifact,
               documentId: delta.data,
-              status: "streaming",
+              status: 'streaming',
             };
 
-          case "data-title":
+          case 'data-title':
             return {
               ...draftArtifact,
               title: delta.data,
-              status: "streaming",
+              status: 'streaming',
             };
 
-          case "data-kind":
+          case 'data-kind':
             return {
               ...draftArtifact,
               kind: delta.data,
-              status: "streaming",
+              status: 'streaming',
             };
 
-          case "data-clear":
+          case 'data-clear':
             return {
               ...draftArtifact,
-              content: "",
-              status: "streaming",
+              content: '',
+              status: 'streaming',
             };
 
-          case "data-finish":
+          case 'data-finish':
             return {
               ...draftArtifact,
-              status: "idle",
+              status: 'idle',
             };
 
           default:

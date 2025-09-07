@@ -5,16 +5,17 @@ import { ChatHeader } from "@/components/chat-header";
 import { useAuth } from "@/components/auth-provider";
 import { useArtifactSelector } from "@/hooks/use-artifact";
 import { useAutoResume } from "@/hooks/use-auto-resume";
+import { useChatReadOnly } from "@/hooks/use-chat-access";
+import { useChatRunState } from "@/hooks/use-chat-run-state";
 import { useChatVisibility } from "@/hooks/use-chat-visibility";
 import { useCompareRun } from "@/hooks/use-compare-run";
-import { useOptimizedChatData } from "@/hooks/use-optimized-chat-data";
 import { getDefaultModelForUser } from "@/lib/ai/models";
 import type { Chat as ChatType, Vote } from "@/lib/db/schema";
 import { uiLogger } from "@/lib/logger";
 import type { AppUser } from "@/lib/supabase/types";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import { fetcher } from "@/lib/utils";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
 import { useModels } from "../hooks/use-models";
@@ -55,6 +56,10 @@ export function Chat({
   });
 
   const { user: authUser, isAnonymous } = useAuth();
+
+  // Determine if chat is read-only for current user
+  const isSharedReadOnly = useChatReadOnly(chat || null, authUser || null);
+  const isChatReadOnly = isReadonly || isSharedReadOnly;
 
   // Anonymous message tracking (moved from useAnonymousAuth)
   const [messageCount, setMessageCount] = useState(0);
@@ -153,9 +158,10 @@ export function Chat({
     listOnMount: false,
   });
 
-  const chatData = useOptimizedChatData(
-    shouldFetchData || (compareState as any).status !== "idle" ? id : ""
-  );
+  // 🚀 STREAM-FIRST ARCHITECTURE: Compose historical + streaming, no window checks
+  const pathname = usePathname();
+  const enableHistorical = (pathname || "").startsWith("/chat/");
+  const chatData = useChatRunState(id, enableHistorical);
 
   // 🚀 UNIFIED COMPARE ARCHITECTURE: Always use chatData (no fallbacks needed)
   const compareRuns = chatData.compareRuns?.items || [];
@@ -292,7 +298,7 @@ export function Chat({
 
   return (
     <>
-      <div className="flex flex-col min-w-0 h-dvh bg-background overflow-hidden">
+      <div className="flex flex-col min-w-0 h-dvh bg-background">
         <ChatHeader
           chatId={id}
           selectedVisibilityType={currentVisibility}
@@ -385,11 +391,11 @@ export function Chat({
           </div>
         )}
 
-        <div className="fixed bottom-0 inset-x-0 z-40 flex justify-center px-2 pb-3 pt-2 md:px-6 md:pb-6 md:pt-4">
-          <form className="relative flex gap-2 w-full max-w-3xl min-w-0">
+        <div className="absolute bottom-0 inset-x-0 flex justify-center px-4 pb-4 md:px-6 md:pb-6">
+          <form className="relative flex gap-2 w-full max-w-3xl">
             {/* Backdrop blur background only behind the input area */}
             <div className="absolute inset-0 bg-background/95 backdrop-blur-sm border-t border-border/30 rounded-t-lg -z-10" />
-            {!isReadonly && messageCount < 10 && (
+            {!isChatReadOnly && messageCount < 10 && (
               <MultimodalInput
                 chatId={id}
                 input={input}
@@ -410,9 +416,10 @@ export function Chat({
                 activeCompareMessage={compareState.status !== "idle"}
                 isModelsLoading={isModelsLoading}
                 isLoadingRuns={isLoadingRuns}
+                readOnly={isSharedReadOnly}
               />
             )}
-            {!isReadonly &&
+            {!isChatReadOnly &&
               messageCount >= 10 &&
               authUser?.is_anonymous !== false && (
                 <div className="flex-1 flex items-center justify-center py-4">

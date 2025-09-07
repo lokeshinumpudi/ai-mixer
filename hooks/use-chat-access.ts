@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useAuth } from '@/components/auth-provider';
-import type { Chat } from '@/lib/db/schema';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useAuth } from "@/components/auth-provider";
+import type { Chat } from "@/lib/db/schema";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export interface ChatAccessResult {
   hasAccess: boolean;
@@ -15,7 +15,7 @@ export interface ChatAccessResult {
 export function useChatAccess(
   chat: Chat | null,
   chatId: string,
-  chatError?: any,
+  chatError?: any
 ): ChatAccessResult {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -30,8 +30,8 @@ export function useChatAccess(
     if (chatError) return false; // If there's an error fetching chat, no access
     if (!chat) return false; // If chat doesn't exist, no access
 
-    if (chat.visibility === 'public') return true;
-    if (chat.visibility === 'private' && chat.userId === user.id) return true;
+    if (chat.visibility === "public") return true;
+    if (chat.visibility === "private" && chat.userId === user.id) return true;
 
     return false;
   })();
@@ -42,20 +42,20 @@ export function useChatAccess(
     if (!isLoading) {
       if (!user) {
         // Redirect to login if not authenticated
-        router.push('/login');
-        setError('Authentication required');
+        router.push("/login");
+        setError("Authentication required");
       } else if (chatError) {
         // Handle API errors (404, 403, etc.)
         if (chatError.status === 404) {
-          setError('Chat not found');
+          setError("Chat not found");
         } else if (chatError.status === 403) {
-          setError('Access denied');
+          setError("Access denied");
         } else {
-          setError('Failed to load chat');
+          setError("Failed to load chat");
         }
       } else if (chat && !hasAccess) {
         // Chat exists but user doesn't have access
-        setError('Access denied');
+        setError("Access denied");
       } else {
         setError(null);
       }
@@ -72,13 +72,17 @@ export function useChatAccess(
 
 // Hook for determining read-only status
 export function useChatReadOnly(chat: Chat | null, user: any): boolean {
-  if (!chat || !user) return true;
+  // If no chat exists (new chat), allow editing if user is authenticated
+  if (!chat) return !user;
+
+  // If no user, read-only
+  if (!user) return true;
 
   // Chat owner can always edit
   if (chat.userId === user.id) return false;
 
-  // Non-owners can only view public chats in read-only mode
-  return chat.visibility !== 'public';
+  // Non-owners: public chats are writable, private chats are read-only
+  return chat.visibility === "private";
 }
 
 // Hook for creating new chats with proper navigation
@@ -96,7 +100,7 @@ export function useChatNavigation() {
   };
 
   const navigateHome = () => {
-    router.push('/');
+    router.push("/");
   };
 
   return {

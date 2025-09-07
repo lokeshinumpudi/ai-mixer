@@ -1,17 +1,17 @@
-import type { VisibilityType } from "@/components/visibility-selector";
-import { getAllowedModelIdsForUser } from "@/lib/ai/entitlements";
-import type { ChatModel } from "@/lib/ai/models";
-import { getDefaultModelForUser } from "@/lib/ai/models";
-import { systemPrompt, type RequestHints } from "@/lib/ai/prompts";
-import { getLanguageModel, modelSupports } from "@/lib/ai/providers";
-import { createDocument } from "@/lib/ai/tools/create-document";
-import { getWeather } from "@/lib/ai/tools/get-weather";
-import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
-import { updateDocument } from "@/lib/ai/tools/update-document";
-import { authenticatedRoute } from "@/lib/auth-decorators";
-import { apiLogger } from "@/lib/logger";
+import type { VisibilityType } from '@/components/visibility-selector';
+import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
+import type { ChatModel } from '@/lib/ai/models';
+import { getDefaultModelForUser } from '@/lib/ai/models';
+import { systemPrompt, type RequestHints } from '@/lib/ai/prompts';
+import { getLanguageModel, modelSupports } from '@/lib/ai/providers';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { getWeather } from '@/lib/ai/tools/get-weather';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { authenticatedRoute } from '@/lib/auth-decorators';
+import { apiLogger } from '@/lib/logger';
 
-import { isProductionEnvironment } from "@/lib/constants";
+import { isProductionEnvironment } from '@/lib/constants';
 import {
   createAnonymousUserIfNotExists,
   createStreamId,
@@ -23,13 +23,13 @@ import {
   saveMessages,
   upsertDailyUsage,
   upsertMonthlyUsage,
-} from "@/lib/db/queries";
-import { ChatSDKError } from "@/lib/errors";
-import { validateModelAccess } from "@/lib/security";
-import type { UserType } from "@/lib/supabase/types";
-import type { ChatMessage } from "@/lib/types";
-import { convertToUIMessages, generateUUID } from "@/lib/utils";
-import { geolocation } from "@vercel/functions";
+} from '@/lib/db/queries';
+import { ChatSDKError } from '@/lib/errors';
+import { validateModelAccess } from '@/lib/security';
+import type { UserType } from '@/lib/supabase/types';
+import type { ChatMessage } from '@/lib/types';
+import { convertToUIMessages, generateUUID } from '@/lib/utils';
+import { geolocation } from '@vercel/functions';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -37,14 +37,14 @@ import {
   smoothStream,
   stepCountIs,
   streamText,
-} from "ai";
-import { after } from "next/server";
+} from 'ai';
+import { after } from 'next/server';
 import {
   createResumableStreamContext,
   type ResumableStreamContext,
-} from "resumable-stream";
-import { generateTitleFromUserMessage } from "../../actions";
-import { postRequestBodySchema, type PostRequestBody } from "./schema";
+} from 'resumable-stream';
+import { generateTitleFromUserMessage } from '../../actions';
+import { postRequestBodySchema, type PostRequestBody } from './schema';
 
 export const maxDuration = 60;
 
@@ -57,10 +57,10 @@ export function getStreamContext() {
         waitUntil: after,
       });
     } catch (error: any) {
-      if (error.message.includes("REDIS_URL")) {
+      if (error.message.includes('REDIS_URL')) {
         apiLogger.warn(
           {},
-          "Resumable streams disabled due to missing REDIS_URL"
+          'Resumable streams disabled due to missing REDIS_URL',
         );
       } else {
         apiLogger.error(
@@ -68,7 +68,7 @@ export function getStreamContext() {
             error: error.message,
             stack: error.stack,
           },
-          "Failed to create resumable stream context"
+          'Failed to create resumable stream context',
         );
       }
     }
@@ -84,7 +84,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
     const json = await request.json();
     requestBody = postRequestBodySchema.parse(json);
   } catch (_) {
-    return new ChatSDKError("bad_request:api").toResponse();
+    return new ChatSDKError('bad_request:api').toResponse();
   }
 
   try {
@@ -96,7 +96,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
     }: {
       id: string;
       message: ChatMessage;
-      selectedChatModel: ChatModel["id"];
+      selectedChatModel: ChatModel['id'];
       selectedVisibilityType: VisibilityType;
     } = requestBody;
 
@@ -117,7 +117,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         quota: usageInfo.quota,
         isOverLimit: usageInfo.isOverLimit,
       },
-      "Rate limit check for chat request"
+      'Rate limit check for chat request',
     );
 
     if (usageInfo.isOverLimit) {
@@ -127,9 +127,9 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           currentUsage: usageInfo.used,
           quota: usageInfo.quota,
         },
-        "Blocking user due to rate limit exceeded"
+        'Blocking user due to rate limit exceeded',
       );
-      return new ChatSDKError("rate_limit:chat").toResponse();
+      return new ChatSDKError('rate_limit:chat').toResponse();
     }
 
     // Validate that the user has access to the selected model
@@ -147,7 +147,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           userType,
           allowedModels: allowedModelIds,
         },
-        "User attempted to use unauthorized model, using fallback"
+        'User attempted to use unauthorized model, using fallback',
       );
     }
 
@@ -162,7 +162,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
 
     const chat = await getChatById({ id });
     let isNewChat = false;
-    let chatTitle = "";
+    let chatTitle = '';
 
     if (!chat) {
       isNewChat = true;
@@ -178,7 +178,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
       });
     } else {
       if (chat.userId !== user.id) {
-        return new ChatSDKError("forbidden:chat").toResponse();
+        return new ChatSDKError('forbidden:chat').toResponse();
       }
       chatTitle = chat.title;
     }
@@ -203,7 +203,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         {
           chatId: id,
           id: message.id,
-          role: "user",
+          role: 'user',
           parts: message.parts,
           attachments: [],
           createdAt: new Date(),
@@ -220,24 +220,9 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
       execute: ({ writer: dataStream }) => {
         dataStreamRef = dataStream; // Store reference for onFinish callback
 
-        // Notify about new chat creation if this is a new chat
-        if (isNewChat) {
-          dataStream.write({
-            type: "data-chat-created",
-            data: {
-              id,
-              title: chatTitle,
-              userId: user.id,
-              visibility: selectedVisibilityType,
-              createdAt: new Date().toISOString(),
-            },
-            transient: true,
-          });
-        }
-
         const model = getLanguageModel(effectiveModel);
-        const supportsArtifacts = modelSupports(effectiveModel, "artifacts");
-        const supportsReasoning = modelSupports(effectiveModel, "reasoning");
+        const supportsArtifacts = modelSupports(effectiveModel, 'artifacts');
+        const supportsReasoning = modelSupports(effectiveModel, 'reasoning');
 
         const result = streamText({
           model,
@@ -253,13 +238,13 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           stopWhen: stepCountIs(5),
           experimental_activeTools: supportsArtifacts
             ? [
-                "getWeather",
-                "createDocument",
-                "updateDocument",
-                "requestSuggestions",
+                'getWeather',
+                'createDocument',
+                'updateDocument',
+                'requestSuggestions',
               ]
-            : ["getWeather"],
-          experimental_transform: smoothStream({ chunking: "word" }),
+            : ['getWeather'],
+          experimental_transform: smoothStream({ chunking: 'word' }),
           tools: {
             getWeather,
             createDocument: createDocument({
@@ -292,7 +277,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           },
           experimental_telemetry: {
             isEnabled: isProductionEnvironment,
-            functionId: "stream-text",
+            functionId: 'stream-text',
           },
         });
 
@@ -301,7 +286,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         dataStream.merge(
           result.toUIMessageStream({
             sendReasoning: supportsReasoning,
-          })
+          }),
         );
       },
       generateId: generateUUID,
@@ -322,17 +307,17 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           const getText = (msg: any) =>
             Array.isArray(msg?.parts)
               ? msg.parts
-                  .filter((p: any) => p?.type === "text")
-                  .map((p: any) => String(p.text || ""))
-                  .join("")
-              : "";
+                  .filter((p: any) => p?.type === 'text')
+                  .map((p: any) => String(p.text || ''))
+                  .join('')
+              : '';
 
           const lastUser = [...messages]
             .reverse()
-            .find((m) => m.role === "user");
+            .find((m) => m.role === 'user');
           const lastAssistant = [...messages]
             .reverse()
-            .find((m) => m.role === "assistant");
+            .find((m) => m.role === 'assistant');
 
           const inChars = lastUser ? getText(lastUser).length : 0;
           const outChars = lastAssistant ? getText(lastAssistant).length : 0;
@@ -348,7 +333,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           });
 
           // Track monthly usage for pro users
-          if (userType === "pro") {
+          if (userType === 'pro') {
             await upsertMonthlyUsage({
               userId: user.id,
               messages: 1,
@@ -364,7 +349,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           // Send usage update to client via data stream (if available)
           if (dataStreamRef) {
             dataStreamRef.write({
-              type: "usage-update",
+              type: 'usage-update',
               content: updatedUsageInfo,
             });
           }
@@ -377,12 +362,12 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
               userId: user.id,
               chatId: id,
             },
-            "Usage upsert failed"
+            'Usage upsert failed',
           );
         }
       },
       onError: () => {
-        return "Oops, an error occurred!";
+        return 'Oops, an error occurred!';
       },
     });
 
@@ -391,8 +376,8 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
     if (streamContext) {
       return new Response(
         await streamContext.resumableStream(streamId, () =>
-          stream.pipeThrough(new JsonToSseTransformStream())
-        )
+          stream.pipeThrough(new JsonToSseTransformStream()),
+        ),
       );
     } else {
       return new Response(stream.pipeThrough(new JsonToSseTransformStream()));
@@ -402,24 +387,24 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
       return error.toResponse();
     }
     return new ChatSDKError(
-      "bad_request:api",
-      "Internal server error"
+      'bad_request:api',
+      'Internal server error',
     ).toResponse();
   }
 });
 
 export const DELETE = authenticatedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
+  const id = searchParams.get('id');
 
   if (!id) {
-    return new ChatSDKError("bad_request:api").toResponse();
+    return new ChatSDKError('bad_request:api').toResponse();
   }
 
   const chat = await getChatById({ id });
 
   if (chat.userId !== user.id) {
-    return new ChatSDKError("forbidden:chat").toResponse();
+    return new ChatSDKError('forbidden:chat').toResponse();
   }
 
   const deletedChat = await deleteChatById({ id });
