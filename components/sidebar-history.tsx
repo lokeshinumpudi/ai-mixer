@@ -136,8 +136,9 @@ export function SidebarHistory({ user }: { user: AppUser | null }) {
     // Reduce duplicate requests on mount/focus
     revalidateOnFocus: false,
     revalidateOnReconnect: true,
-    dedupingInterval: 10000,
-    revalidateFirstPage: false,
+    dedupingInterval: 4000,
+    // Important: we want first page to refresh when we invalidate after streaming
+    revalidateFirstPage: true,
   });
 
   const router = useRouter();

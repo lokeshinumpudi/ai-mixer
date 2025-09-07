@@ -24,6 +24,26 @@ export function DataStreamHandler() {
     mutate((key) => typeof key === "string" && key.startsWith("/api/history"));
   };
 
+  // Optimistically update sidebar history title for the current chat
+  const optimisticUpdateHistoryTitle = (newTitle: string) => {
+    if (!chatId) return;
+    mutate(
+      (key) => typeof key === "string" && key.startsWith("/api/history"),
+      (currentPages: any) => {
+        if (!Array.isArray(currentPages)) return currentPages;
+        return currentPages.map((page) => ({
+          ...page,
+          chats: Array.isArray(page?.chats)
+            ? page.chats.map((c: any) =>
+                c?.id === chatId ? { ...c, title: newTitle } : c
+              )
+            : page?.chats,
+        }));
+      },
+      { revalidate: true }
+    );
+  };
+
   uiLogger.debug(
     {
       chatId: pathname.startsWith("/chat/") ? pathname.slice(6) : "none",
@@ -106,7 +126,13 @@ export function DataStreamHandler() {
       }
 
       // When title is produced or run finishes, refresh history to update chat title
-      if (delta.type === "data-title" || delta.type === "data-finish") {
+      if (delta.type === "data-title") {
+        if (typeof delta.data === "string" && delta.data.length > 0) {
+          optimisticUpdateHistoryTitle(delta.data);
+        } else {
+          invalidateHistoryCache();
+        }
+      } else if (delta.type === "data-finish") {
         invalidateHistoryCache();
       }
 
