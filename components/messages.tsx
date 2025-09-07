@@ -202,7 +202,7 @@ function PureMessages({
   return (
     <div
       ref={messagesContainerRef}
-      className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-4 relative"
+      className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-28 md:pb-40 relative"
     >
       {/* Invisible element at top for scroll detection */}
       {hasMore && (
@@ -286,8 +286,8 @@ function PureMessages({
                   "w-full mx-auto",
                   // For single model, use full width on mobile, max-width on desktop
                   run.modelIds.length === 1
-                    ? "max-w-[100vw] px-2 md:max-w-4xl md:px-4"
-                    : "max-w-5xl px-4"
+                    ? "max-w-full px-2 md:max-w-4xl md:px-4"
+                    : "max-w-full px-2 md:max-w-5xl md:px-4"
                 )}
               >
                 <CompareMessage
@@ -338,8 +338,8 @@ function PureMessages({
             "w-full mx-auto",
             // For single model, use full width on mobile, max-width on desktop
             activeCompareMessage.modelIds.length === 1
-              ? "max-w-[100vw] px-2 md:max-w-4xl md:px-4"
-              : "max-w-5xl px-4"
+              ? "max-w-full px-2 md:max-w-4xl md:px-4"
+              : "max-w-full px-2 md:max-w-5xl md:px-4"
           )}
         >
           <CompareMessage

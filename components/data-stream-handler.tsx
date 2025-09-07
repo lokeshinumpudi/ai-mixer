@@ -8,6 +8,7 @@ import { artifactDefinitions } from "./artifact";
 import { useDataStream } from "./data-stream-provider";
 import { upgradeToast } from "./toast";
 
+import { sidebarHistoryActions } from "@/hooks/use-sidebar-history";
 import { mutate } from "swr";
 
 export function DataStreamHandler() {
@@ -21,27 +22,13 @@ export function DataStreamHandler() {
   };
 
   const invalidateHistoryCache = () => {
-    mutate((key) => typeof key === "string" && key.startsWith("/api/history"));
+    sidebarHistoryActions.refresh();
   };
 
   // Optimistically update sidebar history title for the current chat
   const optimisticUpdateHistoryTitle = (newTitle: string) => {
     if (!chatId) return;
-    mutate(
-      (key) => typeof key === "string" && key.startsWith("/api/history"),
-      (currentPages: any) => {
-        if (!Array.isArray(currentPages)) return currentPages;
-        return currentPages.map((page) => ({
-          ...page,
-          chats: Array.isArray(page?.chats)
-            ? page.chats.map((c: any) =>
-                c?.id === chatId ? { ...c, title: newTitle } : c
-              )
-            : page?.chats,
-        }));
-      },
-      { revalidate: true }
-    );
+    sidebarHistoryActions.updateChatTitle(chatId, newTitle);
   };
 
   uiLogger.debug(
@@ -133,6 +120,16 @@ export function DataStreamHandler() {
           invalidateHistoryCache();
         }
       } else if (delta.type === "data-finish") {
+        invalidateHistoryCache();
+      } else if (delta.type === "data-chat-created") {
+        // New chat was created, refresh the sidebar to show it
+        uiLogger.debug(
+          {
+            chatId,
+            chatData: delta.data,
+          },
+          "New chat created, refreshing sidebar"
+        );
         invalidateHistoryCache();
       }
 

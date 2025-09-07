@@ -1,12 +1,12 @@
-import { getAllowedModelIdsForUser } from '@/lib/ai/entitlements';
-import { systemPrompt, type RequestHints } from '@/lib/ai/prompts';
-import { getLanguageModel } from '@/lib/ai/providers';
-import { authenticatedRoute } from '@/lib/auth-decorators';
+import { getAllowedModelIdsForUser } from "@/lib/ai/entitlements";
+import { systemPrompt, type RequestHints } from "@/lib/ai/prompts";
+import { getLanguageModel } from "@/lib/ai/providers";
+import { authenticatedRoute } from "@/lib/auth-decorators";
 import {
   registerStreamController,
   unregisterStreamController,
-} from '@/lib/cache/stream-registry';
-import { COMPARE_MAX_MODELS } from '@/lib/constants';
+} from "@/lib/cache/stream-registry";
+import { COMPARE_MAX_MODELS } from "@/lib/constants";
 import {
   batchInsertChatUsage,
   calculateCost,
@@ -24,28 +24,28 @@ import {
   saveChat,
   saveMessages,
   startCompareResultInference,
-} from '@/lib/db/queries';
-import { ChatSDKError } from '@/lib/errors';
-import { apiLogger } from '@/lib/logger';
-import type { UserType } from '@/lib/supabase/types';
-import { convertToUIMessages, generateUUID } from '@/lib/utils';
-import { geolocation } from '@vercel/functions';
-import { convertToModelMessages, streamText } from 'ai';
-import { compareStreamRequestSchema } from '../schema';
+} from "@/lib/db/queries";
+import { ChatSDKError } from "@/lib/errors";
+import { apiLogger } from "@/lib/logger";
+import type { UserType } from "@/lib/supabase/types";
+import { convertToUIMessages, generateUUID } from "@/lib/utils";
+import { geolocation } from "@vercel/functions";
+import { convertToModelMessages, streamText } from "ai";
+import { compareStreamRequestSchema } from "../schema";
 
 export const maxDuration = 60;
 
 // SSE event types for compare streaming
 interface CompareSSEEvent {
   type:
-    | 'run_start'
-    | 'model_start'
-    | 'delta'
-    | 'reasoning_delta'
-    | 'model_end'
-    | 'model_error'
-    | 'run_end'
-    | 'heartbeat';
+    | "run_start"
+    | "model_start"
+    | "delta"
+    | "reasoning_delta"
+    | "model_end"
+    | "model_error"
+    | "run_end"
+    | "heartbeat";
   runId?: string;
   chatId?: string;
   modelId?: string;
@@ -72,7 +72,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
       userType: user.userType,
       url: request.url,
     },
-    'Compare stream request started',
+    "Compare stream request started"
   );
 
   let requestBody: any;
@@ -80,7 +80,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
 
   try {
     const json = await request.json();
-    apiLogger.debug({ requestBody: json }, 'Raw request body received');
+    apiLogger.debug({ requestBody: json }, "Raw request body received");
     requestBody = compareStreamRequestSchema.parse(json);
     chatId = requestBody.chatId; // Store for use in catch blocks
     apiLogger.info(
@@ -90,7 +90,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         promptLength: requestBody.prompt?.length || 0,
         models: requestBody.modelIds,
       },
-      'Request parsed successfully',
+      "Request parsed successfully"
     );
   } catch (error) {
     const parsedError =
@@ -101,11 +101,11 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         userId: user.id,
         stack: parsedError.stack,
       },
-      'Request parsing failed',
+      "Request parsing failed"
     );
     return new ChatSDKError(
-      'bad_request:api',
-      'Invalid request body',
+      "bad_request:api",
+      "Invalid request body"
     ).toResponse();
   }
 
@@ -120,7 +120,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         models: modelIds,
         userId: user.id,
       },
-      'Processing compare stream request',
+      "Processing compare stream request"
     );
 
     // Validate model count
@@ -129,7 +129,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         modelCount: modelIds.length,
         maxModels: COMPARE_MAX_MODELS,
       },
-      'Validating model count',
+      "Validating model count"
     );
 
     if (modelIds.length > COMPARE_MAX_MODELS) {
@@ -139,11 +139,11 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           maxAllowed: COMPARE_MAX_MODELS,
           userId: user.id,
         },
-        'Too many models requested',
+        "Too many models requested"
       );
       return new ChatSDKError(
-        'bad_request:api',
-        `Maximum ${COMPARE_MAX_MODELS} models allowed for comparison`,
+        "bad_request:api",
+        `Maximum ${COMPARE_MAX_MODELS} models allowed for comparison`
       ).toResponse();
     }
 
@@ -153,7 +153,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         userId: user.id,
         userType,
       },
-      'Checking user usage and limits',
+      "Checking user usage and limits"
     );
     const usageInfo = await getUserUsageAndLimits({
       userId: user.id,
@@ -168,7 +168,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         userType,
         remaining: usageInfo.quota - usageInfo.used,
       },
-      'User usage information retrieved',
+      "User usage information retrieved"
     );
 
     // Check if user has enough quota for all models
@@ -184,7 +184,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           userType,
           isAnonymous: user.is_anonymous,
         },
-        'Rate limit exceeded for compare request',
+        "Rate limit exceeded for compare request"
       );
 
       // For anonymous users, suggest login instead of showing generic rate limit error
@@ -196,18 +196,18 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             requiredQuota,
             currentUsage: usageInfo.used,
           },
-          'Anonymous user hit rate limit on compare mode - prompting login',
+          "Anonymous user hit rate limit on compare mode - prompting login"
         );
         return new ChatSDKError(
-          'login_required:compare',
-          'Sign in to unlock unlimited model comparisons and higher limits',
+          "login_required:compare",
+          "Sign in to unlock unlimited model comparisons and higher limits"
         ).toResponse();
       }
 
       // For authenticated users, show standard rate limit error
       return new ChatSDKError(
-        'rate_limit:chat',
-        'Insufficient quota for compare run',
+        "rate_limit:chat",
+        "Insufficient quota for compare run"
       ).toResponse();
     }
 
@@ -218,7 +218,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         chatId,
         userId: user.id,
       },
-      'Validating model access',
+      "Validating model access"
     );
     const allowedModelIds = getAllowedModelIdsForUser(userType);
     apiLogger.debug(
@@ -227,18 +227,18 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         userType,
         chatId,
       },
-      'Retrieved allowed models for user',
+      "Retrieved allowed models for user"
     );
     apiLogger.debug(
       {
         requestedModels: modelIds,
         chatId,
       },
-      'Models requested in compare',
+      "Models requested in compare"
     );
 
     const unauthorizedModels = modelIds.filter(
-      (id: string) => !allowedModelIds.includes(id),
+      (id: string) => !allowedModelIds.includes(id)
     );
 
     if (unauthorizedModels.length > 0) {
@@ -251,11 +251,11 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           chatId,
           userId: user.id,
         },
-        'Unauthorized models requested',
+        "Unauthorized models requested"
       );
       return new ChatSDKError(
-        'forbidden:model',
-        `Access denied to models: ${unauthorizedModels.join(', ')}`,
+        "forbidden:model",
+        `Access denied to models: ${unauthorizedModels.join(", ")}`
       ).toResponse();
     }
 
@@ -266,7 +266,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         userType,
         chatId,
       },
-      'All models authorized for compare',
+      "All models authorized for compare"
     );
 
     // Ensure user exists in our database before creating/accessing chats
@@ -277,7 +277,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         email: user.email,
         chatId,
       },
-      'Ensuring user exists in database',
+      "Ensuring user exists in database"
     );
     if (user.is_anonymous) {
       apiLogger.debug(
@@ -285,7 +285,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           userId: user.id,
           chatId,
         },
-        'Creating anonymous user',
+        "Creating anonymous user"
       );
       await createAnonymousUserIfNotExists(user.id);
     } else if (user.email) {
@@ -295,7 +295,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           email: user.email,
           chatId,
         },
-        'Creating OAuth user',
+        "Creating OAuth user"
       );
     }
 
@@ -305,51 +305,55 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         chatId,
         userId: user.id,
       },
-      'Checking if chat exists',
+      "Checking if chat exists"
     );
     const chat = await getChatById({ id: chatId });
+    let isNewChat = false;
+    let chatTitle = "";
+
     if (!chat) {
+      isNewChat = true;
       apiLogger.info(
         {
           chatId,
           userId: user.id,
           promptLength: prompt.length,
         },
-        'Chat not found, creating new chat',
+        "Chat not found, creating new chat"
       );
       // Import generateTitleFromUserMessage for chat creation
-      const { generateTitleFromUserMessage } = await import('../../../actions');
+      const { generateTitleFromUserMessage } = await import("../../../actions");
 
-      const title = await generateTitleFromUserMessage({
+      chatTitle = await generateTitleFromUserMessage({
         message: {
-          id: 'temp',
-          role: 'user',
-          parts: [{ type: 'text', text: prompt }],
+          id: "temp",
+          role: "user",
+          parts: [{ type: "text", text: prompt }],
         },
       });
 
       apiLogger.debug(
         {
           chatId,
-          title,
+          title: chatTitle,
           userId: user.id,
         },
-        'Generated title for new chat',
+        "Generated title for new chat"
       );
 
       await saveChat({
         id: chatId,
         userId: user.id,
-        title,
-        visibility: 'private', // Default to private for compare runs
+        title: chatTitle,
+        visibility: "private", // Default to private for compare runs
       });
       apiLogger.info(
         {
           chatId,
-          title,
+          title: chatTitle,
           userId: user.id,
         },
-        'Chat created successfully',
+        "Chat created successfully"
       );
     } else {
       apiLogger.debug(
@@ -357,7 +361,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           chatId,
           userId: user.id,
         },
-        'Chat exists, proceeding with existing chat',
+        "Chat exists, proceeding with existing chat"
       );
       // Validate chat ownership
       if (chat.userId !== user.id) {
@@ -367,11 +371,11 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             chatUserId: chat.userId,
             requestUserId: user.id,
           },
-          'Chat ownership mismatch',
+          "Chat ownership mismatch"
         );
         return new ChatSDKError(
-          'forbidden:chat',
-          'Access denied to chat',
+          "forbidden:chat",
+          "Access denied to chat"
         ).toResponse();
       }
     }
@@ -383,7 +387,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         userId: user.id,
         existingRunId,
       },
-      'Creating or reusing compare run',
+      "Creating or reusing compare run"
     );
     let runId = existingRunId;
     if (!runId) {
@@ -393,7 +397,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           userId: user.id,
           modelCount: modelIds.length,
         },
-        'No existing runId provided, creating new run',
+        "No existing runId provided, creating new run"
       );
       const { run } = await createCompareRun({
         userId: user.id,
@@ -409,7 +413,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           userId: user.id,
           modelCount: modelIds.length,
         },
-        'Created new compare run',
+        "Created new compare run"
       );
     } else {
       apiLogger.debug(
@@ -418,7 +422,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           chatId,
           userId: user.id,
         },
-        'Reusing existing compare run',
+        "Reusing existing compare run"
       );
     }
 
@@ -437,7 +441,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         chatId,
         userId: user.id,
       },
-      'Loading chat history and user preferences for compare run',
+      "Loading chat history and user preferences for compare run"
     );
     try {
       // Load messages and user settings in parallel
@@ -457,14 +461,14 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           messageCount: dbMessages.length,
           userId: user.id,
         },
-        'Loaded chat history from database',
+        "Loaded chat history from database"
       );
 
       // Create user message object for the new prompt
       const userMessage = {
         id: generateUUID(),
-        role: 'user' as const,
-        parts: [{ type: 'text' as const, text: prompt }],
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: prompt }],
         metadata: {
           createdAt: new Date().toISOString(),
         },
@@ -479,7 +483,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           {
             chatId,
             id: userMessage.id,
-            role: 'user',
+            role: "user",
             parts: userMessage.parts,
             attachments: [],
             createdAt: new Date(),
@@ -501,12 +505,12 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           chatId,
           userId: user.id,
         },
-        'Failed to load prior messages for compare run, using fallback',
+        "Failed to load prior messages for compare run, using fallback"
       );
       // Fallback: just use the prompt as user message
-      allMessages = [{ role: 'user', content: prompt }];
+      allMessages = [{ role: "user", content: prompt }];
       uiMessagesWithMetadata = [
-        { role: 'user', parts: [{ type: 'text', text: prompt }] },
+        { role: "user", parts: [{ type: "text", text: prompt }] },
       ];
     }
 
@@ -517,7 +521,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         chatId,
         modelCount: modelIds.length,
       },
-      'Setting up SSE stream for compare run',
+      "Setting up SSE stream for compare run"
     );
     const stream = new ReadableStream({
       start(controller) {
@@ -526,39 +530,57 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             runId,
             chatId,
           },
-          'Starting SSE stream',
+          "Starting SSE stream"
         );
         // Send run start event
         controller.enqueue(
           new TextEncoder().encode(
             createSSEMessage({
-              type: 'run_start',
+              type: "run_start",
               runId,
               chatId,
               models: modelIds,
-            }),
-          ),
+            })
+          )
         );
+
+        // Send new chat notification if this is a new chat
+        if (isNewChat) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({
+                type: "data-chat-created",
+                data: {
+                  id: chatId,
+                  title: chatTitle,
+                  userId: user.id,
+                  visibility: "private",
+                  createdAt: new Date().toISOString(),
+                },
+              })}\n\n`
+            )
+          );
+        }
         apiLogger.debug(
           {
             runId,
             chatId,
             modelCount: modelIds.length,
           },
-          'Sent run_start SSE event',
+          "Sent run_start SSE event"
         );
 
         // Build model-specific context with intelligent truncation
         const buildModelSpecificContext = (
           targetModelId: string,
-          uiMessages: any[],
+          uiMessages: any[]
         ) => {
           // Filter messages to only include:
           // 1. User messages (always relevant)
           // 2. Assistant messages from the SAME model (avoid competitor responses)
           const filteredUIMessages = uiMessages.filter((msg) => {
-            if (msg.role === 'user') return true;
-            if (msg.role === 'assistant') {
+            if (msg.role === "user") return true;
+            if (msg.role === "assistant") {
               // Check if this assistant message came from the target model
               const msgMetadata = msg.metadata;
               return msgMetadata?.modelId === targetModelId;
@@ -594,14 +616,14 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           } | null = null;
 
           for (const msg of messages) {
-            if (msg.role === 'user') {
+            if (msg.role === "user") {
               // Start new pair
               if (currentPair) pairs.push(currentPair);
               currentPair = {
                 user: msg,
                 tokenEstimate: estimateTokens(getMessageText(msg)),
               };
-            } else if (msg.role === 'assistant' && currentPair) {
+            } else if (msg.role === "assistant" && currentPair) {
               // Complete current pair
               currentPair.assistant = msg;
               currentPair.tokenEstimate += estimateTokens(getMessageText(msg));
@@ -612,7 +634,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           // If total estimated tokens are within limit, return all
           const totalTokens = pairs.reduce(
             (sum, pair) => sum + pair.tokenEstimate,
-            0,
+            0
           );
           if (totalTokens <= OPTIMAL_CONTEXT_TOKENS) {
             return messages;
@@ -659,11 +681,11 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
 
         // Extract text content from message
         const getMessageText = (message: any): string => {
-          if (!message.parts) return '';
+          if (!message.parts) return "";
           return message.parts
-            .filter((p: any) => p.type === 'text')
-            .map((p: any) => p.text || '')
-            .join(' ');
+            .filter((p: any) => p.type === "text")
+            .map((p: any) => p.text || "")
+            .join(" ");
         };
 
         // Start processing all models in parallel
@@ -674,7 +696,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             modelCount: modelIds.length,
             models: modelIds,
           },
-          'Starting parallel processing for models',
+          "Starting parallel processing for models"
         );
 
         // CRITICAL: Batch usage tracking for cost efficiency
@@ -694,7 +716,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
               runId,
               chatId,
             },
-            'Setting up streaming for model',
+            "Setting up streaming for model"
           );
           const abortController = new AbortController();
 
@@ -705,9 +727,9 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                   modelId,
                   chatId,
                 },
-                'Run ID is required for model processing',
+                "Run ID is required for model processing"
               );
-              throw new Error('Run ID is required');
+              throw new Error("Run ID is required");
             }
 
             // Register for cancellation
@@ -716,7 +738,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 modelId,
                 runId,
               },
-              'Registering controller for model',
+              "Registering controller for model"
             );
             registerStreamController(runId, modelId, abortController);
 
@@ -731,12 +753,12 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             controller.enqueue(
               new TextEncoder().encode(
                 createSSEMessage({
-                  type: 'model_start',
+                  type: "model_start",
                   runId,
                   modelId,
                   serverStartedAt: serverStartedAt.toISOString(),
-                }),
-              ),
+                })
+              )
             );
 
             apiLogger.debug(
@@ -744,7 +766,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 modelId,
                 runId,
               },
-              'Getting language model',
+              "Getting language model"
             );
             const model = getLanguageModel(modelId);
 
@@ -755,11 +777,11 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 runId,
                 messageCount: uiMessagesWithMetadata.length,
               },
-              'Building model-specific context',
+              "Building model-specific context"
             );
             const modelSpecificMessages = buildModelSpecificContext(
               modelId,
-              uiMessagesWithMetadata,
+              uiMessagesWithMetadata
             );
             apiLogger.debug(
               {
@@ -768,7 +790,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 originalCount: uiMessagesWithMetadata.length,
                 filteredCount: modelSpecificMessages.length,
               },
-              'Context built for model',
+              "Context built for model"
             );
 
             // Stream with no tools (plain text only for compare)
@@ -777,7 +799,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 modelId,
                 runId,
               },
-              'Starting streamText for model',
+              "Starting streamText for model"
             );
             const result = streamText({
               model,
@@ -796,21 +818,21 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
               tools: {},
             });
             console.log(
-              `[COMPARE_STREAM_MODEL] streamText initialized for ${modelId}`,
+              `[COMPARE_STREAM_MODEL] streamText initialized for ${modelId}`
             );
 
-            let fullContent = '';
-            let reasoningContent = '';
+            let fullContent = "";
+            let reasoningContent = "";
 
             // Stream the full result to capture both text and reasoning
             console.log(
-              `[COMPARE_STREAM_MODEL] Starting streaming loop for ${modelId}`,
+              `[COMPARE_STREAM_MODEL] Starting streaming loop for ${modelId}`
             );
             let partCount = 0;
             for await (const part of result.fullStream) {
               if (abortController.signal.aborted) {
                 console.log(
-                  `[COMPARE_STREAM_MODEL] Stream aborted for ${modelId}`,
+                  `[COMPARE_STREAM_MODEL] Stream aborted for ${modelId}`
                 );
                 break;
               }
@@ -818,37 +840,37 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
               partCount++;
               if (partCount % 10 === 0) {
                 console.log(
-                  `[COMPARE_STREAM_MODEL] Processed ${partCount} parts for ${modelId}`,
+                  `[COMPARE_STREAM_MODEL] Processed ${partCount} parts for ${modelId}`
                 );
               }
 
-              if (part.type === 'text') {
+              if (part.type === "text") {
                 fullContent += part.text;
 
                 // Send text delta to client
                 controller.enqueue(
                   new TextEncoder().encode(
                     createSSEMessage({
-                      type: 'delta',
+                      type: "delta",
                       runId,
                       modelId,
                       textDelta: part.text,
-                    }),
-                  ),
+                    })
+                  )
                 );
-              } else if (part.type === 'reasoning') {
+              } else if (part.type === "reasoning") {
                 reasoningContent += part.text;
 
                 // Send reasoning delta to client
                 controller.enqueue(
                   new TextEncoder().encode(
                     createSSEMessage({
-                      type: 'reasoning_delta',
+                      type: "reasoning_delta",
                       runId,
                       modelId,
                       reasoningDelta: part.text,
-                    }),
-                  ),
+                    })
+                  )
                 );
               }
 
@@ -858,7 +880,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
 
             if (!abortController.signal.aborted) {
               console.log(
-                `[COMPARE_STREAM_MODEL] Completing ${modelId}: ${fullContent.length} chars content, ${reasoningContent.length} chars reasoning`,
+                `[COMPARE_STREAM_MODEL] Completing ${modelId}: ${fullContent.length} chars content, ${reasoningContent.length} chars reasoning`
               );
 
               // Calculate server-side timing
@@ -867,7 +889,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 serverCompletedAt.getTime() - serverStartedAt.getTime();
 
               console.log(
-                `[COMPARE_STREAM_MODEL] ${modelId} inference time: ${inferenceTimeMs}ms`,
+                `[COMPARE_STREAM_MODEL] ${modelId} inference time: ${inferenceTimeMs}ms`
               );
 
               // Complete the result with timing data
@@ -886,22 +908,22 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
               });
 
               console.log(
-                `[COMPARE_STREAM_MODEL] ${modelId} result completed successfully`,
+                `[COMPARE_STREAM_MODEL] ${modelId} result completed successfully`
               );
 
               // Send model end event with server timing
               controller.enqueue(
                 new TextEncoder().encode(
                   createSSEMessage({
-                    type: 'model_end',
+                    type: "model_end",
                     runId,
                     modelId,
                     usage: usage1,
                     serverStartedAt: serverStartedAt.toISOString(),
                     serverCompletedAt: serverCompletedAt.toISOString(),
                     inferenceTimeMs,
-                  }),
-                ),
+                  })
+                )
               );
 
               // Collect usage for batch processing (cost-efficient approach)
@@ -927,7 +949,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                     tokensOut,
                     cost: calculateCost(modelId, usage),
                   },
-                  'Usage collected for batch processing',
+                  "Usage collected for batch processing"
                 );
               }
             }
@@ -942,7 +964,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 chatId,
                 runId,
               },
-              'Model failed during streaming',
+              "Model failed during streaming"
             );
 
             if (!abortController.signal.aborted) {
@@ -952,14 +974,14 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                   chatId,
                   runId,
                 },
-                'Marking model as failed in database',
+                "Marking model as failed in database"
               );
 
               // Mark as failed in database
               await failCompareResult({
                 runId,
                 modelId,
-                error: error.message || 'Unknown error',
+                error: error.message || "Unknown error",
               });
 
               console.log(`[COMPARE_STREAM_ERROR] ${modelId} marked as failed`);
@@ -968,12 +990,12 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
               controller.enqueue(
                 new TextEncoder().encode(
                   createSSEMessage({
-                    type: 'model_error',
+                    type: "model_error",
                     runId,
                     modelId,
-                    error: error.message || 'Unknown error',
-                  }),
-                ),
+                    error: error.message || "Unknown error",
+                  })
+                )
               );
             }
           } finally {
@@ -998,10 +1020,10 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                     recordCount: usageBatch.length,
                     totalCost: usageBatch.reduce(
                       (sum, record) => sum + record.cost,
-                      0,
+                      0
                     ),
                   },
-                  'Batch usage tracking completed successfully',
+                  "Batch usage tracking completed successfully"
                 );
               } catch (error) {
                 const parsedError =
@@ -1014,7 +1036,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                     chatId,
                     recordCount: usageBatch.length,
                   },
-                  'Batch usage tracking failed',
+                  "Batch usage tracking failed"
                 );
                 // Don't fail the entire request if usage tracking fails
               }
@@ -1030,10 +1052,10 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                 // Create model-specific assistant messages for efficient context
                 // Each model's response is saved separately to avoid token waste
                 for (const result of completedRun.results) {
-                  if (result.status === 'completed' && result.content) {
+                  if (result.status === "completed" && result.content) {
                     const modelSpecificMessage = {
                       id: generateUUID(),
-                      role: 'assistant' as const,
+                      role: "assistant" as const,
                       parts: [] as any[],
                       metadata: {
                         compareRunId: runId,
@@ -1045,20 +1067,20 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                     // Add reasoning if present
                     if (result.reasoning) {
                       modelSpecificMessage.parts.push({
-                        type: 'reasoning' as const,
+                        type: "reasoning" as const,
                         text: result.reasoning,
                       });
                     }
 
                     // Add main content without model attribution (since it's in metadata)
                     modelSpecificMessage.parts.push({
-                      type: 'text' as const,
+                      type: "text" as const,
                       text: result.content,
                     });
 
                     // Add metadata as a special part for identification
                     modelSpecificMessage.parts.push({
-                      type: 'metadata' as const,
+                      type: "metadata" as const,
                       compareRunId: runId,
                       modelId: result.modelId,
                       createdAt: new Date().toISOString(),
@@ -1070,7 +1092,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
                         {
                           chatId,
                           id: modelSpecificMessage.id,
-                          role: 'assistant',
+                          role: "assistant",
                           parts: modelSpecificMessage.parts,
                           attachments: [], // Keep attachments empty for now
                           createdAt: new Date(),
@@ -1082,8 +1104,8 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
               }
             } catch (error) {
               console.warn(
-                'Failed to save assistant message for conversation continuity:',
-                error,
+                "Failed to save assistant message for conversation continuity:",
+                error
               );
               // Don't fail the entire request if this fails
             }
@@ -1092,16 +1114,16 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
             controller.enqueue(
               new TextEncoder().encode(
                 createSSEMessage({
-                  type: 'run_end',
+                  type: "run_end",
                   runId,
-                }),
-              ),
+                })
+              )
             );
 
             controller.close();
           })
           .catch(async (error) => {
-            console.error('Compare run failed:', error);
+            console.error("Compare run failed:", error);
 
             // Cancel the run in database
             await cancelCompareRun({ runId });
@@ -1113,7 +1135,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         const heartbeatInterval = setInterval(() => {
           try {
             controller.enqueue(
-              new TextEncoder().encode(createSSEMessage({ type: 'heartbeat' })),
+              new TextEncoder().encode(createSSEMessage({ type: "heartbeat" }))
             );
           } catch (err) {
             clearInterval(heartbeatInterval);
@@ -1130,7 +1152,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         };
 
         // Handle client disconnect
-        request.signal?.addEventListener('abort', cleanup);
+        request.signal?.addEventListener("abort", cleanup);
 
         return () => cleanup();
       },
@@ -1142,16 +1164,16 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         chatId,
         modelCount: modelIds.length,
       },
-      'Returning SSE stream for compare run',
+      "Returning SSE stream for compare run"
     );
     return new Response(stream, {
       headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST",
+        "Access-Control-Allow-Headers": "Content-Type",
       },
     });
   } catch (error) {
@@ -1164,7 +1186,7 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
         userId: user.id,
         chatId,
       },
-      'Fatal error in compare stream',
+      "Fatal error in compare stream"
     );
 
     if (error instanceof ChatSDKError) {
@@ -1174,14 +1196,14 @@ export const POST = authenticatedRoute(async (request, _context, user) => {
           userId: user.id,
           chatId,
         },
-        'Returning ChatSDKError response',
+        "Returning ChatSDKError response"
       );
       return error.toResponse();
     }
 
     return new ChatSDKError(
-      'bad_request:api',
-      'Internal server error',
+      "bad_request:api",
+      "Internal server error"
     ).toResponse();
   }
 });

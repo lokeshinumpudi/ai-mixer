@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import type { UIMessage } from 'ai';
-import cx from 'classnames';
-import type React from 'react';
+import type { UIMessage } from "ai";
+import cx from "classnames";
+import type React from "react";
 import {
   memo,
   useCallback,
@@ -12,50 +12,50 @@ import {
   type ChangeEvent,
   type Dispatch,
   type SetStateAction,
-} from 'react';
-import { toast } from 'sonner';
-import useSWR from 'swr';
-import { useLocalStorage, useWindowSize } from 'usehooks-ts';
+} from "react";
+import { toast } from "sonner";
+import useSWR from "swr";
+import { useLocalStorage, useWindowSize } from "usehooks-ts";
 
-import { useModels } from '@/hooks/use-models';
-import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
-import { uiLogger } from '@/lib/logger';
-import type { AppUser } from '@/lib/supabase/types';
-import type { Attachment, ChatMessage } from '@/lib/types';
-import type { UseChatHelpers } from '@ai-sdk/react';
-import equal from 'fast-deep-equal';
-import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { ArrowUpIcon, PaperclipIcon, StopIcon } from './icons';
-import { ModelPicker } from './model-picker';
-import { PreviewAttachment } from './preview-attachment';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import { MobileFriendlyTooltip } from './ui/mobile-friendly-tooltip';
-import { Textarea } from './ui/textarea';
+import { useModels } from "@/hooks/use-models";
+import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
+import { uiLogger } from "@/lib/logger";
+import type { AppUser } from "@/lib/supabase/types";
+import type { Attachment, ChatMessage } from "@/lib/types";
+import type { UseChatHelpers } from "@ai-sdk/react";
+import equal from "fast-deep-equal";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowDown, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowUpIcon, PaperclipIcon, StopIcon } from "./icons";
+import { ModelPicker } from "./model-picker";
+import { PreviewAttachment } from "./preview-attachment";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { MobileFriendlyTooltip } from "./ui/mobile-friendly-tooltip";
+import { Textarea } from "./ui/textarea";
 
 // Provider-based color mapping for model chips
 function getModelChipColor(modelId: string): string {
-  const provider = modelId.split('/')[0]?.toLowerCase();
+  const provider = modelId.split("/")[0]?.toLowerCase();
 
   switch (provider) {
-    case 'openai':
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
-    case 'anthropic':
-      return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800';
-    case 'google':
-      return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
-    case 'meta':
-      return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
-    case 'mistral':
-      return 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800';
-    case 'cohere':
-      return 'bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800';
-    case 'perplexity':
-      return 'bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800';
+    case "openai":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800";
+    case "anthropic":
+      return "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800";
+    case "google":
+      return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800";
+    case "meta":
+      return "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800";
+    case "mistral":
+      return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800";
+    case "cohere":
+      return "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800";
+    case "perplexity":
+      return "bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800";
     default:
-      return 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-800';
+      return "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-900/30 dark:text-slate-300 dark:border-slate-800";
   }
 }
 
@@ -85,15 +85,15 @@ function PureMultimodalInput({
   chatId: string;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
-  status: UseChatHelpers<ChatMessage>['status'];
+  status: UseChatHelpers<ChatMessage>["status"];
   stop: () => void;
   attachments: Array<Attachment>;
   setAttachments: Dispatch<SetStateAction<Array<Attachment>>>;
   messages: Array<UIMessage>;
-  setMessages: UseChatHelpers<ChatMessage>['setMessages'];
-  sendMessage?: UseChatHelpers<ChatMessage>['sendMessage'];
+  setMessages: UseChatHelpers<ChatMessage>["setMessages"];
+  sendMessage?: UseChatHelpers<ChatMessage>["sendMessage"];
   className?: string;
-  selectedVisibilityType: 'private' | 'public';
+  selectedVisibilityType: "private" | "public";
   user: AppUser | null;
   selectedModelId: string;
   selectedModelIds?: string[];
@@ -110,15 +110,15 @@ function PureMultimodalInput({
 
   // Avoid fetching usage on the new-chat root page where no rate decision is needed yet
   const shouldFetchUsage =
-    typeof window !== 'undefined' && window.location.pathname !== '/';
+    typeof window !== "undefined" && window.location.pathname !== "/";
   const { data: usageData } = useSWR(
-    shouldFetchUsage ? '/api/usage?page=1&limit=100' : null,
+    shouldFetchUsage ? "/api/usage?page=1&limit=100" : null,
     (url) => fetch(url).then((res) => res.json()),
     {
       revalidateOnFocus: false,
       // Prefer event-driven cache invalidation from DataStreamHandler over polling
       refreshInterval: 0,
-    },
+    }
   );
   const { width } = useWindowSize();
 
@@ -130,7 +130,7 @@ function PureMultimodalInput({
 
   const adjustHeight = () => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${
         textareaRef.current.scrollHeight + 2
       }px`;
@@ -139,21 +139,21 @@ function PureMultimodalInput({
 
   const resetHeight = () => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = '98px';
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = "98px";
     }
   };
 
   const [localStorageInput, setLocalStorageInput] = useLocalStorage(
-    'input',
-    '',
+    "input",
+    ""
   );
 
   useEffect(() => {
     if (textareaRef.current) {
       const domValue = textareaRef.current.value;
       // Prefer DOM value over localStorage to handle hydration
-      const finalValue = domValue || localStorageInput || '';
+      const finalValue = domValue || localStorageInput || "";
       setInput(finalValue);
       adjustHeight();
     }
@@ -185,26 +185,26 @@ function PureMultimodalInput({
     const quota = usageData?.limits?.quota || 50;
     const isOverLimit = todayUsed >= quota;
     if (isOverLimit) {
-      toast.error('Message limit reached', {
+      toast.error("Message limit reached", {
         description: `You've reached your ${
-          usageData?.limits?.type || 'daily'
+          usageData?.limits?.type || "daily"
         } limit. Upgrade to continue.`,
         action: {
-          label: 'Upgrade',
+          label: "Upgrade",
           onClick: () => {
             const paymentUrl =
-              process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+              process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
             if (paymentUrl) {
-              window.open(paymentUrl, '_blank');
+              window.open(paymentUrl, "_blank");
             } else {
               uiLogger.error(
                 {
                   chatId,
                   selectedModelIds,
                 },
-                'Payment URL not configured',
+                "Payment URL not configured"
               );
-              router.push('/settings');
+              router.push("/settings");
             }
           },
         },
@@ -212,7 +212,7 @@ function PureMultimodalInput({
       return;
     }
 
-    window.history.replaceState({}, '', `/chat/${chatId}`);
+    window.history.replaceState({}, "", `/chat/${chatId}`);
 
     // Always use compare mode for unified architecture
     if (selectedModelIds.length > 0 && onStartCompare) {
@@ -226,14 +226,14 @@ function PureMultimodalInput({
           inputLength: input.length,
           hasAttachments: attachments.length > 0,
         },
-        'No models selected or compare infrastructure unavailable',
+        "No models selected or compare infrastructure unavailable"
       );
     }
 
     setAttachments([]);
-    setLocalStorageInput('');
+    setLocalStorageInput("");
     resetHeight();
-    setInput('');
+    setInput("");
 
     if (width && width > 768) {
       textareaRef.current?.focus();
@@ -256,33 +256,33 @@ function PureMultimodalInput({
   const uploadFile = useCallback(
     async (file: File) => {
       // Gate uploads for free users
-      if (userType !== 'pro') {
+      if (userType !== "pro") {
         toast.error(
-          'File uploads are a Pro feature. Upgrade to enable uploads.',
+          "File uploads are a Pro feature. Upgrade to enable uploads."
         );
         const paymentUrl =
-          process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+          process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
         if (paymentUrl) {
-          window.open(paymentUrl, '_blank');
+          window.open(paymentUrl, "_blank");
         } else {
           uiLogger.error(
             {
               fileName: file.name,
               fileSize: file.size,
             },
-            'Payment URL not configured for file upload',
+            "Payment URL not configured for file upload"
           );
-          router.push('/settings');
+          router.push("/settings");
         }
         return undefined;
       }
 
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append("file", file);
 
       try {
-        const response = await fetch('/api/files/upload', {
-          method: 'POST',
+        const response = await fetch("/api/files/upload", {
+          method: "POST",
           body: formData,
         });
 
@@ -299,10 +299,10 @@ function PureMultimodalInput({
         const { error } = await response.json();
         toast.error(error);
       } catch (error) {
-        toast.error('Failed to upload file, please try again!');
+        toast.error("Failed to upload file, please try again!");
       }
     },
-    [userType, router],
+    [userType, router]
   );
 
   const handleFileChange = useCallback(
@@ -315,7 +315,7 @@ function PureMultimodalInput({
         const uploadPromises = files.map((file) => uploadFile(file));
         const uploadedAttachments = await Promise.all(uploadPromises);
         const successfullyUploadedAttachments = uploadedAttachments.filter(
-          (attachment) => attachment !== undefined,
+          (attachment) => attachment !== undefined
         );
 
         setAttachments((currentAttachments) => [
@@ -330,32 +330,32 @@ function PureMultimodalInput({
             chatId,
             filesCount: uploadQueue.length,
           },
-          'File upload failed',
+          "File upload failed"
         );
       } finally {
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile],
+    [setAttachments, uploadFile]
   );
 
   const { isAtBottom, scrollToBottom } = useScrollToBottom();
 
   useEffect(() => {
-    if (status === 'submitted') {
+    if (status === "submitted") {
       scrollToBottom();
     }
   }, [status, scrollToBottom]);
 
   return (
-    <div className="relative w-full flex flex-col gap-4">
+    <div className="relative w-full min-w-0 flex flex-col gap-4 overflow-hidden">
       <AnimatePresence>
         {!isAtBottom && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
             className="absolute left-1/2 bottom-36 -translate-x-1/2 z-50"
           >
             <Button
@@ -396,9 +396,9 @@ function PureMultimodalInput({
             <PreviewAttachment
               key={filename}
               attachment={{
-                url: '',
+                url: "",
                 name: filename,
-                contentType: '',
+                contentType: "",
               }}
               isUploading={true}
             />
@@ -406,7 +406,12 @@ function PureMultimodalInput({
         </div>
       )}
 
-      <div className={cx('relative luxury-input glass rounded-3xl', className)}>
+      <div
+        className={cx(
+          "relative w-full overflow-hidden luxury-input glass rounded-3xl",
+          className
+        )}
+      >
         {/* Model chips display - always show in unified compare architecture */}
         <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
           {isModelsLoading ? (
@@ -422,16 +427,16 @@ function PureMultimodalInput({
                 key={modelId}
                 variant="outline"
                 className={`flex items-center gap-1 text-xs font-medium border ${getModelChipColor(
-                  modelId,
+                  modelId
                 )}`}
               >
-                {modelId.split('/').pop()}
+                {modelId.split("/").pop()}
                 {onSelectedModelIdsChange && (
                   <button
                     type="button"
                     onClick={() => {
                       onSelectedModelIdsChange(
-                        selectedModelIds.filter((id) => id !== modelId),
+                        selectedModelIds.filter((id) => id !== modelId)
                       );
                     }}
                     className="ml-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5 transition-colors"
@@ -450,27 +455,27 @@ function PureMultimodalInput({
           placeholder={
             selectedModelIds.length > 1
               ? `Compare with ${selectedModelIds.length} models...`
-              : 'Send a message...'
+              : "Send a message..."
           }
           value={input}
           onChange={handleInput}
           className={cx(
-            'min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none text-base bg-transparent pb-10 md:pb-12 px-4 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 focus:shadow-none border-0',
-            selectedModelIds.length > 0 ? 'pt-2' : 'pt-4',
+            "min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none text-base bg-transparent pb-10 md:pb-12 px-4 placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 focus:shadow-none border-0",
+            selectedModelIds.length > 0 ? "pt-2" : "pt-4"
           )}
           rows={2}
           autoFocus
           onKeyDown={(event) => {
             if (
-              event.key === 'Enter' &&
+              event.key === "Enter" &&
               !event.shiftKey &&
               !event.nativeEvent.isComposing
             ) {
               event.preventDefault();
 
-              if (status !== 'ready') {
+              if (status !== "ready") {
                 toast.error(
-                  'Please wait for the model to finish its response!',
+                  "Please wait for the model to finish its response!"
                 );
               } else {
                 submitForm();
@@ -486,7 +491,7 @@ function PureMultimodalInput({
         <ModelPicker
           user={user}
           selectedModelId={selectedModelId}
-          disabled={status !== 'ready'}
+          disabled={status !== "ready"}
           compact={true}
           selectedModelIds={selectedModelIds}
           onSelectedModelIdsChange={onSelectedModelIdsChange}
@@ -494,7 +499,7 @@ function PureMultimodalInput({
       </div>
 
       <div className="absolute bottom-0 right-0 p-2 md:p-3 w-fit flex flex-row justify-end">
-        {status === 'submitted' ? (
+        {status === "submitted" ? (
           <StopButton stop={stop} setMessages={setMessages} />
         ) : (
           <SendButton
@@ -521,7 +526,7 @@ export const MultimodalInput = memo(
       return false;
 
     return true;
-  },
+  }
 );
 
 function PureAttachmentsButton({
@@ -529,7 +534,7 @@ function PureAttachmentsButton({
   status,
 }: {
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
-  status: UseChatHelpers<ChatMessage>['status'];
+  status: UseChatHelpers<ChatMessage>["status"];
 }) {
   return (
     <MobileFriendlyTooltip
@@ -544,7 +549,7 @@ function PureAttachmentsButton({
           event.preventDefault();
           fileInputRef.current?.click();
         }}
-        disabled={status !== 'ready'}
+        disabled={status !== "ready"}
         variant="ghost"
       >
         <PaperclipIcon size={16} />
@@ -560,7 +565,7 @@ function PureStopButton({
   setMessages,
 }: {
   stop: () => void;
-  setMessages: UseChatHelpers<ChatMessage>['setMessages'];
+  setMessages: UseChatHelpers<ChatMessage>["setMessages"];
 }) {
   return (
     <MobileFriendlyTooltip
@@ -602,9 +607,9 @@ function PureSendButton({
       content={
         !canSend
           ? uploadQueue.length > 0
-            ? 'Wait for file uploads to complete'
-            : 'Type a message to send'
-          : 'Send your message to AI models'
+            ? "Wait for file uploads to complete"
+            : "Type a message to send"
+          : "Send your message to AI models"
       }
       side="top"
       showIcon={false}
@@ -613,10 +618,10 @@ function PureSendButton({
         ref={buttonRef}
         data-testid="send-button"
         className={cx(
-          'luxury-button rounded-full p-2 h-9 w-9 border-0 transition-all duration-300',
+          "luxury-button rounded-full p-2 h-9 w-9 border-0 transition-all duration-300",
           canSend
-            ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md'
-            : 'bg-muted text-muted-foreground cursor-not-allowed',
+            ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
+            : "bg-muted text-muted-foreground cursor-not-allowed"
         )}
         onClick={(event) => {
           event.preventDefault();

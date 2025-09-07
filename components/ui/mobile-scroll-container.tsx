@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { cn } from "@/lib/utils";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 interface MobileScrollContainerProps {
   children: React.ReactNode;
@@ -47,7 +47,7 @@ export function MobileScrollContainer({
 
     scrollRef.current.scrollTo({
       left: scrollPosition,
-      behavior: 'smooth',
+      behavior: "smooth",
     });
   };
 
@@ -56,12 +56,12 @@ export function MobileScrollContainer({
     if (!scrollElement) return;
 
     checkScrollPosition();
-    scrollElement.addEventListener('scroll', checkScrollPosition);
-    window.addEventListener('resize', checkScrollPosition);
+    scrollElement.addEventListener("scroll", checkScrollPosition);
+    window.addEventListener("resize", checkScrollPosition);
 
     return () => {
-      scrollElement.removeEventListener('scroll', checkScrollPosition);
-      window.removeEventListener('resize', checkScrollPosition);
+      scrollElement.removeEventListener("scroll", checkScrollPosition);
+      window.removeEventListener("resize", checkScrollPosition);
     };
   }, [itemCount]);
 
@@ -71,47 +71,47 @@ export function MobileScrollContainer({
       <div
         ref={scrollRef}
         className={cn(
-          'flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory',
-          'scrollbar-thin scrollbar-thumb-muted/50 scrollbar-track-transparent',
+          "flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory",
+          "scrollbar-thin scrollbar-thumb-muted/50 scrollbar-track-transparent",
           // Ensure horizontal scroll stays contained
-          'w-full min-w-0',
+          "w-full min-w-0",
           // Webkit scrollbar styles for better mobile support
-          '[&::-webkit-scrollbar]:h-2',
-          '[&::-webkit-scrollbar-track]:bg-transparent',
-          '[&::-webkit-scrollbar-thumb]:bg-muted/50',
-          '[&::-webkit-scrollbar-thumb]:rounded-full',
-          '[&::-webkit-scrollbar-thumb:hover]:bg-muted/70',
-          className,
+          "[&::-webkit-scrollbar]:h-2",
+          "[&::-webkit-scrollbar-track]:bg-transparent",
+          "[&::-webkit-scrollbar-thumb]:bg-muted/50",
+          "[&::-webkit-scrollbar-thumb]:rounded-full",
+          "[&::-webkit-scrollbar-thumb:hover]:bg-muted/70",
+          className
         )}
         style={{
           // Hide scrollbar on mobile while keeping functionality
-          scrollbarWidth: 'thin',
-          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: "thin",
+          WebkitOverflowScrolling: "touch",
           // Ensure the container doesn't expand beyond viewport
-          maxWidth: '100vw',
+          maxWidth: "calc(100vw - 16px)", // Account for container padding
         }}
       >
         {children}
       </div>
 
-      {/* Left scroll button */}
+      {/* Left scroll button - positioned at top for variable height content */}
       {canScrollLeft && (
         <button
           type="button"
           onClick={() => scrollToCard(Math.max(0, activeIndex - 1))}
-          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-background/80 backdrop-blur-sm border rounded-full p-2 shadow-lg hover:bg-background/90 transition-colors"
+          className="absolute left-2 top-4 z-10 bg-background/80 backdrop-blur-sm border rounded-full p-2 shadow-lg hover:bg-background/90 transition-colors"
           aria-label="Scroll left"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
       )}
 
-      {/* Right scroll button */}
+      {/* Right scroll button - positioned at top for variable height content */}
       {canScrollRight && (
         <button
           type="button"
           onClick={() => scrollToCard(Math.min(itemCount - 1, activeIndex + 1))}
-          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-background/80 backdrop-blur-sm border rounded-full p-2 shadow-lg hover:bg-background/90 transition-colors"
+          className="absolute right-2 top-4 z-10 bg-background/80 backdrop-blur-sm border rounded-full p-2 shadow-lg hover:bg-background/90 transition-colors"
           aria-label="Scroll right"
         >
           <ChevronRight className="h-4 w-4" />
@@ -132,10 +132,10 @@ export function MobileScrollContainer({
                 type="button"
                 onClick={() => scrollToCard(index)}
                 className={cn(
-                  'h-2 w-2 rounded-full transition-colors duration-200',
+                  "h-2 w-2 rounded-full transition-colors duration-200",
                   index === activeIndex
-                    ? 'bg-primary'
-                    : 'bg-muted-foreground/30 hover:bg-muted-foreground/50',
+                    ? "bg-primary"
+                    : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
                 )}
                 aria-label={`Go to card ${index + 1}`}
               />

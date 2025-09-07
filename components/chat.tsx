@@ -292,7 +292,7 @@ export function Chat({
 
   return (
     <>
-      <div className="flex flex-col min-w-0 h-dvh bg-background">
+      <div className="flex flex-col min-w-0 h-dvh bg-background overflow-hidden">
         <ChatHeader
           chatId={id}
           selectedVisibilityType={currentVisibility}
@@ -385,8 +385,8 @@ export function Chat({
           </div>
         )}
 
-        <div className="absolute bottom-0 inset-x-0 flex justify-center px-4 pb-4 md:px-6 md:pb-6">
-          <form className="relative flex gap-2 w-full max-w-3xl">
+        <div className="fixed bottom-0 inset-x-0 z-40 flex justify-center px-2 pb-3 pt-2 md:px-6 md:pb-6 md:pt-4">
+          <form className="relative flex gap-2 w-full max-w-3xl min-w-0">
             {/* Backdrop blur background only behind the input area */}
             <div className="absolute inset-0 bg-background/95 backdrop-blur-sm border-t border-border/30 rounded-t-lg -z-10" />
             {!isReadonly && messageCount < 10 && (

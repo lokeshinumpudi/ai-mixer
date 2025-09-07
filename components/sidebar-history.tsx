@@ -354,23 +354,29 @@ export function SidebarHistory({ user }: { user: AppUser | null }) {
               })()}
           </SidebarMenu>
 
-          {/* Avoid auto-prefetching the second page on first paint */}
-          <HistorySentinel
-            hasReachedEnd={hasReachedEnd}
-            isValidating={isValidating}
-            setSize={setSize}
-          />
+          {/* Load more trigger - positioned after content but before end message */}
+          {!hasReachedEnd && (
+            <HistorySentinel
+              hasReachedEnd={hasReachedEnd}
+              isValidating={isValidating}
+              setSize={setSize}
+            />
+          )}
 
-          {hasReachedEnd ? (
-            <div className="px-2 text-zinc-500 w-full flex flex-row justify-center items-center text-sm gap-2 mt-8">
-              You have reached the end of your chat history.
-            </div>
-          ) : (
-            <div className="p-2 text-zinc-500 dark:text-zinc-400 flex flex-row gap-2 items-center mt-8">
+          {/* Loading indicator */}
+          {isValidating && !hasReachedEnd && (
+            <div className="p-2 text-zinc-500 dark:text-zinc-400 flex flex-row gap-2 items-center justify-center">
               <div className="animate-spin">
                 <LoaderIcon />
               </div>
-              <div>Loading Chats...</div>
+              <div className="text-sm">Loading more chats...</div>
+            </div>
+          )}
+
+          {/* End of history message */}
+          {hasReachedEnd && (
+            <div className="px-2 text-zinc-500 w-full flex flex-row justify-center items-center text-sm gap-2 mt-4">
+              You have reached the end of your chat history.
             </div>
           )}
         </SidebarGroupContent>
@@ -407,11 +413,14 @@ function HistorySentinel({
   setSize: (updater: (size: number) => number) => void;
 }) {
   const didTriggerRef = React.useRef(false);
+
   return (
     <motion.div
+      className="h-4 w-full" // Make it visible for intersection
       onViewportEnter={() => {
         if (didTriggerRef.current) {
           if (!isValidating && !hasReachedEnd) {
+            console.log("🔄 Loading more chats...");
             setSize((size) => size + 1);
           }
         } else {
