@@ -81,8 +81,8 @@ export function useChatReadOnly(chat: Chat | null, user: any): boolean {
   // Chat owner can always edit
   if (chat.userId === user.id) return false;
 
-  // Non-owners: public chats are writable, private chats are read-only
-  return chat.visibility === "private";
+  // Non-owners are always read-only (public shares are view-only)
+  return true;
 }
 
 // Hook for creating new chats with proper navigation
