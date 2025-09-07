@@ -1,9 +1,10 @@
-"use client";
+'use client';
 
-import { PlusIcon } from "@/components/icons";
-import { SidebarHistory } from "@/components/sidebar-history";
-import { SidebarUserNav } from "@/components/sidebar-user-nav";
-import { Button } from "@/components/ui/button";
+import { useAuth } from '@/components/auth-provider';
+import { PlusIcon } from '@/components/icons';
+import { SidebarHistory } from '@/components/sidebar-history';
+import { SidebarUserNav } from '@/components/sidebar-user-nav';
+import { Button } from '@/components/ui/button';
 import {
   Sidebar,
   SidebarContent,
@@ -11,17 +12,26 @@ import {
   SidebarHeader,
   SidebarMenu,
   useSidebar,
-} from "@/components/ui/sidebar";
-import { useAnonymousAuth } from "@/hooks/use-anonymous-auth";
-import { useModels } from "@/hooks/use-models";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { GoogleLoginCTA } from "./google-login-cta";
+} from '@/components/ui/sidebar';
+import { useModels } from '@/hooks/use-models';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useMemo } from 'react';
+import { GoogleLoginCTA } from './google-login-cta';
 
 export function AppSidebar() {
   const router = useRouter();
   const { setOpenMobile } = useSidebar();
-  const { user, messageCount } = useAnonymousAuth();
+  const { user, isAnonymous } = useAuth();
+
+  // Get message count for anonymous users
+  const messageCount = useMemo(() => {
+    if (typeof window !== 'undefined' && isAnonymous) {
+      const stored = localStorage.getItem('anonymous_message_count');
+      return stored ? Number.parseInt(stored, 10) : 0;
+    }
+    return 0;
+  }, [isAnonymous]);
   const { mutate: mutateModels } = useModels();
 
   return (
@@ -49,14 +59,14 @@ export function AppSidebar() {
                 setOpenMobile(false);
                 // Force revalidation of models data for fresh user settings
                 console.log(
-                  "🔄 Sidebar: Clicking New Chat, triggering mutateModels..."
+                  '🔄 Sidebar: Clicking New Chat, triggering mutateModels...',
                 );
                 const freshData = await mutateModels();
                 console.log(
-                  "✅ Sidebar: Fresh models data received:",
-                  freshData
+                  '✅ Sidebar: Fresh models data received:',
+                  freshData,
                 );
-                router.push("/");
+                router.push('/');
                 router.refresh();
               }}
             >

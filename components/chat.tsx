@@ -2,11 +2,12 @@
 
 import { ChatHeader } from "@/components/chat-header";
 
-import { useAnonymousAuth } from "@/hooks/use-anonymous-auth";
+import { useAuth } from "@/components/auth-provider";
 import { useArtifactSelector } from "@/hooks/use-artifact";
 import { useAutoResume } from "@/hooks/use-auto-resume";
 import { useChatVisibility } from "@/hooks/use-chat-visibility";
 import { useCompareRun } from "@/hooks/use-compare-run";
+import { useOptimizedChatData } from "@/hooks/use-optimized-chat-data";
 import { getDefaultModelForUser } from "@/lib/ai/models";
 import type { Chat as ChatType, Vote } from "@/lib/db/schema";
 import { uiLogger } from "@/lib/logger";
@@ -53,12 +54,30 @@ export function Chat({
     initialVisibilityType,
   });
 
-  const {
-    messageCount,
-    incrementMessageCount,
-    shouldShowLoginPrompt,
-    user: authUser,
-  } = useAnonymousAuth();
+  const { user: authUser, isAnonymous } = useAuth();
+
+  // Anonymous message tracking (moved from useAnonymousAuth)
+  const [messageCount, setMessageCount] = useState(0);
+  const [shouldShowLoginPrompt, setShouldShowLoginPrompt] = useState(false);
+
+  // Load message count from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined" && isAnonymous) {
+      const stored = localStorage.getItem("anonymous_message_count");
+      const count = stored ? Number.parseInt(stored, 10) : 0;
+      setMessageCount(count);
+      setShouldShowLoginPrompt(count >= 5); // MAX_ANONYMOUS_MESSAGES = 5
+    }
+  }, [isAnonymous]);
+
+  const incrementMessageCount = useCallback(() => {
+    if (isAnonymous) {
+      const newCount = messageCount + 1;
+      setMessageCount(newCount);
+      localStorage.setItem("anonymous_message_count", newCount.toString());
+      setShouldShowLoginPrompt(newCount >= 5);
+    }
+  }, [isAnonymous, messageCount]);
 
   // Use integrated models API that includes user settings
   const {
@@ -93,42 +112,76 @@ export function Chat({
   // Initialize selectedModelIds from compareModels only after API data is loaded
   useEffect(() => {
     // Only initialize once the API data has loaded and we haven't initialized yet
-    if (!isModelsLoading && !hasInitialized) {
+    if (!isModelsLoading && !hasInitialized && selectedModelIds.length === 0) {
       if (compareModels && compareModels.length > 0) {
         // Always prioritize compareModels from API response
         setSelectedModelIds(compareModels);
+        setHasInitialized(true);
       } else if (currentModel) {
         // Fallback to current model if no compareModels are set
         setSelectedModelIds([currentModel]);
+        setHasInitialized(true);
       }
-      setHasInitialized(true);
     }
-  }, [isModelsLoading, compareModels, currentModel, hasInitialized]);
+  }, [
+    isModelsLoading,
+    compareModels,
+    currentModel,
+    hasInitialized,
+    selectedModelIds.length,
+  ]);
 
-  // Compare run hook
+  // 🚀 UNIFIED COMPARE ARCHITECTURE: Always use optimized data for existing chats
+  const shouldFetchData =
+    id &&
+    id.length > 0 &&
+    typeof window !== "undefined" &&
+    // Only fetch for existing chat pages, not root page with new UUIDs
+    (window.location.pathname.startsWith("/chat/") ||
+      (window.location.pathname !== "/" && id.length === 36)); // UUID length check
+
+  // Compare run hook - only for streaming, data comes from chatData
   const {
     startCompare,
     cancelModel,
     cancelAll,
     loadCompareRun,
-    compareRuns,
-    isLoadingRuns,
+    mutateCompareRuns,
     ...compareState
   } = useCompareRun(id, {
-    // Skip listing runs on the root page to avoid useless /api/compare calls
-    listOnMount:
-      typeof window !== "undefined" && window.location.pathname !== "/",
+    // Never list on mount - data comes from optimized chatData
+    listOnMount: false,
   });
+
+  const chatData = useOptimizedChatData(
+    shouldFetchData || (compareState as any).status !== "idle" ? id : ""
+  );
+
+  // 🚀 UNIFIED COMPARE ARCHITECTURE: Always use chatData (no fallbacks needed)
+  const compareRuns = chatData.compareRuns?.items || [];
+  const isLoadingRuns = chatData.isLoading;
 
   // Auto-set models if this chat has compare runs (even when reloading)
   useEffect(() => {
-    if (!isLoadingRuns && compareRuns.length > 0) {
+    if (!isLoadingRuns && compareRuns.length > 0 && !hasInitialized) {
       // Set the selected models from the first compare run if none are selected
       if (compareRuns[0]?.modelIds && selectedModelIds.length === 0) {
         setSelectedModelIds(compareRuns[0].modelIds);
+        setHasInitialized(true);
       }
     }
-  }, [isLoadingRuns, compareRuns, selectedModelIds.length, id]);
+  }, [isLoadingRuns, compareRuns, selectedModelIds.length, hasInitialized]);
+
+  // When a run completes, revalidate consolidated data to pull final results
+  useEffect(() => {
+    if (compareState.status === "completed") {
+      const t = setTimeout(() => {
+        void chatData.mutate();
+      }, 300);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [compareState.status]);
 
   // For unified compare architecture, we don't need the regular useChat hook
   // since all interactions go through compare infrastructure
@@ -147,10 +200,11 @@ export function Chat({
 
   // Initialize compare mode with current model when available
   useEffect(() => {
-    if (currentModel && selectedModelIds.length === 0) {
+    if (currentModel && selectedModelIds.length === 0 && !hasInitialized) {
       setSelectedModelIds([currentModel]);
+      setHasInitialized(true);
     }
-  }, [currentModel, selectedModelIds.length]);
+  }, [currentModel, selectedModelIds.length, hasInitialized]);
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
@@ -284,8 +338,8 @@ export function Chat({
         <Messages
           chatId={id}
           status={status}
-          votes={votes}
-          messages={messages}
+          votes={chatData.votes || votes}
+          messages={[]} // No longer using messages in unified compare mode
           setMessages={setMessages}
           regenerate={regenerate}
           isReadonly={isReadonly}
@@ -296,8 +350,8 @@ export function Chat({
           cancelAll={cancelAll}
           startCompare={startCompare}
           isLoadingRuns={isLoadingRuns}
-          hasMore={hasMore}
-          loadMore={loadMore}
+          hasMore={false} // No message pagination in unified compare mode
+          loadMore={async () => {}} // No-op function for unified compare mode
           isLoadingMore={isLoadingMore}
           selectedVisibilityType={visibilityType}
           selectedModelIds={selectedModelIds}

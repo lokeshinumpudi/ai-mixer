@@ -1,7 +1,7 @@
 'use client';
 
+import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
-import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import { useRouter } from 'next/navigation';
 
 interface LoginCTAProps {
@@ -16,7 +16,7 @@ export function LoginCTA({
   onClick,
 }: LoginCTAProps) {
   const router = useRouter();
-  const { signInWithGoogle } = useSupabaseAuth();
+  const { signInWithGoogle } = useAuth();
 
   const handleClick = async () => {
     try {

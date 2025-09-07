@@ -1,3 +1,4 @@
+import { AuthGuard, AuthProvider } from '@/components/auth-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
@@ -76,8 +77,12 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Toaster position="top-center" />
-          {children}
+          <AuthProvider>
+            <AuthGuard>
+              <Toaster position="top-center" />
+              {children}
+            </AuthGuard>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

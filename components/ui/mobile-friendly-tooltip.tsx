@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+} from '@/components/ui/tooltip';
+import { Info } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 
 // Hook to detect touch devices
 function useIsTouchDevice() {
@@ -16,20 +16,20 @@ function useIsTouchDevice() {
   useEffect(() => {
     const checkTouchDevice = () => {
       setIsTouchDevice(
-        "ontouchstart" in window ||
+        'ontouchstart' in window ||
           navigator.maxTouchPoints > 0 ||
           // @ts-ignore - for older browsers
-          navigator.msMaxTouchPoints > 0
+          navigator.msMaxTouchPoints > 0,
       );
     };
 
     checkTouchDevice();
 
     // Listen for changes in case device capabilities change
-    window.addEventListener("touchstart", checkTouchDevice, { once: true });
+    window.addEventListener('touchstart', checkTouchDevice, { once: true });
 
     return () => {
-      window.removeEventListener("touchstart", checkTouchDevice);
+      window.removeEventListener('touchstart', checkTouchDevice);
     };
   }, []);
 
@@ -44,11 +44,11 @@ export interface MobileFriendlyTooltipProps {
   /** Whether to show an info icon alongside the trigger */
   showIcon?: boolean;
   /** Icon size when showIcon is true */
-  iconSize?: "sm" | "md" | "lg";
+  iconSize?: 'sm' | 'md' | 'lg';
   /** Tooltip positioning */
-  side?: "top" | "bottom" | "left" | "right";
+  side?: 'top' | 'bottom' | 'left' | 'right';
   /** Tooltip alignment */
-  align?: "start" | "center" | "end";
+  align?: 'start' | 'center' | 'end';
   /** Distance from trigger element */
   sideOffset?: number;
   /** Auto-close timeout in milliseconds (mobile only) */
@@ -60,7 +60,7 @@ export interface MobileFriendlyTooltipProps {
   /** Whether the trigger should be a button (for better accessibility) */
   asButton?: boolean;
   /** Button type when asButton is true */
-  buttonType?: "button" | "submit" | "reset";
+  buttonType?: 'button' | 'submit' | 'reset';
   /** Disabled state */
   disabled?: boolean;
   /** Callback when tooltip opens/closes */
@@ -71,15 +71,15 @@ export function MobileFriendlyTooltip({
   content,
   children,
   showIcon = true,
-  iconSize = "sm",
-  side = "top",
-  align = "center",
+  iconSize = 'sm',
+  side = 'top',
+  align = 'center',
   sideOffset = 5,
   autoCloseDelay = 5000,
-  triggerClassName = "",
-  contentClassName = "",
+  triggerClassName = '',
+  contentClassName = '',
   asButton = true,
-  buttonType = "button",
+  buttonType = 'button',
   disabled = false,
   onOpenChange,
 }: MobileFriendlyTooltipProps) {
@@ -89,9 +89,9 @@ export function MobileFriendlyTooltip({
 
   // Icon size mapping
   const iconSizeMap = {
-    sm: "size-3",
-    md: "size-4",
-    lg: "size-5",
+    sm: 'size-3',
+    md: 'size-4',
+    lg: 'size-5',
   };
 
   // Handle open/close state changes
@@ -113,12 +113,12 @@ export function MobileFriendlyTooltip({
       }
     };
 
-    document.addEventListener("touchstart", handleClickOutside);
-    document.addEventListener("click", handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('click', handleClickOutside);
 
     return () => {
-      document.removeEventListener("touchstart", handleClickOutside);
-      document.removeEventListener("click", handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside);
     };
   }, [isTouchDevice, isOpen]);
 
@@ -157,9 +157,9 @@ export function MobileFriendlyTooltip({
   // Check if children is already an interactive element (button, input, etc.)
   const isChildInteractive =
     React.isValidElement(children) &&
-    (children.type === "button" ||
-      (typeof children.type === "function" &&
-        children.type.name?.includes("Button")) ||
+    (children.type === 'button' ||
+      (typeof children.type === 'function' &&
+        children.type.name?.includes('Button')) ||
       children.props?.onClick ||
       children.props?.onTouchEnd);
 
@@ -213,7 +213,7 @@ export function MobileFriendlyTooltip({
   // For non-interactive children, create our own wrapper
   const baseTriggerClasses = `
     flex items-center gap-1 cursor-help
-    ${disabled ? "opacity-50 cursor-not-allowed" : ""}
+    ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
     ${triggerClassName}
   `.trim();
 
@@ -223,7 +223,7 @@ export function MobileFriendlyTooltip({
     hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/20 rounded-sm
   `.trim();
 
-  const TriggerElement = asButton ? "button" : "div";
+  const TriggerElement = asButton ? 'button' : 'div';
   const triggerProps = asButton
     ? {
         type: buttonType,
@@ -303,7 +303,7 @@ export interface InfoTooltipProps {
   /** The tooltip content text */
   content: string;
   /** Icon size */
-  size?: "sm" | "md" | "lg";
+  size?: 'sm' | 'md' | 'lg';
   /** Custom classes for the icon */
   className?: string;
   /** All other MobileFriendlyTooltip props */
@@ -312,8 +312,8 @@ export interface InfoTooltipProps {
 
 export function InfoTooltip({
   content,
-  size = "sm",
-  className = "",
+  size = 'sm',
+  className = '',
   tooltipProps = {},
 }: InfoTooltipProps) {
   return (
@@ -338,7 +338,7 @@ export interface TextWithTooltipProps {
   /** Whether to show info icon */
   showIcon?: boolean;
   /** Text element type */
-  as?: "span" | "div" | "p" | "label";
+  as?: 'span' | 'div' | 'p' | 'label';
   /** Custom classes for the text */
   className?: string;
   /** All other MobileFriendlyTooltip props */
@@ -349,8 +349,8 @@ export function TextWithTooltip({
   text,
   tooltip,
   showIcon = true,
-  as: Element = "span",
-  className = "",
+  as: Element = 'span',
+  className = '',
   tooltipProps = {},
 }: TextWithTooltipProps) {
   return (

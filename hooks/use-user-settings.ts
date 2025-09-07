@@ -1,6 +1,6 @@
 'use client';
 
-import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
+import { useAuth } from '@/components/auth-provider';
 import { getDefaultModelForUser } from '@/lib/ai/models';
 import type { UserType } from '@/lib/supabase/types';
 import { fetcher } from '@/lib/utils';
@@ -27,7 +27,7 @@ export interface UseUserSettingsReturn {
  * Provides optimistic updates and automatic synchronization
  */
 export function useUserSettings(): UseUserSettingsReturn {
-  const { user } = useSupabaseAuth();
+  const { user } = useAuth();
   const userId = user?.id;
 
   // Fetch user settings from API - used primarily for manual settings updates
@@ -168,7 +168,7 @@ export function useSelectedModel(): {
   isLoading: boolean;
 } {
   const { settings, updateSetting, isLoading } = useUserSettings();
-  const { user } = useSupabaseAuth();
+  const { user } = useAuth();
 
   // Get the selected model from settings, with plan-based fallback
   const selectedModel =

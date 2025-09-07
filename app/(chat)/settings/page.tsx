@@ -1,5 +1,6 @@
 'use client';
 
+import { useAuth } from '@/components/auth-provider';
 import { IdentityManager } from '@/components/identity-manager';
 import { SystemPromptForm } from '@/components/settings/SystemPromptForm';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +10,6 @@ import { MobileFriendlyTooltip } from '@/components/ui/mobile-friendly-tooltip';
 import { Progress } from '@/components/ui/progress';
 import { useSidebar } from '@/components/ui/sidebar';
 import { UsageDashboard } from '@/components/usage/usage-dashboard';
-import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import { fetcher } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -40,7 +40,7 @@ const tabs: { id: TabId; label: string }[] = [
 
 export default function SettingsPage() {
   // All hooks must be called at the top level, before any conditional logic
-  const { user, loading } = useSupabaseAuth();
+  const { user, loading } = useAuth();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>('customization');
   // Always fetch usage data since it's displayed in the sidebar

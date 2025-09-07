@@ -8,5 +8,18 @@ export function createClient() {
     throw new Error('Missing Supabase environment variables:client');
   }
 
-  return createBrowserClient(supabaseUrl, supabaseAnonKey);
+  return createBrowserClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      // Enable automatic session refresh
+      autoRefreshToken: true,
+      // Persist session in localStorage
+      persistSession: true,
+      // Detect session in URL (for OAuth redirects)
+      detectSessionInUrl: true,
+      // Flow type for better UX
+      flowType: 'pkce',
+      // Enable debug logging to troubleshoot PKCE issues
+      debug: process.env.NODE_ENV === 'development',
+    },
+  });
 }

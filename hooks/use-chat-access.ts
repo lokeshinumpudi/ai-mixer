@@ -1,6 +1,6 @@
 'use client';
 
-import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
+import { useAuth } from '@/components/auth-provider';
 import type { Chat } from '@/lib/db/schema';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -17,7 +17,7 @@ export function useChatAccess(
   chatId: string,
   chatError?: any,
 ): ChatAccessResult {
-  const { user, loading } = useSupabaseAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useAuth } from '@/components/auth-provider';
 import type { ChatModel } from '@/lib/ai/models';
 import { fetcher } from '@/lib/utils';
 import useSWR from 'swr';
@@ -24,8 +25,14 @@ interface ModelsResponse {
 }
 
 export function useModels() {
+  const { user, loading: authLoading } = useAuth();
+
+  // Only fetch models when auth is ready and user exists
+  // Add a small delay to ensure session is fully synchronized
+  const shouldFetch = !authLoading && user && user.id;
+
   const { data, error, isLoading, mutate } = useSWR<ModelsResponse>(
-    '/api/models',
+    shouldFetch ? '/api/models' : null,
     fetcher,
     {
       revalidateOnMount: true,
@@ -36,6 +43,9 @@ export function useModels() {
       // Periodic background refresh is still fine but make it lighter
       refreshInterval: 15 * 60 * 1000, // 15 minutes
       dedupingInterval: 60 * 60 * 1000, // 1 hour
+      // Add error retry with backoff
+      errorRetryCount: 3,
+      errorRetryInterval: 1000,
     },
   );
 
@@ -48,7 +58,7 @@ export function useModels() {
     defaultModel: data?.userSettings?.defaultModel,
     compareModels: data?.userSettings?.compareModels ?? [],
     mode: data?.userSettings?.mode ?? 'single',
-    isLoading,
+    isLoading: authLoading || isLoading, // Include auth loading state
     error,
     mutate,
   };

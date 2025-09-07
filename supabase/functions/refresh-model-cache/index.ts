@@ -33,25 +33,62 @@ Deno.serve(async (req) => {
     });
     const { models } = await gateway.getAvailableModels();
 
-    // Insert new cache entry with expiration
+    // Upsert strategy: Update existing cache or create new one
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const now = new Date().toISOString();
 
-    const { error } = await supabase.from('ModelCache').insert({
-      models,
-      lastRefreshedAt: new Date().toISOString(),
-      expiresAt: expiresAt.toISOString(),
-      status: 'active',
-    });
+    // First, try to update existing active cache
+    const { data: existingCache } = await supabase
+      .from('ModelCache')
+      .select('id')
+      .eq('status', 'active')
+      .limit(1)
+      .single();
 
-    if (error) {
-      throw error;
+    let result: any;
+    if (existingCache) {
+      // Update existing cache entry
+      result = await supabase
+        .from('ModelCache')
+        .update({
+          models,
+          lastRefreshedAt: now,
+          expiresAt: expiresAt.toISOString(),
+        })
+        .eq('id', existingCache.id);
+    } else {
+      // Create new cache entry if none exists
+      result = await supabase.from('ModelCache').insert({
+        models,
+        lastRefreshedAt: now,
+        expiresAt: expiresAt.toISOString(),
+        status: 'active',
+      });
+    }
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    // Cleanup: Remove expired cache entries to prevent database bloat
+    const { error: cleanupError } = await supabase
+      .from('ModelCache')
+      .delete()
+      .lt('expiresAt', now);
+
+    // Don't fail the entire operation if cleanup fails
+    if (cleanupError) {
+      console.warn('Cache cleanup failed:', cleanupError.message);
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Cache refreshed successfully',
+        message: existingCache
+          ? 'Cache updated successfully'
+          : 'Cache created successfully',
         models_cached: models.length,
+        operation: existingCache ? 'update' : 'insert',
       }),
       {
         headers: { 'Content-Type': 'application/json' },

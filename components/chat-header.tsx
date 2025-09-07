@@ -1,24 +1,24 @@
-"use client";
+'use client';
 
-import { useRouter } from "next/navigation";
-import { useWindowSize } from "usehooks-ts";
+import { useRouter } from 'next/navigation';
+import { useWindowSize } from 'usehooks-ts';
 
-import { SidebarToggle } from "@/components/sidebar-toggle";
-import { Button } from "@/components/ui/button";
-import { useChatAccess } from "@/hooks/use-chat-access";
-import { useModels } from "@/hooks/use-models";
-import { useSupabaseAuth } from "@/hooks/use-supabase-auth";
-import type { Chat } from "@/lib/db/schema";
-import type { AppUser } from "@/lib/supabase/types";
-import { memo, useEffect, useRef } from "react";
-import { GoogleLoginCTA } from "./google-login-cta";
-import { DiamondIcon, PlusIcon } from "./icons";
-import { ShareButtonSimple } from "./share-button-simple";
-import { MobileFriendlyTooltip } from "./ui/mobile-friendly-tooltip";
-import { useSidebar } from "./ui/sidebar";
+import { useAuth } from '@/components/auth-provider';
+import { SidebarToggle } from '@/components/sidebar-toggle';
+import { Button } from '@/components/ui/button';
+import { useChatAccess } from '@/hooks/use-chat-access';
+import { useModels } from '@/hooks/use-models';
+import type { Chat } from '@/lib/db/schema';
+import type { AppUser } from '@/lib/supabase/types';
+import { memo, useEffect, useRef } from 'react';
+import { GoogleLoginCTA } from './google-login-cta';
+import { DiamondIcon, PlusIcon } from './icons';
+import { ShareButtonSimple } from './share-button-simple';
+import { MobileFriendlyTooltip } from './ui/mobile-friendly-tooltip';
+import { useSidebar } from './ui/sidebar';
 // We no longer render the visibility selector UI, but keep a lightweight
 // type locally to avoid coupling to the old component.
-type VisibilityType = "private" | "public";
+type VisibilityType = 'private' | 'public';
 
 function PureChatHeader({
   chatId,
@@ -38,7 +38,7 @@ function PureChatHeader({
   onVisibilityChange?: (visibility: VisibilityType) => void;
 }) {
   const { mutate: mutateModels, userType } = useModels();
-  const { isAnonymous } = useSupabaseAuth();
+  const { isAnonymous } = useAuth();
   const router = useRouter();
   const { open } = useSidebar();
   const { isOwner: hookIsOwner } = useChatAccess(chat || null, chatId);
@@ -57,22 +57,22 @@ function PureChatHeader({
         if (shouldCompress !== compressed && headerRef.current) {
           compressed = shouldCompress;
           if (shouldCompress) {
-            headerRef.current.style.paddingTop = "4px";
-            headerRef.current.style.paddingBottom = "4px";
-            headerRef.current.classList.add("backdrop-blur-sm", "shadow-sm");
+            headerRef.current.style.paddingTop = '4px';
+            headerRef.current.style.paddingBottom = '4px';
+            headerRef.current.classList.add('backdrop-blur-sm', 'shadow-sm');
           } else {
-            headerRef.current.style.paddingTop = "6px";
-            headerRef.current.style.paddingBottom = "6px";
-            headerRef.current.classList.remove("backdrop-blur-sm", "shadow-sm");
+            headerRef.current.style.paddingTop = '6px';
+            headerRef.current.style.paddingBottom = '6px';
+            headerRef.current.classList.remove('backdrop-blur-sm', 'shadow-sm');
           }
         }
       });
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener('scroll', onScroll);
     };
   }, []);
 
@@ -97,11 +97,11 @@ function PureChatHeader({
             onClick={async () => {
               // Force revalidation of models data for fresh user settings
               console.log(
-                "🔄 Header: Clicking New Chat, triggering mutateModels..."
+                '🔄 Header: Clicking New Chat, triggering mutateModels...',
               );
               const freshData = await mutateModels();
-              console.log("✅ Header: Fresh models data received:", freshData);
-              router.push("/");
+              console.log('✅ Header: Fresh models data received:', freshData);
+              router.push('/');
               router.refresh();
             }}
           >
@@ -120,7 +120,7 @@ function PureChatHeader({
       </div>
 
       {/* Upgrade button for free users */}
-      {userType === "free" && (
+      {userType === 'free' && (
         <MobileFriendlyTooltip
           content="Unlock all AI models with higher limits and premium features"
           side="bottom"
@@ -132,14 +132,14 @@ function PureChatHeader({
             className="order-3 hidden md:flex items-center gap-1.5 text-xs bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
             onClick={() => {
               const paymentUrl =
-                process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || "";
+                process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
               if (paymentUrl) {
-                window.open(paymentUrl, "_blank");
+                window.open(paymentUrl, '_blank');
               } else {
                 console.error(
-                  "Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL."
+                  'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
                 );
-                router.push("/settings");
+                router.push('/settings');
               }
             }}
           >

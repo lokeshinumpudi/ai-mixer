@@ -1,8 +1,8 @@
 'use client';
 
+import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
-import { useAnonymousAuth } from '@/hooks/use-anonymous-auth';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 interface GoogleLoginCTAProps {
   variant?: 'default' | 'outline' | 'ghost';
@@ -17,8 +17,18 @@ export function GoogleLoginCTA({
   className,
   showMessageCount = false,
 }: GoogleLoginCTAProps) {
-  const { signInWithGoogle, messageCount, shouldShowLoginPrompt } =
-    useAnonymousAuth();
+  const { signInWithGoogle, isAnonymous } = useAuth();
+
+  // Get message count for anonymous users
+  const messageCount = useMemo(() => {
+    if (typeof window !== 'undefined' && isAnonymous) {
+      const stored = localStorage.getItem('anonymous_message_count');
+      return stored ? Number.parseInt(stored, 10) : 0;
+    }
+    return 0;
+  }, [isAnonymous]);
+
+  const shouldShowLoginPrompt = messageCount >= 5;
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {

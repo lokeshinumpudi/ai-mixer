@@ -41,7 +41,7 @@ const initialModelState: CompareModelState = {
 
 export function useCompareRun(
   chatId: string,
-  options?: { listOnMount?: boolean },
+  options?: { listOnMount?: boolean; disableOptimisticUpdates?: boolean },
 ) {
   compareLogger.debug(
     {
@@ -553,21 +553,24 @@ export function useCompareRun(
               })),
             };
 
-            // Optimistically update the compareRuns cache immediately
-            mutateCompareRuns(
-              (currentData: CompareRunsListResponse | undefined) => {
-                if (!currentData) return currentData;
+            // Optimistically update the compareRuns cache immediately (unless disabled)
+            if (!options?.disableOptimisticUpdates) {
+              mutateCompareRuns(
+                (currentData: CompareRunsListResponse | undefined) => {
+                  if (!currentData) return currentData;
 
-                // Add the new completed run to the end of the list (chronological order)
-                return {
-                  ...currentData,
-                  items: [...currentData.items, completedRun],
-                };
-              },
-              false, // Don't revalidate from server
-            );
+                  // Add the new completed run to the end of the list (chronological order)
+                  return {
+                    ...currentData,
+                    items: [...currentData.items, completedRun],
+                  };
+                },
+                false, // Don't revalidate from server
+              );
+            }
 
-            // Mark this run for handoff: keep active UI until we see it in history
+            // Preserve active card after completion; no auto-clear.
+            // Still record for potential future uses (e.g., manual clear).
             pendingHandoffRunIdRef.current = (
               capturedState as CompareRunState
             ).runId;

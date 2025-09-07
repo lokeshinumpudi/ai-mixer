@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
-import { uiLogger } from "@/lib/logger";
-import type { ChatMessage } from "@/lib/types";
-import type { UseChatHelpers } from "@ai-sdk/react";
-import { motion } from "framer-motion";
-import { memo, useRef } from "react";
-import { Button } from "./ui/button";
-type VisibilityType = "private" | "public";
+import { uiLogger } from '@/lib/logger';
+import type { ChatMessage } from '@/lib/types';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import { motion } from 'framer-motion';
+import { memo, useRef } from 'react';
+import { Button } from './ui/button';
+type VisibilityType = 'private' | 'public';
 
 interface SuggestedActionsProps {
   chatId: string;
-  sendMessage?: UseChatHelpers<ChatMessage>["sendMessage"];
+  sendMessage?: UseChatHelpers<ChatMessage>['sendMessage'];
   selectedVisibilityType: VisibilityType;
   // Unified compare architecture props
   selectedModelIds?: string[];
@@ -28,24 +28,24 @@ function PureSuggestedActions({
 
   const suggestedActions = [
     {
-      title: "What are the advantages",
-      label: "of using AI tools instead of Google?",
-      action: "What are the advantages of using AI tools instead of Google?",
+      title: 'What are the advantages',
+      label: 'of using AI tools instead of Google?',
+      action: 'What are the advantages of using AI tools instead of Google?',
     },
     {
-      title: "Write code to",
+      title: 'Write code to',
       label: `demonstrate djikstra's algorithm`,
       action: `Write code to demonstrate djikstra's algorithm`,
     },
     {
-      title: "Help me write an essay",
+      title: 'Help me write an essay',
       label: `about Oil Painting`,
       action: `Help me write an essay about Oil Painting`,
     },
     {
-      title: "What is the weather",
-      label: "in New Delhi?",
-      action: "What is the weather in New Delhi?",
+      title: 'What is the weather',
+      label: 'in New Delhi?',
+      action: 'What is the weather in New Delhi?',
     },
   ];
 
@@ -62,12 +62,12 @@ function PureSuggestedActions({
           exit={{ opacity: 0, y: 20 }}
           transition={{ delay: 0.05 * index }}
           key={`suggested-action-${suggestedAction.title}-${index}`}
-          className={index > 1 ? "hidden sm:block" : "block"}
+          className={index > 1 ? 'hidden sm:block' : 'block'}
         >
           <Button
             variant="ghost"
             onClick={async () => {
-              window.history.replaceState({}, "", `/chat/${chatId}`);
+              window.history.replaceState({}, '', `/chat/${chatId}`);
 
               // Always use compare mode for unified architecture (1-N models)
               if (selectedModelIds.length > 0 && onStartCompare) {
@@ -80,7 +80,7 @@ function PureSuggestedActions({
                     action: suggestedAction.action,
                     selectedModelIds,
                   },
-                  "No models selected for suggested action"
+                  'No models selected for suggested action',
                 );
               }
             }}
@@ -109,5 +109,5 @@ export const SuggestedActions = memo(
       return false;
 
     return true;
-  }
+  },
 );

@@ -11,6 +11,7 @@ import {
   inArray,
   lt,
   or,
+  sql,
   sum,
 } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -23,7 +24,6 @@ import { dbLogger } from '@/lib/logger';
 
 import type { UserType } from '@/lib/supabase/types';
 import type { UserSystemPrompt } from '@/lib/types';
-import { sql } from 'drizzle-orm';
 import { ChatSDKError } from '../errors';
 import {
   chat,
@@ -166,19 +166,27 @@ export async function createOAuthUserIfNotExistsSimple(
 // Ensure an anonymous user exists in the database
 export async function createAnonymousUserIfNotExists(supabaseUserId: string) {
   try {
-    // Check if user already exists by Supabase ID
+    // Check if user already exists by Supabase ID (try both id and supabaseId fields for backward compatibility)
     const existingById = await db
       .select()
       .from(user)
       .where(eq(user.id, supabaseUserId));
     if (existingById.length > 0) return existingById[0];
 
-    // Create new anonymous user with auto-generated ID (don't use Supabase ID as primary key for anonymous users)
+    // Also check by supabaseId field for existing records
+    const existingBySupabaseId = await db
+      .select()
+      .from(user)
+      .where(eq(user.supabaseId, supabaseUserId));
+    if (existingBySupabaseId.length > 0) return existingBySupabaseId[0];
+
+    // Create new anonymous user using Supabase ID as primary key (matches auth decorator pattern)
     const inserted = await db
       .insert(user)
       .values({
+        id: supabaseUserId, // Use Supabase ID directly as primary key
         email: `anonymous-${supabaseUserId}@temp.local`, // Temporary email to satisfy NOT NULL constraint
-        supabaseId: supabaseUserId, // Store Supabase ID for linking later
+        supabaseId: supabaseUserId, // Also store in supabaseId field for consistency
       })
       .returning();
     return inserted[0];

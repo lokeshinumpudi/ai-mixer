@@ -28,5 +28,11 @@ export async function createClient() {
         }
       },
     },
+    auth: {
+      // Enable PKCE for server-side OAuth callbacks
+      flowType: 'pkce',
+      // Enable debug logging in development
+      debug: process.env.NODE_ENV === 'development',
+    },
   });
 }

@@ -1,12 +1,12 @@
-import { authenticatedRoute } from "@/lib/auth-decorators";
-import { getChatById, getCompareRun } from "@/lib/db/queries";
-import { ChatSDKError } from "@/lib/errors";
+import { authenticatedRoute } from '@/lib/auth-decorators';
+import { getChatById, getCompareRun } from '@/lib/db/queries';
+import { ChatSDKError } from '@/lib/errors';
 
 export const GET = authenticatedRoute(async (request, context, user) => {
   if (!context.params) {
     return new ChatSDKError(
-      "bad_request:api",
-      "Run ID is required"
+      'bad_request:api',
+      'Run ID is required',
     ).toResponse();
   }
 
@@ -15,8 +15,8 @@ export const GET = authenticatedRoute(async (request, context, user) => {
 
     if (!runId) {
       return new ChatSDKError(
-        "bad_request:api",
-        "Run ID is required"
+        'bad_request:api',
+        'Run ID is required',
       ).toResponse();
     }
 
@@ -26,12 +26,12 @@ export const GET = authenticatedRoute(async (request, context, user) => {
     // private chats only by the owner.
     const chat = await getChatById({ id: run.chatId });
     if (!chat) {
-      return new ChatSDKError("not_found:chat", "Chat not found").toResponse();
+      return new ChatSDKError('not_found:chat', 'Chat not found').toResponse();
     }
-    if (chat.visibility === "private" && chat.userId !== user.id) {
+    if (chat.visibility === 'private' && chat.userId !== user.id) {
       return new ChatSDKError(
-        "forbidden:compare",
-        "Access denied"
+        'forbidden:compare',
+        'Access denied',
       ).toResponse();
     }
 
@@ -40,15 +40,15 @@ export const GET = authenticatedRoute(async (request, context, user) => {
       results,
     });
   } catch (error) {
-    console.error("Get compare run error:", error);
+    console.error('Get compare run error:', error);
 
     if (error instanceof ChatSDKError) {
       return error.toResponse();
     }
 
     return new ChatSDKError(
-      "bad_request:api",
-      "Failed to get compare run"
+      'bad_request:api',
+      'Failed to get compare run',
     ).toResponse();
   }
 });

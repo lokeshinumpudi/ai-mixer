@@ -1,7 +1,7 @@
 'use client';
 
+import { useAuth } from '@/components/auth-provider';
 import type { Chat } from '@/lib/db/schema';
-import type { ChatMessage } from '@/lib/types';
 import { fetcher } from '@/lib/utils';
 import useSWR from 'swr';
 
@@ -12,16 +12,11 @@ import useSWR from 'swr';
  * - Reduces 9 API calls to 1 call
  * - 70%+ performance improvement
  * - Built-in caching and error handling
+ * - Unified compare architecture (no messages)
  */
 
 export interface OptimizedChatData {
   chat: Chat | null;
-  messages: {
-    items: ChatMessage[];
-    hasMore: boolean;
-    nextCursor: string | null;
-    total: number;
-  };
   compareRuns: {
     items: any[];
     hasMore: boolean;
@@ -32,20 +27,27 @@ export interface OptimizedChatData {
   error: any;
   mutate: () => Promise<any>;
   // Pagination functions
-  loadMoreMessages: () => Promise<void>;
   loadMoreCompareRuns: () => Promise<void>;
 }
 
 export function useOptimizedChatData(chatId: string): OptimizedChatData {
+  const { user, loading: authLoading } = useAuth();
+
+  // 🚨 FIX: Only make API calls for valid, existing chats AND when auth is ready
+  // Don't call API for new/empty chats (like on root page) or when auth is loading
+  const shouldFetch =
+    !authLoading &&
+    user &&
+    chatId &&
+    chatId.length > 0 &&
+    typeof window !== 'undefined' &&
+    // Only fetch for existing chat pages, not root page with new UUIDs
+    (window.location.pathname.startsWith('/chat/') ||
+      (window.location.pathname !== '/' && chatId.length === 36)); // UUID length check
+
   // Single consolidated API call with aggressive caching
   const { data, error, isLoading, mutate } = useSWR<{
     chat: Chat;
-    messages: {
-      items: ChatMessage[];
-      hasMore: boolean;
-      nextCursor: string | null;
-      total: number;
-    };
     compareRuns: {
       items: any[];
       hasMore: boolean;
@@ -56,7 +58,7 @@ export function useOptimizedChatData(chatId: string): OptimizedChatData {
       queriesExecuted: number;
       consolidatedResponse: boolean;
     };
-  }>(chatId ? `/api/chat/${chatId}/data` : null, fetcher, {
+  }>(shouldFetch ? `/api/chat/${chatId}/data` : null, fetcher, {
     // Aggressive caching for performance
     revalidateOnFocus: false,
     revalidateOnReconnect: true,
@@ -65,38 +67,12 @@ export function useOptimizedChatData(chatId: string): OptimizedChatData {
     errorRetryInterval: 1000,
     // Cache for 5 minutes
     refreshInterval: 5 * 60 * 1000,
+    // Don't retry on 404 errors (chat doesn't exist)
+    shouldRetryOnError: (error) => {
+      // Don't retry on 404 (chat not found) or 403 (forbidden)
+      return error?.status !== 404 && error?.status !== 403;
+    },
   });
-
-  // Pagination functions with optimistic updates
-  const loadMoreMessages = async () => {
-    if (!data?.messages.hasMore || isLoading) return;
-
-    try {
-      const response = await fetch(
-        `/api/chat/${chatId}/data?messageBefore=${data.messages.nextCursor}&messageLimit=20`,
-      );
-      const newData = await response.json();
-
-      // Optimistic update - append new messages
-      mutate(
-        (current) => {
-          if (!current) return current;
-          return {
-            ...current,
-            messages: {
-              ...current.messages,
-              items: [...current.messages.items, ...newData.messages.items],
-              hasMore: newData.messages.hasMore,
-              nextCursor: newData.messages.nextCursor,
-            },
-          };
-        },
-        false, // Don't revalidate
-      );
-    } catch (error) {
-      console.error('Failed to load more messages:', error);
-    }
-  };
 
   const loadMoreCompareRuns = async () => {
     if (!data?.compareRuns.hasMore || isLoading) return;
@@ -133,22 +109,15 @@ export function useOptimizedChatData(chatId: string): OptimizedChatData {
 
   return {
     chat: data?.chat || null,
-    messages: data?.messages || {
-      items: [],
-      hasMore: false,
-      nextCursor: null,
-      total: 0,
-    },
     compareRuns: data?.compareRuns || {
       items: [],
       hasMore: false,
       nextCursor: null,
     },
     votes: data?.votes || [],
-    isLoading,
+    isLoading: authLoading || isLoading, // Include auth loading state
     error,
     mutate,
-    loadMoreMessages,
     loadMoreCompareRuns,
   };
 }

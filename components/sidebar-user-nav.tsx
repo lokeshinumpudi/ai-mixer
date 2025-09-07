@@ -1,6 +1,6 @@
 'use client';
 
-import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
+import { useAuth } from '@/components/auth-provider';
 import { createClient } from '@/lib/supabase/client';
 import { ChevronUp } from 'lucide-react';
 import { useTheme } from 'next-themes';
@@ -25,7 +25,7 @@ import { toast } from './toast';
 import { MobileFriendlyTooltip } from './ui/mobile-friendly-tooltip';
 export function SidebarUserNav({ user }: { user: any }) {
   const router = useRouter();
-  const { loading, signOut } = useSupabaseAuth();
+  const { loading, signOut } = useAuth();
   const { setTheme, resolvedTheme } = useTheme();
   const { setOpenMobile, setOpen } = useSidebar();
   const supabase = createClient();

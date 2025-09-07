@@ -31,9 +31,27 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Check for Supabase session cookies
+  // Supabase typically sets sb-[project-ref]-auth-token and sb-[project-ref]-auth-token.0
+  const cookies = request.cookies.getAll();
+  const hasSupabaseCookies = cookies.some(
+    (cookie) =>
+      cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token'),
+  );
+
+  let user = null;
+
+  if (hasSupabaseCookies) {
+    try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      user = authUser;
+    } catch (error) {
+      // If getUser fails, continue without user (will be handled by client)
+      console.warn('Middleware auth check failed:', error);
+    }
+  }
 
   return supabaseResponse;
 }

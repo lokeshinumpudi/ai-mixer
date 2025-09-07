@@ -7,6 +7,7 @@
 
 'use client';
 
+import { useAuth } from '@/components/auth-provider';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +29,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { useSupabaseAuth } from '@/hooks/use-supabase-auth';
 import {
   Github,
   Loader2,
@@ -61,7 +61,7 @@ export function IdentityManager() {
     unlinkIdentity,
     isAuthenticated,
     isAnonymous,
-  } = useSupabaseAuth();
+  } = useAuth();
 
   const [identities, setIdentities] = useState<Identity[]>([]);
   const [loadingIdentities, setLoadingIdentities] = useState(false);

@@ -106,9 +106,60 @@ export function authenticatedRoute(handler: AuthenticatedRouteHandler) {
           {
             authMethod: bearer ? 'bearer_token' : 'session',
             url: request.url,
+            cookies: request.cookies.getAll().map((c) => c.name),
           },
-          'No authenticated user found',
+          'No authenticated user found - checking for anonymous access',
         );
+
+        // For anonymous users, try to create one if none exists
+        try {
+          const { data: anonData, error: anonError } =
+            await supabase.auth.signInAnonymously({
+              options: {
+                data: {
+                  user_type: 'anonymous' as UserType,
+                  created_via: 'anonymous',
+                },
+              },
+            });
+
+          if (anonError) throw anonError;
+
+          if (anonData.user) {
+            authLogger.info(
+              {
+                userId: anonData.user.id,
+                isAnonymous: true,
+              },
+              'Created anonymous user for API access',
+            );
+
+            // Get user type for the newly created anonymous user
+            const userType = await getUserType(anonData.user.id, true);
+
+            const user: AppUser & { userType: UserType } = {
+              id: anonData.user.id,
+              email: anonData.user.email,
+              user_metadata: {
+                user_type: userType,
+                created_via: 'anonymous',
+              },
+              is_anonymous: anonData.user.is_anonymous,
+              userType,
+            };
+
+            return await handler(request, context, user);
+          }
+        } catch (anonError) {
+          authLogger.error(
+            {
+              error: anonError,
+              url: request.url,
+            },
+            'Failed to create anonymous user for API',
+          );
+        }
+
         return new ChatSDKError(
           'unauthorized:api',
           'Authentication required',
