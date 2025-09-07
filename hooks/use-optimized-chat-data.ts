@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useAuth } from '@/components/auth-provider';
-import type { Chat } from '@/lib/db/schema';
-import { fetcher } from '@/lib/utils';
-import useSWR from 'swr';
+import { useAuth } from "@/components/auth-provider";
+import type { Chat } from "@/lib/db/schema";
+import { fetcher } from "@/lib/utils";
+import useSWR from "swr";
 
 /**
  * 🚀 OPTIMIZED CHAT DATA HOOK
@@ -40,10 +40,10 @@ export function useOptimizedChatData(chatId: string): OptimizedChatData {
     user &&
     chatId &&
     chatId.length > 0 &&
-    typeof window !== 'undefined' &&
+    typeof window !== "undefined" &&
     // Only fetch for existing chat pages, not root page with new UUIDs
-    (window.location.pathname.startsWith('/chat/') ||
-      (window.location.pathname !== '/' && chatId.length === 36)); // UUID length check
+    (window.location.pathname.startsWith("/chat/") ||
+      (window.location.pathname !== "/" && chatId.length === 36)); // UUID length check
 
   // Single consolidated API call with aggressive caching
   const { data, error, isLoading, mutate } = useSWR<{
@@ -67,6 +67,24 @@ export function useOptimizedChatData(chatId: string): OptimizedChatData {
     errorRetryInterval: 1000,
     // Cache for 5 minutes
     refreshInterval: 5 * 60 * 1000,
+    // Do not show running state if all model results are already completed
+    onSuccess: (payload) => {
+      try {
+        const items = payload?.compareRuns?.items || [];
+        if (items.length > 0) {
+          const latest = items[items.length - 1];
+          if (
+            latest?.status === "running" &&
+            Array.isArray(latest.results) &&
+            latest.results.every((r: any) => r.status === "completed")
+          ) {
+            // Locally patch status to completed to avoid eternal loading
+            (payload as any).compareRuns.items[items.length - 1].status =
+              "completed";
+          }
+        }
+      } catch {}
+    },
     // Don't retry on 404 errors (chat doesn't exist)
     shouldRetryOnError: (error) => {
       // Don't retry on 404 (chat not found) or 403 (forbidden)
@@ -79,7 +97,7 @@ export function useOptimizedChatData(chatId: string): OptimizedChatData {
 
     try {
       const response = await fetch(
-        `/api/chat/${chatId}/data?compareCursor=${data.compareRuns.nextCursor}&compareLimit=50`,
+        `/api/chat/${chatId}/data?compareCursor=${data.compareRuns.nextCursor}&compareLimit=50`
       );
       const newData = await response.json();
 
@@ -100,10 +118,10 @@ export function useOptimizedChatData(chatId: string): OptimizedChatData {
             },
           };
         },
-        false, // Don't revalidate
+        false // Don't revalidate
       );
     } catch (error) {
-      console.error('Failed to load more compare runs:', error);
+      console.error("Failed to load more compare runs:", error);
     }
   };
 

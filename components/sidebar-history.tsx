@@ -22,7 +22,7 @@ import { fetcher } from "@/lib/utils";
 import { isToday, isYesterday, subMonths, subWeeks } from "date-fns";
 import { motion } from "framer-motion";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import useSWRInfinite from "swr/infinite";
 import { LoaderIcon } from "./icons";
@@ -116,10 +116,14 @@ export function SidebarHistory({ user }: { user: AppUser | null }) {
   const { setOpenMobile } = useSidebar();
   const { id } = useParams();
 
-  const getKey =
-    user && !user.is_anonymous
-      ? getChatHistoryPaginationKeyForUser(user.id)
-      : () => null as any;
+  // Memoize the pagination key factory to avoid re-creation across renders
+  const getKey = useMemo(
+    () =>
+      user && !user.is_anonymous
+        ? getChatHistoryPaginationKeyForUser(user.id)
+        : () => null as any,
+    [user?.id, user?.is_anonymous]
+  );
 
   const {
     data: paginatedChatHistories,
@@ -129,6 +133,11 @@ export function SidebarHistory({ user }: { user: AppUser | null }) {
     mutate,
   } = useSWRInfinite<ChatHistory>(getKey, fetcher, {
     fallbackData: [],
+    // Reduce duplicate requests on mount/focus
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+    dedupingInterval: 10000,
+    revalidateFirstPage: false,
   });
 
   const router = useRouter();
@@ -344,12 +353,11 @@ export function SidebarHistory({ user }: { user: AppUser | null }) {
               })()}
           </SidebarMenu>
 
-          <motion.div
-            onViewportEnter={() => {
-              if (!isValidating && !hasReachedEnd) {
-                setSize((size) => size + 1);
-              }
-            }}
+          {/* Avoid auto-prefetching the second page on first paint */}
+          <HistorySentinel
+            hasReachedEnd={hasReachedEnd}
+            isValidating={isValidating}
+            setSize={setSize}
           />
 
           {hasReachedEnd ? (
@@ -385,5 +393,30 @@ export function SidebarHistory({ user }: { user: AppUser | null }) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+function HistorySentinel({
+  hasReachedEnd,
+  isValidating,
+  setSize,
+}: {
+  hasReachedEnd: boolean;
+  isValidating: boolean;
+  setSize: (updater: (size: number) => number) => void;
+}) {
+  const didTriggerRef = React.useRef(false);
+  return (
+    <motion.div
+      onViewportEnter={() => {
+        if (didTriggerRef.current) {
+          if (!isValidating && !hasReachedEnd) {
+            setSize((size) => size + 1);
+          }
+        } else {
+          didTriggerRef.current = true;
+        }
+      }}
+    />
   );
 }
