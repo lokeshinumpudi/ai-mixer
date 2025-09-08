@@ -5,9 +5,9 @@
  * Supports multiple OAuth providers and account linking/unlinking
  */
 
-'use client';
+"use client";
 
-import { useAuth } from '@/components/auth-provider';
+import { useAuth } from "@/components/auth-provider";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,28 +18,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import {
-  Github,
-  Loader2,
-  Mail,
-  Plus,
-  Shield,
-  Trash2,
-  Twitter,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Github, Loader2, Mail, Shield, Trash2, Twitter } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 interface Identity {
   id: string;
@@ -80,19 +72,19 @@ export function IdentityManager() {
     try {
       const { identities: userIdentities, error } = await getLinkedIdentities();
       if (error) {
-        toast.error('Failed to load linked accounts');
+        toast.error("Failed to load linked accounts");
         return;
       }
       setIdentities(userIdentities as Identity[]);
     } catch (err) {
-      console.error('Failed to load identities:', err);
+      console.error("Failed to load identities:", err);
     } finally {
       setLoadingIdentities(false);
     }
   };
 
   const handleLinkIdentity = async (
-    provider: 'google' | 'github' | 'discord' | 'twitter',
+    provider: "google" | "github" | "discord" | "twitter"
   ) => {
     setLinkingProvider(provider);
     try {
@@ -116,7 +108,7 @@ export function IdentityManager() {
   const handleUnlinkIdentity = async (identityId: string, provider: string) => {
     // Don't allow unlinking if it's the last identity
     if (identities.length <= 1) {
-      toast.error('You must have at least one linked account');
+      toast.error("You must have at least one linked account");
       return;
     }
 
@@ -141,13 +133,13 @@ export function IdentityManager() {
 
   const getProviderIcon = (provider: string) => {
     switch (provider.toLowerCase()) {
-      case 'google':
+      case "google":
         return <Shield className="size-4 text-red-500" />;
-      case 'github':
+      case "github":
         return <Github className="size-4" />;
-      case 'twitter':
+      case "twitter":
         return <Twitter className="size-4 text-blue-500" />;
-      case 'email':
+      case "email":
         return <Mail className="size-4" />;
       default:
         return <Shield className="size-4" />;
@@ -156,26 +148,26 @@ export function IdentityManager() {
 
   const getProviderColor = (provider: string) => {
     switch (provider.toLowerCase()) {
-      case 'google':
-        return 'bg-red-50 text-red-700 border-red-200';
-      case 'github':
-        return 'bg-gray-50 text-gray-700 border-gray-200';
-      case 'twitter':
-        return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'email':
-        return 'bg-green-50 text-green-700 border-green-200';
+      case "google":
+        return "bg-red-50 text-red-700 border-red-200";
+      case "github":
+        return "bg-gray-50 text-gray-700 border-gray-200";
+      case "twitter":
+        return "bg-blue-50 text-blue-700 border-blue-200";
+      case "email":
+        return "bg-green-50 text-green-700 border-green-200";
       default:
-        return 'bg-gray-50 text-gray-700 border-gray-200';
+        return "bg-gray-50 text-gray-700 border-gray-200";
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -205,11 +197,11 @@ export function IdentityManager() {
         <CardContent>
           <div className="space-y-4">
             <Button
-              onClick={() => handleLinkIdentity('google')}
+              onClick={() => handleLinkIdentity("google")}
               disabled={linkingProvider !== null}
               className="w-full"
             >
-              {linkingProvider === 'google' ? (
+              {linkingProvider === "google" ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               ) : (
                 <Shield className="mr-2 size-4" />
@@ -218,11 +210,11 @@ export function IdentityManager() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => handleLinkIdentity('github')}
+              onClick={() => handleLinkIdentity("github")}
               disabled={linkingProvider !== null}
               className="w-full"
             >
-              {linkingProvider === 'github' ? (
+              {linkingProvider === "github" ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               ) : (
                 <Github className="mr-2 size-4" />
@@ -281,7 +273,7 @@ export function IdentityManager() {
                         Linked {formatDate(identity.created_at)}
                         {identity.last_sign_in_at && (
                           <span className="ml-2">
-                            • Last sign-in{' '}
+                            • Last sign-in{" "}
                             {formatDate(identity.last_sign_in_at)}
                           </span>
                         )}
@@ -308,7 +300,7 @@ export function IdentityManager() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Unlink Account</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to unlink your{' '}
+                            Are you sure you want to unlink your{" "}
                             {identity.provider} account? You can always link it
                             again later.
                           </AlertDialogDescription>
@@ -319,7 +311,7 @@ export function IdentityManager() {
                             onClick={() =>
                               handleUnlinkIdentity(
                                 identity.id,
-                                identity.provider,
+                                identity.provider
                               )
                             }
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -339,7 +331,7 @@ export function IdentityManager() {
         <Separator />
 
         {/* Add New Identity */}
-        <div className="space-y-4">
+        {/* <div className="space-y-4">
           <h3 className="text-sm font-medium">Link New Account</h3>
           <div className="grid grid-cols-2 gap-3">
             {!identities.some((id) => id.provider === 'google') && (
@@ -398,7 +390,7 @@ export function IdentityManager() {
               </Button>
             )}
           </div>
-        </div>
+        </div> */}
 
         {/* Security Note */}
         <div className="bg-muted p-4 rounded-lg">
