@@ -22,6 +22,8 @@
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
+    "db:backfill": "npx tsx scripts/backfill-aggregates.ts",
+    "db:backfill:dry": "npx tsx scripts/backfill-aggregates.ts --dry-run",
     "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
     "prepare": "husky"
   },
