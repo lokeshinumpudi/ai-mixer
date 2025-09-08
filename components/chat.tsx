@@ -1,31 +1,31 @@
-"use client";
+'use client';
 
-import { ChatHeader } from "@/components/chat-header";
+import { ChatHeader } from '@/components/chat-header';
 
-import { useAuth } from "@/components/auth-provider";
-import { useArtifactSelector } from "@/hooks/use-artifact";
-import { useAutoResume } from "@/hooks/use-auto-resume";
-import { useChatReadOnly } from "@/hooks/use-chat-access";
-import { useChatRunState } from "@/hooks/use-chat-run-state";
-import { useChatVisibility } from "@/hooks/use-chat-visibility";
-import { useCompareRun } from "@/hooks/use-compare-run";
-import { useOnboarding } from "@/hooks/use-onboarding";
-import { getDefaultModelForUser } from "@/lib/ai/models";
-import type { Chat as ChatType, Vote } from "@/lib/db/schema";
-import { uiLogger } from "@/lib/logger";
-import type { AppUser } from "@/lib/supabase/types";
-import type { Attachment, ChatMessage } from "@/lib/types";
-import { fetcher } from "@/lib/utils";
-import { usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import useSWR from "swr";
-import { useModels } from "../hooks/use-models";
-import { Artifact } from "./artifact";
-import { GoogleLoginCTA } from "./google-login-cta";
-import { Messages } from "./messages";
-import { MultimodalInput } from "./multimodal-input";
-import { OnboardingModal } from "./onboarding-modal";
-import { toast, upgradeToast } from "./toast";
+import { useAuth } from '@/components/auth-provider';
+import { useArtifactSelector } from '@/hooks/use-artifact';
+import { useAutoResume } from '@/hooks/use-auto-resume';
+import { useChatReadOnly } from '@/hooks/use-chat-access';
+import { useChatRunState } from '@/hooks/use-chat-run-state';
+import { useChatVisibility } from '@/hooks/use-chat-visibility';
+import { useCompareRun } from '@/hooks/use-compare-run';
+import { useOnboarding } from '@/hooks/use-onboarding';
+import { getDefaultModelForUser } from '@/lib/ai/models';
+import type { Chat as ChatType, Vote } from '@/lib/db/schema';
+import { uiLogger } from '@/lib/logger';
+import type { AppUser } from '@/lib/supabase/types';
+import type { Attachment, ChatMessage } from '@/lib/types';
+import { fetcher } from '@/lib/utils';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import useSWR from 'swr';
+import { useModels } from '../hooks/use-models';
+import { Artifact } from './artifact';
+import { GoogleLoginCTA } from './google-login-cta';
+import { Messages } from './messages';
+import { MultimodalInput } from './multimodal-input';
+import { OnboardingModal } from './onboarding-modal';
+import { toast, upgradeToast } from './toast';
 
 export function Chat({
   id,
@@ -42,7 +42,7 @@ export function Chat({
 }: {
   id: string;
   initialMessages: ChatMessage[];
-  initialVisibilityType: "private" | "public";
+  initialVisibilityType: 'private' | 'public';
   isReadonly: boolean;
   user: AppUser | null;
   autoResume: boolean;
@@ -72,8 +72,8 @@ export function Chat({
 
   // Load message count from localStorage
   useEffect(() => {
-    if (typeof window !== "undefined" && isAnonymous) {
-      const stored = localStorage.getItem("anonymous_message_count");
+    if (typeof window !== 'undefined' && isAnonymous) {
+      const stored = localStorage.getItem('anonymous_message_count');
       const count = stored ? Number.parseInt(stored, 10) : 0;
       setMessageCount(count);
       setShouldShowLoginPrompt(count >= 5); // MAX_ANONYMOUS_MESSAGES = 5
@@ -84,7 +84,7 @@ export function Chat({
     if (isAnonymous) {
       const newCount = messageCount + 1;
       setMessageCount(newCount);
-      localStorage.setItem("anonymous_message_count", newCount.toString());
+      localStorage.setItem('anonymous_message_count', newCount.toString());
       setShouldShowLoginPrompt(newCount >= 5);
     }
   }, [isAnonymous, messageCount]);
@@ -103,15 +103,15 @@ export function Chat({
   // Don't use initialChatModel while API is loading to avoid race conditions
   const currentModel =
     userSettings?.defaultModel ||
-    getDefaultModelForUser(userType ?? "anonymous");
+    getDefaultModelForUser(userType ?? 'anonymous');
 
-  const [input, setInput] = useState<string>("");
+  const [input, setInput] = useState<string>('');
 
   // Unified compare architecture - always in compare mode
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [currentVisibility, setCurrentVisibility] = useState<
-    "private" | "public"
+    'private' | 'public'
   >(initialVisibilityType);
 
   // Reset initialization flag when chat changes
@@ -145,10 +145,10 @@ export function Chat({
   const shouldFetchData =
     id &&
     id.length > 0 &&
-    typeof window !== "undefined" &&
+    typeof window !== 'undefined' &&
     // Only fetch for existing chat pages, not root page with new UUIDs
-    (window.location.pathname.startsWith("/chat/") ||
-      (window.location.pathname !== "/" && id.length === 36)); // UUID length check
+    (window.location.pathname.startsWith('/chat/') ||
+      (window.location.pathname !== '/' && id.length === 36)); // UUID length check
 
   // Compare run hook - only for streaming, data comes from chatData
   const {
@@ -165,7 +165,7 @@ export function Chat({
 
   // 🚀 STREAM-FIRST ARCHITECTURE: Compose historical + streaming, no window checks
   const pathname = usePathname();
-  const enableHistorical = (pathname || "").startsWith("/chat/");
+  const enableHistorical = (pathname || '').startsWith('/chat/');
   const chatData = useChatRunState(id, enableHistorical);
 
   // 🚀 UNIFIED COMPARE ARCHITECTURE: Always use chatData (no fallbacks needed)
@@ -185,7 +185,7 @@ export function Chat({
 
   // When a run completes, revalidate consolidated data to pull final results
   useEffect(() => {
-    if (compareState.status === "completed") {
+    if (compareState.status === 'completed') {
       const t = setTimeout(() => {
         void chatData.mutate();
       }, 300);
@@ -199,13 +199,13 @@ export function Chat({
   const messages = initialMessages;
   const setMessages = () => {}; // No-op since we don't use regular chat
   const sendMessage = async (_message?: any) => Promise.resolve(); // No-op since we don't use regular chat
-  const status = "ready" as const;
+  const status = 'ready' as const;
   const stop = async () => {};
   const regenerate = async () => {};
   const resumeStream = async () => {};
 
   const searchParams = useSearchParams();
-  const query = searchParams.get("query");
+  const query = searchParams.get('query');
 
   const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
 
@@ -219,7 +219,7 @@ export function Chat({
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
-    fetcher
+    fetcher,
   );
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
@@ -235,7 +235,7 @@ export function Chat({
         // Always use compare infrastructure for unified architecture (1-N models)
         await startCompare({ prompt, modelIds });
         // Clear input after starting
-        setInput("");
+        setInput('');
       } catch (error: any) {
         uiLogger.error(
           {
@@ -245,26 +245,26 @@ export function Chat({
             modelIds,
             promptLength: prompt.length,
           },
-          "Failed to start chat/comparison"
+          'Failed to start chat/comparison',
         );
 
         // Check if it's a rate limit error for compare functionality
-        if (error instanceof Error && error.message.includes("429")) {
+        if (error instanceof Error && error.message.includes('429')) {
           upgradeToast({
-            title: "Compare limit reached",
+            title: 'Compare limit reached',
             description:
-              "Upgrade to Pro for unlimited model comparisons and 1000 messages per month.",
-            actionText: "Upgrade to Pro",
+              'Upgrade to Pro for unlimited model comparisons and 1000 messages per month.',
+            actionText: 'Upgrade to Pro',
           });
         } else {
           toast({
-            type: "error",
-            description: "Failed to start chat. Please try again.",
+            type: 'error',
+            description: 'Failed to start chat. Please try again.',
           });
         }
       }
     },
-    [startCompare, setInput]
+    [startCompare, setInput],
   );
 
   // Handle query parameter from URL (e.g., shared links)
@@ -275,13 +275,13 @@ export function Chat({
         handleStartCompare(query, selectedModelIds);
       } else {
         sendMessage({
-          role: "user" as const,
-          parts: [{ type: "text", text: query }],
+          role: 'user' as const,
+          parts: [{ type: 'text', text: query }],
         });
       }
 
       setHasAppendedQuery(true);
-      window.history.replaceState({}, "", `/chat/${id}`);
+      window.history.replaceState({}, '', `/chat/${id}`);
     }
   }, [
     query,
@@ -321,7 +321,7 @@ export function Chat({
         />
 
         {/* Read-only indicator for shared chats */}
-        {!isOwner && chat?.visibility === "public" && (
+        {!isOwner && chat?.visibility === 'public' && (
           <div className="mx-auto px-4 py-3 w-full max-w-none md:max-w-3xl">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <div className="flex items-center gap-2 text-blue-700">
@@ -386,7 +386,7 @@ export function Chat({
                   </h3>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
                     {messageCount >= 10
-                      ? "Sign in with Google to continue chatting with unlimited messages."
+                      ? 'Sign in with Google to continue chatting with unlimited messages.'
                       : `${
                           10 - messageCount
                         } messages remaining. Sign in for unlimited access to all models.`}
@@ -424,7 +424,7 @@ export function Chat({
                 onSelectedModelIdsChange={handleSelectedModelIdsChange}
                 onStartCompare={handleStartCompare}
                 compareRuns={compareRuns}
-                activeCompareMessage={compareState.status !== "idle"}
+                activeCompareMessage={compareState.status !== 'idle'}
                 isModelsLoading={isModelsLoading}
                 isLoadingRuns={isLoadingRuns}
                 readOnly={isSharedReadOnly}

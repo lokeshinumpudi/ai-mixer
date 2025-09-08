@@ -1,18 +1,20 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { FREE_MODELS, PRICING, PRO_MODELS } from "@/lib/constants";
-import { motion } from "framer-motion";
+} from '@/components/ui/dialog';
+import { FREE_MODELS, PRICING, PRO_MODELS } from '@/lib/constants';
+import { motion } from 'framer-motion';
 import {
   ArrowRight,
   Bot,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Crown,
   MessageSquareCode,
   Play,
@@ -20,8 +22,8 @@ import {
   Star,
   Trophy,
   Zap,
-} from "lucide-react";
-import { useEffect, useState } from "react";
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface OnboardingModalProps {
   isOpen: boolean;
@@ -37,7 +39,7 @@ const fadeInUp = {
 const scaleIn = {
   initial: { opacity: 0, scale: 0.9 },
   animate: { opacity: 1, scale: 1 },
-  transition: { duration: 0.5, ease: "easeOut" },
+  transition: { duration: 0.5, ease: 'easeOut' },
 };
 
 export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
@@ -57,19 +59,19 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
 
   const steps = [
     {
-      title: "🚀 Welcome to AI Mixer",
-      subtitle: "Compare AI models like never before",
+      title: '🚀 Welcome to AI Mixer',
+      subtitle: 'Compare AI models like never before',
       content: (
-        <div className="space-y-8">
+        <div className="space-y-4 sm:space-y-8">
           {/* Hero Section */}
           <motion.div {...scaleIn} className="text-center">
-            <div className="mx-auto mb-6 size-20 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg">
-              <MessageSquareCode className="size-10 text-white" />
+            <div className="mx-auto mb-3 sm:mb-6 size-16 sm:size-20 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg">
+              <MessageSquareCode className="size-8 sm:size-10 text-white" />
             </div>
-            <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            <h3 className="text-xl sm:text-2xl font-bold mb-2 sm:mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Get Better AI Answers
             </h3>
-            <p className="text-muted-foreground text-lg leading-relaxed max-w-md mx-auto">
+            <p className="text-muted-foreground text-base sm:text-lg leading-relaxed max-w-md mx-auto">
               Why settle for one AI opinion? Compare responses from multiple
               models and find the perfect answer every time.
             </p>
@@ -82,7 +84,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
             className="relative rounded-xl overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 shadow-lg"
           >
             <div className="p-6">
-              <div className="space-y-4">
+              <div className="space-y-2 sm:space-y-4">
                 {/* User Question */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border shadow-sm">
                   <div className="flex items-center gap-3 mb-2">
@@ -179,10 +181,10 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
       ),
     },
     {
-      title: "⚡ Instant Model Comparison",
-      subtitle: "See all perspectives at once",
+      title: '⚡ Instant Model Comparison',
+      subtitle: 'See all perspectives at once',
       content: (
-        <div className="space-y-6">
+        <div className="space-y-3 sm:space-y-6">
           <motion.div {...fadeInUp} className="text-center">
             <div className="mx-auto mb-6 size-18 rounded-full bg-gradient-to-br from-green-500 to-blue-600 flex items-center justify-center shadow-lg">
               <Zap className="size-9 text-white" />
@@ -271,10 +273,10 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
       ),
     },
     {
-      title: "🎯 Start Free, Upgrade When Ready",
-      subtitle: "Try it risk-free",
+      title: '🎯 Start Free, Upgrade When Ready',
+      subtitle: 'Try it risk-free',
       content: (
-        <div className="space-y-6">
+        <div className="space-y-3 sm:space-y-6">
           <motion.div {...fadeInUp} className="text-center">
             <div className="mx-auto mb-6 size-18 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg">
               <Crown className="size-9 text-white" />
@@ -306,7 +308,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
                 {FREE_MODELS.slice(0, 3).map((model) => (
                   <li key={model} className="flex items-center gap-2">
                     <Check className="size-4 text-green-600" />
-                    <span>{model.split("/")[1]}</span>
+                    <span>{model.split('/')[1]}</span>
                   </li>
                 ))}
                 <li className="flex items-center gap-2">
@@ -384,9 +386,9 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
     },
     {
       title: "🚀 You're All Set!",
-      subtitle: "Start comparing AI models now",
+      subtitle: 'Start comparing AI models now',
       content: (
-        <div className="space-y-6">
+        <div className="space-y-3 sm:space-y-6">
           <motion.div {...scaleIn} className="text-center">
             <div className="mx-auto mb-6 size-20 rounded-full bg-gradient-to-br from-green-500 to-blue-600 flex items-center justify-center shadow-lg">
               <Play className="size-10 text-white ml-1" />
@@ -406,7 +408,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
             transition={{ delay: 0.2 }}
             className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 p-6 rounded-xl border-2 border-dashed border-primary/30"
           >
-            <div className="text-center space-y-4">
+            <div className="text-center space-y-2 sm:space-y-4">
               <h4 className="font-bold text-lg">Try This First Question:</h4>
               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border shadow-sm max-w-md mx-auto">
                 <p className="text-sm font-medium text-left">
@@ -462,7 +464,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
     // Track skip behavior
     const timeBeforeSkip = Date.now() - startTime;
     console.log(
-      `Onboarding skipped at step ${currentStep} after ${timeBeforeSkip}ms`
+      `Onboarding skipped at step ${currentStep} after ${timeBeforeSkip}ms`,
     );
     onClose();
   };
@@ -473,98 +475,114 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={() => {}}>
-      <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto w-[95vw] sm:w-full border-2 border-primary/20">
-        <div className="sticky top-0 z-10 bg-background px-4 py-4 sm:px-6 border-b">
-          <DialogHeader className="p-0">
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  {steps[currentStep].title}
-                </DialogTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {steps[currentStep].subtitle}
-                </p>
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full p-0 border-2 border-primary/20">
+        <div className="flex flex-col h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh]">
+          <div className="sticky top-0 z-10 bg-background px-3 py-2 sm:px-6 sm:py-4 border-b">
+            <DialogHeader className="p-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    {steps[currentStep].title}
+                  </DialogTitle>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
+                    {steps[currentStep].subtitle}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
+                    {currentStep + 1} of {steps.length}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-                  {currentStep + 1} of {steps.length}
-                </span>
-              </div>
-            </div>
-          </DialogHeader>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
-          <motion.div
-            key={currentStep}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            {steps[currentStep].content}
-          </motion.div>
-        </div>
-
-        <div className="px-4 py-2 sm:px-6">
-          <div className="flex justify-center gap-3">
-            {steps.map((step, index) => (
-              <button
-                type="button"
-                key={`step-${index}-${step.title}`}
-                onClick={() => handleStepClick(index)}
-                className={`relative transition-all duration-200 ${
-                  index === currentStep
-                    ? "w-8 h-2 bg-primary rounded-full"
-                    : index < currentStep
-                    ? "size-2 bg-primary/60 rounded-full hover:bg-primary/80"
-                    : "size-2 bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50"
-                }`}
-                aria-label={`Go to step ${index + 1}`}
-              />
-            ))}
+            </DialogHeader>
           </div>
-        </div>
 
-        <div className="sticky bottom-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 py-3 sm:px-6 border-t">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="flex gap-2 w-full sm:w-auto">
-              {currentStep > 0 && (
+          <div className="flex-1 overflow-y-auto px-3 py-2 sm:p-6">
+            <motion.div
+              key={currentStep}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              {steps[currentStep].content}
+            </motion.div>
+          </div>
+
+          <div className="px-3 py-1 sm:px-6 sm:py-2">
+            <div className="flex justify-center gap-3">
+              {steps.map((step, index) => (
+                <button
+                  type="button"
+                  key={`step-${index}-${step.title}`}
+                  onClick={() => handleStepClick(index)}
+                  className={`relative transition-all duration-200 ${
+                    index === currentStep
+                      ? 'w-8 h-2 bg-primary rounded-full'
+                      : index < currentStep
+                        ? 'size-2 bg-primary/60 rounded-full hover:bg-primary/80'
+                        : 'size-2 bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50'
+                  }`}
+                  aria-label={`Go to step ${index + 1}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Simple Bottom Navigation */}
+          <div className="flex items-center justify-between px-4 py-3 border-t bg-background">
+            {/* Left: Previous Button */}
+            <div className="flex items-center">
+              {currentStep > 0 ? (
                 <Button
-                  variant="outline"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setCurrentStep(currentStep - 1)}
-                  className="w-full sm:w-auto"
+                  className="p-2 h-8 w-8"
                 >
-                  Previous
+                  <ChevronLeft className="size-4" />
                 </Button>
+              ) : (
+                <div className="w-8" />
               )}
-              <Button
-                variant="ghost"
-                onClick={handleSkip}
-                className="text-muted-foreground hover:text-foreground w-full sm:w-auto"
-              >
-                Skip Tour
-              </Button>
             </div>
 
-            <Button
-              onClick={handleNext}
-              size="lg"
-              className={`${
-                currentStep === steps.length - 1
-                  ? "bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 shadow-lg"
-                  : "bg-primary hover:bg-primary/90"
-              } transition-all duration-200 w-full sm:w-auto`}
-            >
+            {/* Center: Main Action */}
+            <div className="flex-1 flex justify-center">
               {currentStep === steps.length - 1 ? (
-                <>
+                <Button
+                  onClick={handleNext}
+                  className="bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 shadow-lg px-6"
+                >
                   Start Comparing Now
                   <ArrowRight className="ml-2 size-4" />
-                </>
+                </Button>
               ) : (
-                "Next"
+                <div className="w-8" /> // Spacer
               )}
-            </Button>
+            </div>
+
+            {/* Right: Skip/Close */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSkip}
+                className="text-xs text-muted-foreground hover:text-foreground px-2 h-8"
+              >
+                Skip
+              </Button>
+              {currentStep < steps.length - 1 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNext}
+                  className="p-2 h-8 w-8"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>

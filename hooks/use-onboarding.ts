@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from 'react';
 
-const ONBOARDING_STORAGE_KEY = "ai-chat-onboarding-completed";
+const ONBOARDING_STORAGE_KEY = 'ai-chat-onboarding-completed';
 
 interface OnboardingState {
   hasSeenOnboarding: boolean;
@@ -18,9 +18,9 @@ export function useOnboarding(): OnboardingState & {
 
   // Initialize onboarding state from localStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
       const completed = localStorage.getItem(ONBOARDING_STORAGE_KEY);
-      const hasCompleted = completed === "true";
+      const hasCompleted = completed === 'true';
 
       setHasSeenOnboarding(hasCompleted);
       setShouldShowOnboarding(!hasCompleted);
@@ -28,15 +28,15 @@ export function useOnboarding(): OnboardingState & {
   }, []);
 
   const markOnboardingComplete = useCallback(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
       setHasSeenOnboarding(true);
       setShouldShowOnboarding(false);
     }
   }, []);
 
   const resetOnboarding = useCallback(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
       localStorage.removeItem(ONBOARDING_STORAGE_KEY);
       setHasSeenOnboarding(false);
       setShouldShowOnboarding(true);
