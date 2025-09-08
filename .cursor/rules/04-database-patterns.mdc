@@ -1,0 +1,176 @@
+---
+alwaysApply: true
+globs: "lib/db/**/*,drizzle.config.ts"
+description: "Schema guidelines and centralized query patterns with Drizzle ORM."
+---
+
+# 04: Database Patterns
+
+## Core Principles
+
+- **Drizzle ORM**: Use Drizzle for all database interactions to ensure type safety.
+- **Centralized Queries**: All database queries **MUST** be located in `lib/db/queries.ts`. This provides a single source of truth for data access logic, making the codebase easier to maintain and test.
+- **Clean User Identity Management**: Use **DIRECT MAPPING** for OAuth users. Supabase IDs are used directly as database primary keys.
+
+## Schema Design
+
+The database schema is defined in `lib/db/schema.ts`.
+
+- **Type Inference**: Use Drizzle's `InferSelectModel` to automatically generate TypeScript types from your table schemas.
+- **Foreign Keys**: Enforce data integrity by using foreign key constraints to link related tables (e.g., `chat.userId` references `user.id`).
+- **User-Scoped Data**: Nearly all tables should have a `userId` column to ensure data is properly associated with a user.
+- **Current Implementation Notes**:
+  - `User.id` uses Supabase user ID directly as the primary key for all users (both anonymous and OAuth).
+  - No complex linking or ID translation required - clean 1:1 mapping.
+  - Fresh database state ensures no legacy user complications.
+
+## CLEAN OAuth User Identity Management
+
+**✅ CLEAN APPROACH**: Direct mapping eliminates complexity. No legacy user handling needed.
+
+### ✅ CLEAN: Direct Mapping Approach (CURRENT)
+
+```typescript
+// lib/db/queries.ts
+export async function createOAuthUserIfNotExistsSimple(
+  supabaseUserId: string,
+  email: string
+) {
+  // Check if user already exists
+  const [existingUser] = await db
+    .select()
+    .from(user)
+    .where(eq(user.id, supabaseUserId))
+    .limit(1);
+
+  if (existingUser) {
+    return existingUser; // Already exists
+  }
+
+  // Create new user with direct ID mapping
+  const [newUser] = await db
+    .insert(user)
+    .values({
+      id: supabaseUserId, // Direct: Supabase ID = Database ID
+      email,
+    })
+    .returning();
+
+  return newUser;
+}
+```
+
+### Why This Approach is Clean
+
+- **Zero Complexity**: Single database lookup
+- **Direct Mapping**: Supabase ID = Database primary key
+- **No Edge Cases**: Fresh database state
+- **Future-Proof**: Simple and maintainable
+
+```typescript
+// lib/db/schema.ts
+export const chat = pgTable("Chat", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  title: text("title").notNull(),
+  userId: uuid("userId") // Foreign key to the user table
+    .notNull()
+    .references(() => user.id),
+});
+```
+
+## Query Organization
+
+All database logic must be abstracted into functions within `lib/db/queries.ts`. API routes and other server-side code should call these functions instead of interacting with the database directly.
+
+### ✅ Correct Pattern
+
+```typescript
+// lib/db/queries.ts
+export async function getChatsByUserId(userId: string) {
+  try {
+    return await db.select().from(chat).where(eq(chat.userId, userId));
+  } catch (error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get chats");
+  }
+}
+
+// app/api/history/route.ts
+import { getChatsByUserId } from "@/lib/db/queries";
+
+export const GET = protectedRoute(async (req, context, user) => {
+  const chats = await getChatsByUserId(user.id);
+  return Response.json(chats);
+});
+```
+
+### ❌ Incorrect Pattern
+
+```typescript
+// app/api/history/route.ts
+// ❌ BAD: Database logic mixed with route logic
+export const GET = protectedRoute(async (req, context, user) => {
+  // ❌ This query should be in `lib/db/queries.ts`
+  const chats = await db.select().from(chat).where(eq(chat.userId, user.id));
+  return Response.json(chats);
+});
+```
+
+## Foreign Key Constraints & Deletion Order
+
+When deleting records with foreign key relationships, deletion order is critical:
+
+```typescript
+// lib/db/queries.ts - deleteChatById
+export async function deleteChatById({ id }: { id: string }) {
+  try {
+    // Delete in correct order due to foreign key constraints
+    await db.delete(vote).where(eq(vote.chatId, id));
+    await db.delete(message).where(eq(message.chatId, id));
+    await db.delete(stream).where(eq(stream.chatId, id));
+    // Delete compare runs (compareResult will be cascade deleted automatically)
+    await db.delete(compareRun).where(eq(compareRun.chatId, id));
+    const [chatsDeleted] = await db
+      .delete(chat)
+      .where(eq(chat.id, id))
+      .returning();
+    return chatsDeleted;
+  } catch (error) {
+    throw new ChatSDKError(
+      "bad_request:database",
+      "Failed to delete chat by id"
+    );
+  }
+}
+```
+
+**CRITICAL**: Always delete child records before parent records to avoid foreign key constraint violations.
+
+## Related Data Loading
+
+When displaying complex objects, always load related data explicitly:
+
+```typescript
+// ❌ BAD: Only loading parent records
+const runs = await db.select().from(compareRun);
+
+// ✅ GOOD: Loading parent records with related data
+const itemsWithResults = await Promise.all(
+  items.map(async (run) => {
+    const results = await db
+      .select()
+      .from(compareResult)
+      .where(eq(compareResult.runId, run.id))
+      .orderBy(asc(compareResult.createdAt));
+
+    return { ...run, results };
+  })
+);
+```
+
+## Migrations
+
+Database schema changes are managed using Drizzle's migration system.
+
+- **Generate**: `pnpm db:generate` to create a new migration file based on schema changes.
+- **Apply**: `pnpm db:migrate` to apply pending migrations to the database.
+- **Studio**: `pnpm db:studio` to open a local GUI for viewing and editing the database.

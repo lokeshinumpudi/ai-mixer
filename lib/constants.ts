@@ -11,16 +11,17 @@ export const isTestEnvironment = Boolean(
 
 export const DUMMY_PASSWORD = generateDummyPassword();
 
-export const DEFAULT_MODEL = 'xai/grok-3-mini';
-// Image model configuration
-export const DEFAULT_IMAGE_MODEL = 'xai/grok-2-image-1212'; // Or whatever image model is available via gateway
-
 // Pricing configuration
 export const PRICING = {
+  ANONYMOUS_TIER: {
+    dailyMessages: 20,
+    name: 'Anonymous Plan',
+    description: '20 messages per day with basic models',
+  },
   FREE_TIER: {
-    dailyMessages: 5,
+    dailyMessages: 50,
     name: 'Free Plan',
-    description: '5 messages per day with basic models',
+    description: '50 messages per day with basic+ models',
   },
   PAID_TIER: {
     monthlyMessages: 1000,
@@ -32,85 +33,176 @@ export const PRICING = {
 
 // Free models (available to all users)
 export const FREE_MODELS = [
-  'openai/gpt-5-nano',
-  'openai/gpt-oss-20b',
+  'amazon/nova-lite',
   'google/gemini-2.0-flash',
+  'anthropic/claude-3.5-haiku',
 ] as const;
 
 // Pro models (require paid subscription)
 export const PRO_MODELS = [
   ...FREE_MODELS,
-  'openai/gpt-5-mini',
-  'openai/gpt-oss-120b',
-  'xai/grok-code-fast-1',
-  'google/gemini-2.5-flash-image-preview',
-  'openai/gpt-4o-mini',
   'moonshotai/kimi-k2',
-  'alibaba/qwen-3-32b',
+  // "alibaba/qwen-3-32b",
+  // "openai/gpt-5-mini",
+  // "openai/gpt-oss-120b",
+  // "xai/grok-code-fast-1",
+  // "google/gemini-2.5-flash-image-preview",
+  // "openai/gpt-4o-mini",
 ] as const;
 
-// Unified model configuration - single source of truth
-export const SUPPORTED_MODELS = {
-  'google/gemini-2.0-flash': {
+export const DEFAULT_MODEL = FREE_MODELS[0];
+// Image model configuration
+export const DEFAULT_IMAGE_MODEL = 'xai/grok-2-image-1212';
+
+// Minimal model configuration - only business controls we need
+export const MODEL_CONFIG = {
+  'amazon/nova-lite': {
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: true,
     supportsReasoning: true,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
+  },
+  'anthropic/claude-3.5-haiku': {
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: true,
+    supportsReasoning: false,
+    supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: false,
+  },
+  'google/gemini-2.0-flash': {
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: true,
+    supportsReasoning: true,
+    supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'openai/gpt-5-nano': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: false,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
   'xai/grok-code-fast-1': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: false,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
   'moonshotai/kimi-k2': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: false,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
   'openai/gpt-oss-20b': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: false,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
   'openai/gpt-5-mini': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: true,
+    supportsVision: true,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'openai/gpt-oss-120b': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: true,
+    supportsVision: true,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'openai/gpt-4o-mini': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: true,
+    supportsVision: true,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'google/gemini-2.5-flash-image-preview': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: true,
+    supportsVision: true,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: true,
   },
   'alibaba/qwen-3-32b': {
-    supportsReasoning: true,
+    enabled: true,
+    allowFileUploads: false,
+    supportsVision: false,
+    supportsReasoning: false,
     supportsArtifacts: true,
+    supportsToolCalling: true,
+    supportsPdf: false,
   },
 } as const;
 
+// Backward compatibility alias
+export const SUPPORTED_MODELS = MODEL_CONFIG;
+
 // Derived constants for convenience
-export const SUPPORTED_MODEL_IDS = Object.keys(SUPPORTED_MODELS) as Array<
-  keyof typeof SUPPORTED_MODELS
+export const SUPPORTED_MODEL_IDS = Object.keys(MODEL_CONFIG) as Array<
+  keyof typeof MODEL_CONFIG
 >;
 
-// Helper functions to work with the unified model config
-export function getModelCapabilities(modelId: string) {
-  return (
-    SUPPORTED_MODELS[modelId as keyof typeof SUPPORTED_MODELS] || {
-      supportsReasoning: false,
-      supportsArtifacts: false,
-    }
-  );
-}
-
+// Helper function to check if model is configured
 export function isModelSupported(modelId: string): boolean {
-  return modelId in SUPPORTED_MODELS;
+  return modelId in MODEL_CONFIG;
 }
 
-// Backward compatibility alias (deprecated - use SUPPORTED_MODELS directly)
-export const MODEL_CAPABILITIES = SUPPORTED_MODELS;
+// Helper function to get model capabilities
+export function getModelCapabilities(modelId: string) {
+  return MODEL_CONFIG[modelId as keyof typeof MODEL_CONFIG] || null;
+}
+
+// AI Compare feature configuration
+export const COMPARE_MAX_MODELS = 3;
+
+// Curated compare presets for quick selection
+export const COMPARE_PRESETS = {
+  'Fast Reasoning Trio': [
+    'google/gemini-2.0-flash',
+    'openai/gpt-5-nano',
+    'xai/grok-code-fast-1',
+  ],
+  'Vision Models': [
+    'google/gemini-2.0-flash',
+    'openai/gpt-5-mini',
+    'openai/gpt-oss-120b',
+  ],
+  'Code Specialists': [
+    'xai/grok-code-fast-1',
+    'openai/gpt-5-mini',
+    'alibaba/qwen-3-32b',
+  ],
+  'Balanced Duo': ['google/gemini-2.0-flash', 'openai/gpt-4o-mini'],
+} as const;

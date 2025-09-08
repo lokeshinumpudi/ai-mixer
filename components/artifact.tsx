@@ -1,4 +1,15 @@
+import { codeArtifact } from '@/artifacts/code/client';
+import { imageArtifact } from '@/artifacts/image/client';
+import { sheetArtifact } from '@/artifacts/sheet/client';
+import { textArtifact } from '@/artifacts/text/client';
+import { useArtifact } from '@/hooks/use-artifact';
+import type { Document, Vote } from '@/lib/db/schema';
+import type { AppUser } from '@/lib/supabase/types';
+import type { Attachment, ChatMessage } from '@/lib/types';
+import { fetcher } from '@/lib/utils';
+import type { UseChatHelpers } from '@ai-sdk/react';
 import { formatDistance } from 'date-fns';
+import equal from 'fast-deep-equal';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   type Dispatch,
@@ -10,25 +21,14 @@ import {
 } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { useDebounceCallback, useWindowSize } from 'usehooks-ts';
-import type { Document, Vote } from '@/lib/db/schema';
-import { fetcher } from '@/lib/utils';
-import { MultimodalInput } from './multimodal-input';
-import { Toolbar } from './toolbar';
-import { VersionFooter } from './version-footer';
 import { ArtifactActions } from './artifact-actions';
 import { ArtifactCloseButton } from './artifact-close-button';
 import { ArtifactMessages } from './artifact-messages';
+import { MultimodalInput } from './multimodal-input';
+import { Toolbar } from './toolbar';
 import { useSidebar } from './ui/sidebar';
-import { useArtifact } from '@/hooks/use-artifact';
-import { imageArtifact } from '@/artifacts/image/client';
-import { codeArtifact } from '@/artifacts/code/client';
-import { sheetArtifact } from '@/artifacts/sheet/client';
-import { textArtifact } from '@/artifacts/text/client';
-import equal from 'fast-deep-equal';
-import type { UseChatHelpers } from '@ai-sdk/react';
-import type { VisibilityType } from './visibility-selector';
-import type { Attachment, ChatMessage } from '@/lib/types';
-import type { Session } from 'next-auth';
+import { VersionFooter } from './version-footer';
+type VisibilityType = 'private' | 'public';
 
 export const artifactDefinitions = [
   textArtifact,
@@ -68,7 +68,7 @@ function PureArtifact({
   votes,
   isReadonly,
   selectedVisibilityType,
-  session,
+  user,
   selectedModelId,
 }: {
   chatId: string;
@@ -85,7 +85,7 @@ function PureArtifact({
   regenerate: UseChatHelpers<ChatMessage>['regenerate'];
   isReadonly: boolean;
   selectedVisibilityType: VisibilityType;
-  session: Session;
+  user: AppUser | null;
   selectedModelId: string;
 }) {
   const { artifact, setArtifact, metadata, setMetadata } = useArtifact(chatId);
@@ -341,7 +341,7 @@ function PureArtifact({
                     className="bg-background dark:bg-muted"
                     setMessages={setMessages}
                     selectedVisibilityType={selectedVisibilityType}
-                    session={session}
+                    user={user}
                     selectedModelId={selectedModelId}
                   />
                 </form>

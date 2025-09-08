@@ -1,0 +1,241 @@
+---
+alwaysApply: false
+description: "Patterns and best practices for implementing compare mode functionality with mobile-responsive design"
+globs: hooks/use-compare-run.ts,components/compare-message.tsx,components/messages.tsx,components/chat.tsx,components/ui/mobile-scroll-container.tsx,components/ui/expandable-modal.tsx
+---
+
+# Compare Mode Implementation Patterns
+
+## Overview
+
+Compare mode is now the **core application architecture** - `compare-message.tsx` serves as the defacto entry point for all message rendering and interactions. This unified approach eliminates dual-mode complexity while maintaining real-time streaming, optimistic updates, smooth UX transitions, and mobile-responsive horizontal scrolling.
+
+## Core Architecture
+
+### State Management (`useCompareRun` hook)
+
+```tsx
+interface CompareRunState {
+  runId: string | null;
+  prompt: string;
+  modelIds: string[];
+  status: "idle" | "running" | "completed" | "canceled" | "failed";
+  byModelId: Record<string, CompareModelState>;
+  isRunning: boolean;
+}
+```
+
+### Key Components
+
+- **`useCompareRun`**: Manages compare state, streaming, and optimistic updates
+- **`CompareMessage`**: Renders responsive model responses (grid on desktop, horizontal scroll on mobile)
+- **`MobileScrollContainer`**: Enhanced horizontal scrolling with indicators and navigation
+- **`ExpandableModal`**: Full-screen modal for detailed card reading
+- **`Messages`**: Orchestrates regular messages + compare runs
+
+## Implementation Patterns
+
+### 1. Message Positioning
+
+```tsx
+// In Messages component - correct order for natural flow
+{messages.map(/* regular messages */)}
+{compareRuns.map(/* historical compare runs */)}
+{activeCompareMessage && /* active compare run */}
+```
+
+**Critical**: Active compare messages must appear at bottom, historical runs in middle, regular messages at top.
+
+### 2. Optimistic Updates Pattern
+
+```tsx
+// Instead of API refresh, update cache optimistically
+mutateCompareRuns(
+  (currentData) => ({
+    ...currentData,
+    items: [...currentData.items, completedRun], // Add to END
+  }),
+  false // Don't revalidate from server
+);
+```
+
+**Why**: Prevents layout shifts and provides instant feedback.
+
+### 3. Loading State Management
+
+```tsx
+// Prevent inappropriate suggestions during loading
+{
+  messages.length === 0 &&
+    compareRuns.length === 0 &&
+    !activeCompareMessage &&
+    !isLoadingRuns && <SuggestedActions />; // ← Critical: Check loading state
+}
+```
+
+**Why**: Prevents suggestions from flashing during page loads.
+
+## Streaming Events
+
+### Event Types
+
+- `"run_start"`: Compare run initiated
+- `"model_start"`: Individual model begins processing
+- `"delta"`: Content chunks from model
+- `"reasoning_delta"`: Reasoning content chunks
+- `"model_end"`: Individual model completes
+- `"run_end"`: All models complete
+
+### State Updates
+
+```tsx
+case "run_end": {
+  // Capture final state for optimistic updates
+  const completedRun = createCompletedRunObject(capturedState);
+
+  // Optimistic cache update
+  mutateCompareRuns(cache => ({
+    ...cache,
+    items: [...cache.items, completedRun]
+  }), false);
+
+  // Clear active state after delay
+  setTimeout(() => clearActiveState(), 500);
+}
+```
+
+## Best Practices
+
+### ✅ Do
+
+- Use optimistic updates to prevent layout shifts
+- Add new runs to END of list (chronological order)
+- Handle loading states to prevent UI flashing
+- Maintain proper message positioning hierarchy
+- Use proper TypeScript types for state management
+
+### ❌ Don't
+
+- Refresh data from API after every stream completion
+- Add new messages to beginning of list
+- Show suggestions during loading states
+- Mix message positioning order
+- Use non-null assertions without proper checks
+
+## Performance Considerations
+
+### Memory Management
+
+- Clear completed states after optimistic updates
+- Use proper cleanup in useEffect returns
+- Handle stream cancellations gracefully
+
+### Network Efficiency
+
+- Prefer optimistic updates over API refreshes
+- Use selective revalidation when needed
+- Cache streaming data locally
+
+## Error Handling
+
+```tsx
+case "model_error": {
+  setState(prev => ({
+    ...prev,
+    byModelId: {
+      ...prev.byModelId,
+      [event.modelId]: {
+        ...prev.byModelId[event.modelId],
+        status: "failed",
+        error: event.error,
+      },
+    },
+  }));
+}
+```
+
+## Mobile-Responsive Design Patterns
+
+### Desktop vs Mobile Layout
+
+```tsx
+{
+  /* Mobile: Horizontal scrollable cards */
+}
+<div className="md:hidden">
+  <MobileScrollContainer
+    itemCount={modelIds.length}
+    itemIds={modelIds}
+    showIndicators={modelIds.length > 1}
+  >
+    {/* Cards with w-[80vw] max-w-[320px] */}
+  </MobileScrollContainer>
+</div>;
+
+{
+  /* Desktop: Grid layout */
+}
+<div className="hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+  {/* Traditional grid cards */}
+</div>;
+```
+
+### Mobile Scroll Container Features
+
+- **Snap Scrolling**: CSS `snap-x snap-mandatory` for precise alignment
+- **Touch Optimized**: Native momentum scrolling with `WebkitOverflowScrolling: touch`
+- **Visual Indicators**: Dot indicators with active states and swipe hints
+- **Navigation Controls**: Left/right arrow buttons for precise control
+- **Scroll Containment**: Proper overflow management to prevent page-wide scrolling
+
+### Expandable Modal Integration
+
+```tsx
+// Modal with enhanced header content
+<ExpandableModal
+  title={modelName}
+  headerContent={<ModalHeaderContent result={result} onCancel={onCancel} />}
+>
+  <ExpandedCompareResult />
+</ExpandableModal>
+```
+
+**Key Features:**
+
+- Consolidated timing and token usage in sticky header
+- Mobile-optimized sizing with responsive margins
+- Backdrop click-to-close functionality
+- Keyboard navigation support (Escape key)
+
+## Performance Optimizations
+
+### React Memoization
+
+```tsx
+// Memoized components for performance
+const CompareMessage = memo(function CompareMessage({ ... }) { ... });
+const CompareResultCard = memo(function CompareResultCard({ ... }) { ... });
+const ExpandedCompareResult = memo(function ExpandedCompareResult({ ... }) { ... });
+
+// Memoized event handlers
+const handleExpandCard = useCallback((modelId: string) => {
+  setExpandedModelId(modelId);
+}, []);
+```
+
+### Scroll Performance
+
+- **Throttled Updates**: Scroll position updates optimized for 60fps
+- **Conditional Rendering**: Modal only renders when needed
+- **Efficient Keys**: Use model IDs instead of array indices for React keys
+- **Memory Management**: Proper cleanup of scroll event listeners
+
+## Testing Considerations
+
+- Test optimistic updates don't break on network failures
+- Verify loading states prevent inappropriate UI changes
+- Ensure proper cleanup on component unmount
+- Test error states and recovery flows
+- **Mobile Testing**: Verify horizontal scroll containment and touch interactions
+- **Performance Testing**: Monitor scroll smoothness and modal opening performance
+- **Accessibility Testing**: Ensure keyboard navigation and screen reader support

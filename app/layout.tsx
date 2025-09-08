@@ -1,10 +1,10 @@
-import { Toaster } from 'sonner';
+import { AuthGuard, AuthProvider } from '@/components/auth-provider';
+import { ThemeProvider } from '@/components/theme-provider';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import { ThemeProvider } from '@/components/theme-provider';
+import { Toaster } from 'sonner';
 
 import './globals.css';
-import { SessionProvider } from 'next-auth/react';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://lokeshinumpudi.com'),
@@ -13,8 +13,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
   maximumScale: 1, // Disable auto-zoom on mobile Safari
-};
+  viewportFit: 'cover',
+} as const;
 
 const geist = Geist({
   subsets: ['latin'],
@@ -77,8 +80,12 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Toaster position="top-center" />
-          <SessionProvider>{children}</SessionProvider>
+          <AuthProvider>
+            <AuthGuard>
+              <Toaster position="top-center" />
+              {children}
+            </AuthGuard>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

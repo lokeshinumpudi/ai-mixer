@@ -1,3 +1,4 @@
+import type { DBMessage, Document } from '@/lib/db/schema';
 import type {
   CoreAssistantMessage,
   CoreToolMessage,
@@ -5,14 +6,46 @@ import type {
   UIMessagePart,
 } from 'ai';
 import { type ClassValue, clsx } from 'clsx';
+import { formatISO } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
-import type { DBMessage, Document } from '@/lib/db/schema';
 import { ChatSDKError, type ErrorCode } from './errors';
 import type { ChatMessage, ChatTools, CustomUIDataTypes } from './types';
-import { formatISO } from 'date-fns';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/**
+ * Parse content to extract thinking/reasoning sections from AI responses
+ * This utility function can be used across components to handle reasoning content
+ * that comes embedded in text responses (e.g., from compare API)
+ */
+export function parseContentWithThinking(content: string): {
+  mainContent: string;
+  thinkingContent: string | null;
+} {
+  if (!content) return { mainContent: '', thinkingContent: null };
+
+  // Look for <thinking> or <think> tags (case insensitive)
+  const thinkingRegex = /<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi;
+  const thinkingMatches = content.match(thinkingRegex);
+
+  if (!thinkingMatches) {
+    return { mainContent: content, thinkingContent: null };
+  }
+
+  // Extract thinking content (remove the tags)
+  const thinkingContent = thinkingMatches
+    .map((match) => match.replace(/<\/?think(?:ing)?>/gi, '').trim())
+    .join('\n\n');
+
+  // Remove thinking sections from main content
+  const mainContent = content.replace(thinkingRegex, '').trim();
+
+  return {
+    mainContent,
+    thinkingContent: thinkingContent || null,
+  };
 }
 
 export const fetcher = async (url: string) => {
@@ -61,6 +94,51 @@ export function generateUUID(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+/**
+ * Get the base URL for the application
+ * Uses NEXT_PUBLIC_BASE_URL environment variable if available,
+ * otherwise falls back to constructing from current location (client-side)
+ * or from headers (server-side)
+ */
+export function getBaseUrl(headers?: Headers): string {
+  // Debug logging to trace URL resolution
+  console.log(
+    '[getBaseUrl] Environment variable:',
+    process.env.NEXT_PUBLIC_BASE_URL,
+  );
+  console.log('[getBaseUrl] Is client-side:', typeof window !== 'undefined');
+  console.log('[getBaseUrl] Headers provided:', !!headers);
+
+  // If environment variable is set, use it
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    console.log(
+      '[getBaseUrl] Using environment variable:',
+      process.env.NEXT_PUBLIC_BASE_URL,
+    );
+    return process.env.NEXT_PUBLIC_BASE_URL;
+  }
+
+  // Client-side fallback
+  if (typeof window !== 'undefined') {
+    const clientUrl = `${window.location.protocol}//${window.location.host}`;
+    console.log('[getBaseUrl] Using client-side URL:', clientUrl);
+    return clientUrl;
+  }
+
+  // Server-side fallback using headers
+  if (headers) {
+    const host = headers.get('host');
+    const protocol = headers.get('x-forwarded-proto') || 'http';
+    const serverUrl = `${protocol}://${host}`;
+    console.log('[getBaseUrl] Using server-side URL from headers:', serverUrl);
+    return serverUrl;
+  }
+
+  // Last resort fallback
+  console.log('[getBaseUrl] Using fallback URL: http://localhost:3000');
+  return 'http://localhost:3000';
 }
 
 type ResponseMessageWithoutId = CoreToolMessage | CoreAssistantMessage;

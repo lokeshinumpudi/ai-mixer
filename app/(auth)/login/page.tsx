@@ -1,74 +1,56 @@
 'use client';
 
-import { toast } from '@/components/toast';
+import { useAuth } from '@/components/auth-provider';
+import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
-import { useActionState, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
-import { AuthForm } from '@/components/auth-form';
-import { SubmitButton } from '@/components/submit-button';
-
-import { useSession } from 'next-auth/react';
-import { authenticate, type AuthenticateActionState } from '../actions';
-
-export default function Page() {
+export default function LoginPage() {
+  const { isAuthenticated, loading, signInWithGoogle } = useAuth();
   const router = useRouter();
 
-  const [email, setEmail] = useState('');
-  const [isSuccessful, setIsSuccessful] = useState(false);
-
-  const [state, formAction] = useActionState<AuthenticateActionState, FormData>(
-    authenticate,
-    {
-      status: 'idle',
-    },
-  );
-
-  const { update: updateSession } = useSession();
-
+  // Redirect to home if already authenticated
   useEffect(() => {
-    if (state.status === 'failed') {
-      toast({
-        type: 'error',
-        description: 'Invalid credentials!',
-      });
-    } else if (state.status === 'invalid_data') {
-      toast({
-        type: 'error',
-        description: 'Failed validating your submission!',
-      });
-    } else if (state.status === 'success') {
-      if (state.isNewUser) {
-        toast({
-          type: 'success',
-          description: 'Welcome! Your account has been created.',
-        });
-      }
-      setIsSuccessful(true);
-      updateSession();
-      router.push('/'); // Redirect to home page after successful authentication
+    if (isAuthenticated) {
+      router.push('/');
     }
-  }, [state.status, state.isNewUser]);
+  }, [isAuthenticated, router]);
 
-  const handleSubmit = (formData: FormData) => {
-    setEmail(formData.get('email') as string);
-    formAction(formData);
-  };
+  // Show loading state while checking authentication
+  if (loading) {
+    return (
+      <div className="flex h-dvh w-screen items-center justify-center">
+        <div className="w-full max-w-md overflow-hidden rounded-2xl flex flex-col gap-6 bg-background/80 backdrop-blur-md shadow-xl ring-1 ring-border/50 p-6 sm:p-8">
+          <div className="flex flex-col items-center justify-center gap-3 px-4 text-center sm:px-16">
+            <div className="animate-spin rounded-full size-8 border-b-2 border-gray-900 dark:border-gray-100 mx-auto" />
+            <p className="text-sm text-gray-500 dark:text-zinc-400">
+              Checking authentication...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
+  // Don't render login form if authenticated (will redirect)
+  if (isAuthenticated) {
+    return null;
+  }
+
+  // Show login form for unauthenticated users
   return (
     <div className="flex h-dvh w-screen items-start pt-12 md:pt-0 md:items-center justify-center">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl flex flex-col gap-12 bg-background/80 backdrop-blur-md shadow-xl ring-1 ring-border/50 p-6 sm:p-8">
-        <div className="flex flex-col items-center justify-center gap-2 px-4 text-center sm:px-16">
-          <h3 className="text-xl font-semibold dark:text-zinc-50">Welcome</h3>
+      <div className="w-full max-w-md overflow-hidden rounded-2xl flex flex-col gap-6 bg-background/80 backdrop-blur-md shadow-xl ring-1 ring-border/50 p-6 sm:p-8">
+        <div className="flex flex-col items-center justify-center gap-3 px-4 text-center sm:px-16">
+          <h3 className="text-xl font-semibold dark:text-zinc-50">Sign in</h3>
           <p className="text-sm text-gray-500 dark:text-zinc-400">
-            Enter your email and password to sign in or create an account
+            Continue to unlock more messages and all models
           </p>
         </div>
-        <AuthForm action={handleSubmit} defaultEmail={email}>
-          <SubmitButton isSuccessful={isSuccessful}>Continue</SubmitButton>
-          <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
-            We'll automatically create an account if you don't have one
-          </p>
-        </AuthForm>
+
+        <Button onClick={() => signInWithGoogle()} className="w-full">
+          Continue with Google
+        </Button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import Form from 'next/form';
 
-import { signOut } from '@/app/(auth)/auth';
+import { createClient } from '@/lib/supabase/server';
 
 export const SignOutForm = () => {
   return (
@@ -8,8 +8,13 @@ export const SignOutForm = () => {
       className="w-full"
       action={async () => {
         'use server';
-
-        await signOut();
+        // Clear Supabase session first to prevent auto-restoring previous user
+        try {
+          const supabase = await createClient();
+          await supabase.auth.signOut();
+        } catch (e) {
+          console.error('Supabase server signOut failed', e);
+        }
       }}
     >
       <button

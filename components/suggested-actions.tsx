@@ -1,45 +1,51 @@
-'use client';
+"use client";
 
-import type { ChatMessage } from '@/lib/types';
-import type { UseChatHelpers } from '@ai-sdk/react';
-import { motion } from 'framer-motion';
-import { memo, useRef } from 'react';
-import { Button } from './ui/button';
-import type { VisibilityType } from './visibility-selector';
+import { uiLogger } from "@/lib/logger";
+import type { ChatMessage } from "@/lib/types";
+import type { UseChatHelpers } from "@ai-sdk/react";
+import { motion } from "framer-motion";
+import { memo, useRef } from "react";
+import { Button } from "./ui/button";
+type VisibilityType = "private" | "public";
 
 interface SuggestedActionsProps {
   chatId: string;
-  sendMessage: UseChatHelpers<ChatMessage>['sendMessage'];
+  sendMessage?: UseChatHelpers<ChatMessage>["sendMessage"];
   selectedVisibilityType: VisibilityType;
+  // Unified compare architecture props
+  selectedModelIds?: string[];
+  onStartCompare?: (prompt: string, modelIds: string[]) => void;
 }
 
 function PureSuggestedActions({
   chatId,
   sendMessage,
   selectedVisibilityType,
+  selectedModelIds = [],
+  onStartCompare,
 }: SuggestedActionsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const suggestedActions = [
     {
-      title: 'What are the advantages',
-      label: 'of using Next.js?',
-      action: 'What are the advantages of using Next.js?',
+      title: "What are the advantages",
+      label: "of using AI tools instead of Google?",
+      action: "What are the advantages of using AI tools instead of Google?",
     },
     {
-      title: 'Write code to',
+      title: "Write code to",
       label: `demonstrate djikstra's algorithm`,
       action: `Write code to demonstrate djikstra's algorithm`,
     },
     {
-      title: 'Help me write an essay',
-      label: `about silicon valley`,
-      action: `Help me write an essay about silicon valley`,
+      title: "Help me write an essay",
+      label: `about Oil Painting`,
+      action: `Help me write an essay about Oil Painting`,
     },
     {
-      title: 'What is the weather',
-      label: 'in San Francisco?',
-      action: 'What is the weather in San Francisco?',
+      title: "What is the weather",
+      label: "in New Delhi?",
+      action: "What is the weather in New Delhi?",
     },
   ];
 
@@ -56,17 +62,27 @@ function PureSuggestedActions({
           exit={{ opacity: 0, y: 20 }}
           transition={{ delay: 0.05 * index }}
           key={`suggested-action-${suggestedAction.title}-${index}`}
-          className={index > 1 ? 'hidden sm:block' : 'block'}
+          className={index > 1 ? "hidden sm:block" : "block"}
         >
           <Button
             variant="ghost"
             onClick={async () => {
-              window.history.replaceState({}, '', `/chat/${chatId}`);
+              window.history.replaceState({}, "", `/chat/${chatId}`);
 
-              sendMessage({
-                role: 'user',
-                parts: [{ type: 'text', text: suggestedAction.action }],
-              });
+              // Always use compare mode for unified architecture (1-N models)
+              if (selectedModelIds.length > 0 && onStartCompare) {
+                onStartCompare(suggestedAction.action, selectedModelIds);
+              } else {
+                // This should not happen in unified architecture
+                uiLogger.warn(
+                  {
+                    chatId,
+                    action: suggestedAction.action,
+                    selectedModelIds,
+                  },
+                  "No models selected for suggested action"
+                );
+              }
             }}
             className="luxury-button text-left border border-border/50 rounded-2xl px-5 py-4 text-sm flex-1 gap-2 sm:flex-col w-full h-auto justify-start items-start hover:border-border hover:shadow-sm"
           >
@@ -87,7 +103,11 @@ export const SuggestedActions = memo(
     if (prevProps.chatId !== nextProps.chatId) return false;
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
+    if (
+      prevProps.selectedModelIds?.length !== nextProps.selectedModelIds?.length
+    )
+      return false;
 
     return true;
-  },
+  }
 );

@@ -1,4 +1,4 @@
-import { protectedRoute } from '@/lib/auth-decorators';
+import { authenticatedRoute } from '@/lib/auth-decorators';
 import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -16,7 +16,7 @@ const FileSchema = z.object({
     }),
 });
 
-export const POST = protectedRoute(async (request, context, user) => {
+export const POST = authenticatedRoute(async (request, context, user) => {
   if (request.body === null) {
     return new Response('Request body is empty', { status: 400 });
   }

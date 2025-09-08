@@ -1,19 +1,44 @@
 'use client';
 
 import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
+import { uiLogger } from '@/lib/logger';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { artifactDefinitions } from './artifact';
 import { useDataStream } from './data-stream-provider';
 import { upgradeToast } from './toast';
 
-import { useUsage } from '@/hooks/use-usage';
+import { mutate } from 'swr';
 
 export function DataStreamHandler() {
   const { dataStream } = useDataStream();
   const pathname = usePathname();
   const router = useRouter();
-  const { updateUsage } = useUsage();
+  // Function to invalidate usage cache when usage updates come through stream
+  const invalidateUsageCache = () => {
+    // Targeted invalidation only when a stream is active; removes need for polling
+    mutate((key) => typeof key === 'string' && key.startsWith('/api/usage'));
+  };
+
+  const invalidateHistoryCache = () => {
+    // Simple approach: just refresh the sidebar history API
+    mutate((key) => typeof key === 'string' && key.startsWith('/api/history'));
+  };
+
+  // Simple title update - just refresh the sidebar
+  const updateHistoryTitle = (newTitle: string) => {
+    if (!chatId) return;
+    // Just refresh the sidebar - no complex optimistic updates needed
+    invalidateHistoryCache();
+  };
+
+  uiLogger.debug(
+    {
+      chatId: pathname.startsWith('/chat/') ? pathname.slice(6) : 'none',
+      pathname,
+    },
+    'DataStreamHandler initialized',
+  );
 
   // Extract chatId from pathname (e.g., /chat/123 -> 123)
   const chatId = pathname.startsWith('/chat/') ? pathname.slice(6) : undefined;
@@ -25,16 +50,34 @@ export function DataStreamHandler() {
   useEffect(() => {
     if (!dataStream?.length) return;
 
+    uiLogger.debug(
+      {
+        newDeltasCount: dataStream.length - lastProcessedIndex.current - 1,
+        totalDeltas: dataStream.length,
+        chatId,
+      },
+      'Processing new data stream deltas',
+    );
+
     const newDeltas = dataStream.slice(lastProcessedIndex.current + 1);
     lastProcessedIndex.current = dataStream.length - 1;
+
+    uiLogger.debug(
+      {
+        deltaTypes: newDeltas.map((d) => d.type),
+        deltaCount: newDeltas.length,
+        chatId,
+      },
+      'Processing data deltas',
+    );
 
     newDeltas.forEach((delta) => {
       // Handle usage updates
       if (delta.type === 'data-usageUpdate' && delta.data) {
         const usageInfo = delta.data;
 
-        // Update the usage hook with new data
-        updateUsage(usageInfo);
+        // Invalidate usage cache to trigger refresh with new data
+        invalidateUsageCache();
 
         // Show upgrade toast when user is approaching or over limit
         if (usageInfo.remaining <= 10 && usageInfo.remaining > 5) {
@@ -55,19 +98,30 @@ export function DataStreamHandler() {
           // Final warning
           upgradeToast({
             title: 'Almost out of messages!',
-            description: `Only ${usageInfo.remaining} messages left! Upgrade now to keep chatting with premium models.`,
-            actionText: 'Upgrade Now',
+            description: `Only ${usageInfo.remaining} messages left! Upgrade to Pro for unlimited access.`,
+            actionText: 'Upgrade to Pro',
           });
         } else if (usageInfo.isOverLimit) {
           // Over limit - show error toast
           upgradeToast({
             title: 'Message limit reached',
             description: `You've used all your ${usageInfo.type} messages. Upgrade to Pro for unlimited access.`,
-            actionText: 'Get Pro Access',
+            actionText: 'Upgrade to Pro',
           });
         }
 
         return; // Exit early for usage updates
+      }
+
+      // When title is produced or run finishes, refresh history to update chat title
+      if (delta.type === 'data-title') {
+        if (typeof delta.data === 'string' && delta.data.length > 0) {
+          updateHistoryTitle(delta.data);
+        } else {
+          invalidateHistoryCache();
+        }
+      } else if (delta.type === 'data-finish') {
+        invalidateHistoryCache();
       }
 
       const artifactDefinition = artifactDefinitions.find(
@@ -127,7 +181,14 @@ export function DataStreamHandler() {
         }
       });
     });
-  }, [dataStream, setArtifact, setMetadata, artifact, router, updateUsage]);
+  }, [
+    dataStream,
+    setArtifact,
+    setMetadata,
+    artifact,
+    router,
+    invalidateUsageCache,
+  ]);
 
   return null;
 }

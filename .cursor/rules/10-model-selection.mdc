@@ -1,0 +1,71 @@
+---
+alwaysApply: true
+description: "The hierarchical model selection architecture."
+---
+
+# 10: Model Selection
+
+## Overview
+
+The model selection system is designed for consistency, performance, and a good user experience, using a hierarchical approach to determine which AI model is active.
+
+## Hierarchical Priority
+
+The active model is determined by the following priority order (from highest to lowest):
+
+1.  **Props `selectedModelId`**: An explicit prop passed to a component. This is mainly for backward compatibility.
+2.  **Server Settings Model**: The user's preferred model, fetched from the database via the `/api/models` endpoint. This is the authoritative setting.
+3.  **localStorage Model**: The last selected model, stored in localStorage. This provides instant UI feedback and offline persistence.
+4.  **Plan-Based Default**: A fallback model determined by the user's subscription tier (`free` or `pro`).
+
+## Implementation
+
+The `ModelPicker` component implements this logic, using the `useModels` hook to get the server settings and `useState` with `localStorage` for the local selection.
+
+````typescript
+// components/model-picker.tsx
+const { models: allModels, userSettings } = useModels();
+const [localModel, setLocalModel] = useState(() =>
+  safeLocalStorage.get(MODEL_SELECTION_KEY)
+);
+
+## Performance Optimizations
+
+### Smart Early Return for Invalid Operations
+
+When there's only 1 model selected in compare mode, attempting to deselect it should be ignored to prevent unnecessary computation:
+
+```typescript
+// components/model-picker.tsx - handleModelSelect
+const handleModelSelect = async (modelId: string) => {
+  if (isCompareMode && onSelectedModelIdsChange) {
+    const currentlySelected = selectedModelIds.includes(modelId);
+
+    if (currentlySelected) {
+      // Prevent deselection if it would result in empty selection
+      if (selectedModelIds.length === 1) {
+        return; // Ignore the operation - no computation needed
+      }
+      // Only execute when safe to deselect
+      newSelection = selectedModelIds.filter((id) => id !== modelId);
+    }
+    // ... rest of logic
+  }
+};
+````
+
+### Benefits:
+
+- **🚀 Zero Cost**: No array operations, API calls, or re-renders
+- **📱 Better UX**: Predictable behavior prevents user confusion
+- **🔋 Efficient**: Saves battery and CPU on invalid operations
+- **🛡️ Safe**: Maintains UI state consistency
+
+```
+
+When a user selects a new model:
+
+1.  The choice is immediately written to localStorage (`setLocalModel`).
+2.  A `PATCH` request is sent to `/api/user/settings` to update the database.
+3.  The SWR cache for `/api/models` is revalidated to sync the server state.
+```

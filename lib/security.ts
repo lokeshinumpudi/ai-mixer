@@ -1,7 +1,7 @@
-import type { UserType } from '@/app/(auth)/auth';
-import { auth } from '@/app/(auth)/auth';
 import { getUserById } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
+import { createClient } from '@/lib/supabase/server';
+import type { UserType } from '@/lib/supabase/types';
 
 export interface SecurityContext {
   user: {
@@ -17,23 +17,27 @@ export interface SecurityContext {
  * Ensures the user exists in the database and session is valid
  */
 export async function requireAuth(): Promise<SecurityContext> {
-  const session = await auth();
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
-  if (!session?.user?.id) {
+  if (error || !user || user.is_anonymous) {
     throw new ChatSDKError('unauthorized:chat');
   }
 
   // Verify user still exists in database (for real-time deactivation)
-  const dbUser = await getUserById(session.user.id);
+  const dbUser = await getUserById(user.id);
   if (!dbUser) {
     throw new ChatSDKError('unauthorized:chat');
   }
 
   return {
     user: {
-      id: session.user.id,
-      type: session.user.type,
-      email: session.user.email ?? null,
+      id: user.id,
+      type: (user.user_metadata?.user_type || 'free') as UserType,
+      email: user.email ?? null,
     },
     isAuthenticated: true,
   };

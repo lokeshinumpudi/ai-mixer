@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 export default function BillingSuccessPage() {
   const params = useSearchParams();
@@ -97,7 +97,7 @@ export default function BillingSuccessPage() {
       </div>
       <div className="flex gap-4 mt-4">
         <Button asChild>
-          <Link href="/settings">Go to Settings</Link>
+          <Link href="/settings?refresh=billing">Go to Settings</Link>
         </Button>
         <Button variant="outline" asChild>
           <Link href="/">Back to Chat</Link>

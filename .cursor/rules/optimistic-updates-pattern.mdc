@@ -1,0 +1,324 @@
+---
+alwaysApply: false
+description: "Pattern for implementing optimistic updates to prevent layout shifts and improve UX"
+globs: hooks/use-compare-run.ts,components/chat.tsx,hooks/*.ts
+---
+
+# Optimistic Updates Pattern
+
+## Overview
+
+Optimistic updates provide instant UI feedback by updating local state/cache immediately, then synchronizing with server in background. This prevents jarring layout shifts and creates smooth user experiences.
+
+## When to Use Optimistic Updates
+
+### ✅ Good Candidates
+
+- **Chat completions** - Immediate response display
+- **Message sending** - Instant message appearance
+- **State transitions** - Status changes (pending → completed)
+- **List operations** - Adding/removing items
+- **Form submissions** - Immediate visual feedback
+
+### ❌ Avoid For
+
+- **Financial transactions** - Need server confirmation
+- **Critical state changes** - Where rollback is expensive
+- **Large data operations** - Memory/performance concerns
+- **Real-time collaborative edits** - Conflict resolution needed
+
+## Implementation Pattern
+
+### Basic Structure
+
+```tsx
+// 1. Update local state immediately
+setLocalState(newState);
+
+// 2. Perform server operation
+try {
+  await apiCall();
+} catch (error) {
+  // 3. Rollback on failure
+  setLocalState(originalState);
+}
+```
+
+### SWR Optimistic Updates
+
+```tsx
+mutate((currentData) => updatedData, {
+  optimisticData: optimisticResult,
+  rollbackOnError: true,
+  revalidate: false, // Prevent unnecessary re-fetch
+});
+```
+
+## Compare Mode Example
+
+### Before (Problematic)
+
+```tsx
+case "run_end":
+  // This causes layout shift!
+  mutateCompareRuns(); // Refreshes entire list from API
+  setState({ runId: null, ... });
+```
+
+### After (Optimistic)
+
+```tsx
+case "run_end": {
+  // 1. Capture final state for optimistic updates
+  let capturedState: CompareRunState | null = null;
+  setState((prev) => {
+    capturedState = {
+      ...prev,
+      status: "completed",
+      isRunning: false,
+    };
+    return capturedState;
+  });
+
+  // 2. Create completed run object from captured state
+  const completedRun = {
+    id: capturedState!.runId,
+    prompt: capturedState!.prompt,
+    modelIds: capturedState!.modelIds,
+    status: "completed" as const,
+    createdAt: new Date().toISOString(),
+    results: Object.entries(capturedState!.byModelId).map(([modelId, modelState]) => ({
+      modelId,
+      status: (modelState as CompareModelState).status,
+      content: (modelState as CompareModelState).content,
+      reasoning: (modelState as CompareModelState).reasoning,
+      usage: (modelState as CompareModelState).usage,
+      error: (modelState as CompareModelState).error,
+      serverStartedAt: (modelState as CompareModelState).serverStartedAt,
+      serverCompletedAt: (modelState as CompareModelState).serverCompletedAt,
+      inferenceTimeMs: (modelState as CompareModelState).inferenceTimeMs,
+    })),
+  };
+
+  // 3. Optimistically update cache (no API refresh)
+  mutateCompareRuns(
+    (currentData: CompareRunsListResponse | undefined) => {
+      if (!currentData) return currentData;
+      // Add to END for chronological order
+      return {
+        ...currentData,
+        items: [...currentData.items, completedRun],
+      };
+    },
+    false // Don't revalidate from server
+  );
+
+  // 4. Clear active state after brief delay
+  setTimeout(() => {
+    setState({
+      runId: null,
+      prompt: "",
+      modelIds: [],
+      status: "idle",
+      byModelId: {},
+      isRunning: false,
+    });
+  }, 500);
+}
+```
+
+## Key Principles
+
+### 1. Immediate Feedback
+
+```tsx
+// Update UI first, sync later
+const optimisticResult = { ...current, status: "completed" };
+mutate(optimisticResult, { revalidate: false });
+```
+
+### 2. Proper Rollback
+
+```tsx
+mutate(optimisticData, {
+  rollbackOnError: true,
+  onError: (error) => {
+    console.error("Optimistic update failed:", error);
+    // Additional error handling
+  },
+});
+```
+
+### 3. State Consistency
+
+```tsx
+// Ensure local state matches server expectations
+const serverCompatibleData = transformForServer(localData);
+await api.update(serverCompatibleData);
+```
+
+### 4. Loading States
+
+```tsx
+// Show optimistic state, handle loading gracefully
+const [optimisticState, setOptimisticState] = useState(initialState);
+const [isUpdating, setIsUpdating] = useState(false);
+
+setOptimisticState(newState);
+setIsUpdating(true);
+```
+
+## Advanced Patterns
+
+### Conditional Updates
+
+```tsx
+mutate((current) => {
+  if (!shouldUpdate(current)) return current;
+  return applyOptimisticUpdate(current);
+}, false);
+```
+
+### Batched Updates
+
+```tsx
+// Group related updates to prevent multiple re-renders
+const updates = [
+  { type: "add_message", payload: newMessage },
+  { type: "update_status", payload: "completed" },
+];
+
+updates.forEach((update) => {
+  mutate((current) => applyUpdate(current, update), false);
+});
+```
+
+### Conflict Resolution
+
+```tsx
+// Handle server conflicts
+mutate(optimisticData, {
+  onError: (error) => {
+    if (error.status === 409) {
+      // Conflict
+      // Revert and show conflict resolution UI
+      mutate(originalData, false);
+      showConflictDialog();
+    }
+  },
+});
+```
+
+## Error Handling
+
+### Graceful Degradation
+
+```tsx
+try {
+  // Optimistic update
+  setOptimisticState(newState);
+
+  // Server sync
+  await syncWithServer();
+} catch (error) {
+  // Revert optimistic changes
+  setOptimisticState(originalState);
+
+  // Show user-friendly error
+  toast.error("Update failed. Please try again.");
+}
+```
+
+### Network Failure Recovery
+
+```tsx
+const [pendingUpdates, setPendingUpdates] = useState([]);
+
+useEffect(() => {
+  if (navigator.onLine && pendingUpdates.length > 0) {
+    // Retry failed optimistic updates
+    retryPendingUpdates();
+  }
+}, [navigator.onLine]);
+```
+
+## Testing Optimistic Updates
+
+### Unit Tests
+
+```tsx
+test("optimistic update reverts on error", async () => {
+  const mockApi = jest.fn().mockRejectedValue(new Error("API Error"));
+
+  // Trigger optimistic update
+  fireEvent.click(submitButton);
+
+  // Verify optimistic state
+  expect(screen.getByText("Completed")).toBeInTheDocument();
+
+  // Wait for error handling
+  await waitFor(() => {
+    expect(screen.getByText("Pending")).toBeInTheDocument();
+  });
+});
+```
+
+### Integration Tests
+
+```tsx
+test("optimistic updates sync correctly", async () => {
+  // Simulate user action
+  userEvent.click(submitButton);
+
+  // Verify immediate UI update
+  expect(screen.getByText("Updated")).toBeInTheDocument();
+
+  // Mock successful server response
+  await waitFor(() => {
+    expect(mockApi).toHaveBeenCalled();
+  });
+
+  // Verify final state maintained
+  expect(screen.getByText("Updated")).toBeInTheDocument();
+});
+```
+
+## Performance Considerations
+
+### Memory Management
+
+```tsx
+// Clean up optimistic state after confirmation
+useEffect(() => {
+  if (serverConfirmed) {
+    setOptimisticState(null);
+  }
+}, [serverConfirmed]);
+```
+
+### Debouncing
+
+```tsx
+// Prevent rapid optimistic updates
+const debouncedUpdate = useDebounce(optimisticUpdate, 300);
+```
+
+## Migration Guide
+
+### From Pessimistic to Optimistic
+
+1. **Identify slow operations** that benefit from instant feedback
+2. **Add optimistic state management** to components
+3. **Implement rollback mechanisms** for error cases
+4. **Add loading states** to handle pending operations
+5. **Test error scenarios** thoroughly
+
+### Best Practices Summary
+
+- ✅ **Update UI first**, sync with server second
+- ✅ **Always handle rollback** scenarios
+- ✅ **Use proper TypeScript types** for state consistency
+- ✅ **Test error recovery** thoroughly
+- ✅ **Consider performance impact** of optimistic updates
+- ❌ **Don't use for critical operations** requiring server confirmation
+- ❌ **Don't forget cleanup** of optimistic state

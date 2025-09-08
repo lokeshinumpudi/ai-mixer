@@ -11,21 +11,25 @@ import {
   inArray,
   lt,
   or,
+  sql,
   sum,
-  type SQL,
 } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
-import type { UserType } from '@/app/(auth)/auth';
 import type { ArtifactKind } from '@/components/artifact';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
-import { PRICING } from '@/lib/constants';
-import { sql } from 'drizzle-orm';
+import { dbLogger } from '@/lib/logger';
+
+import type { UserType } from '@/lib/supabase/types';
+import type { UserSystemPrompt } from '@/lib/types';
 import { ChatSDKError } from '../errors';
 import {
   chat,
+  chatUsage,
+  compareResult,
+  compareRun,
   creditLedger,
   document,
   message,
@@ -40,6 +44,7 @@ import {
   usageMonthly,
   user,
   userNotification,
+  userSettings,
   vote,
   type Chat,
   type DBMessage,
@@ -86,6 +91,123 @@ export async function createUser(email: string, password: string) {
   }
 }
 
+// Old createOAuthUserIfNotExists function removed - replaced with createOAuthUserIfNotExistsSimple
+// which leverages Supabase's built-in identity linking for automatic anonymous → OAuth transitions
+
+// Simplified OAuth user creation leveraging Supabase identity linking
+export async function createOAuthUserIfNotExistsSimple(
+  supabaseUserId: string,
+  email: string,
+) {
+  try {
+    dbLogger.debug(
+      {
+        supabaseUserId,
+        email,
+      },
+      'Creating OAuth user (Supabase identity linking)',
+    );
+
+    // Check if user already exists
+    const [existingUser] = await db
+      .select()
+      .from(user)
+      .where(eq(user.id, supabaseUserId))
+      .limit(1);
+
+    if (existingUser) {
+      dbLogger.debug(
+        {
+          supabaseUserId,
+          email,
+          existingUserId: existingUser.id,
+        },
+        'OAuth user already exists',
+      );
+      return existingUser;
+    }
+
+    // Create new OAuth user
+    const [newUser] = await db
+      .insert(user)
+      .values({
+        id: supabaseUserId,
+        email,
+      })
+      .returning();
+
+    dbLogger.info(
+      {
+        supabaseUserId,
+        email,
+        newUserId: newUser.id,
+      },
+      'Created new OAuth user (Supabase identity linking)',
+    );
+    return newUser;
+  } catch (error) {
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        supabaseUserId,
+        email,
+        error: parsedError.message,
+      },
+      'Failed to create OAuth user',
+    );
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create user account',
+    );
+  }
+}
+
+// Ensure an anonymous user exists in the database
+export async function createAnonymousUserIfNotExists(supabaseUserId: string) {
+  try {
+    // Check if user already exists by Supabase ID (try both id and supabaseId fields for backward compatibility)
+    const existingById = await db
+      .select()
+      .from(user)
+      .where(eq(user.id, supabaseUserId));
+    if (existingById.length > 0) return existingById[0];
+
+    // Also check by supabaseId field for existing records
+    const existingBySupabaseId = await db
+      .select()
+      .from(user)
+      .where(eq(user.supabaseId, supabaseUserId));
+    if (existingBySupabaseId.length > 0) return existingBySupabaseId[0];
+
+    // Create new anonymous user using Supabase ID as primary key (matches auth decorator pattern)
+    const inserted = await db
+      .insert(user)
+      .values({
+        id: supabaseUserId, // Use Supabase ID directly as primary key
+        email: `anonymous-${supabaseUserId}@temp.local`, // Temporary email to satisfy NOT NULL constraint
+        supabaseId: supabaseUserId, // Also store in supabaseId field for consistency
+      })
+      .returning();
+    return inserted[0];
+  } catch (error) {
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        supabaseUserId,
+        error: parsedError.message,
+        stack: parsedError.stack,
+      },
+      'Error in createAnonymousUserIfNotExists',
+    );
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to ensure anonymous user',
+    );
+  }
+}
+
 export async function saveChat({
   id,
   userId,
@@ -112,9 +234,12 @@ export async function saveChat({
 
 export async function deleteChatById({ id }: { id: string }) {
   try {
+    // Delete in correct order due to foreign key constraints
     await db.delete(vote).where(eq(vote.chatId, id));
     await db.delete(message).where(eq(message.chatId, id));
     await db.delete(stream).where(eq(stream.chatId, id));
+    // Delete compare runs (compareResult will be cascade deleted automatically)
+    await db.delete(compareRun).where(eq(compareRun.chatId, id));
 
     const [chatsDeleted] = await db
       .delete(chat)
@@ -143,23 +268,20 @@ export async function getChatsByUserId({
   try {
     const extendedLimit = limit + 1;
 
-    const query = (whereCondition?: SQL<any>) =>
-      db
-        .select()
-        .from(chat)
-        .where(
-          whereCondition
-            ? and(whereCondition, eq(chat.userId, id))
-            : eq(chat.userId, id),
-        )
-        .orderBy(desc(chat.createdAt))
-        .limit(extendedLimit);
+    // 🚀 PERFORMANCE OPTIMIZATION: Use optimized index-aware query
+    const baseQuery = db
+      .select()
+      .from(chat)
+      .where(eq(chat.userId, id))
+      .orderBy(desc(chat.createdAt))
+      .limit(extendedLimit);
 
     let filteredChats: Array<Chat> = [];
 
     if (startingAfter) {
+      // Optimized cursor-based pagination
       const [selectedChat] = await db
-        .select()
+        .select({ createdAt: chat.createdAt })
         .from(chat)
         .where(eq(chat.id, startingAfter))
         .limit(1);
@@ -171,10 +293,18 @@ export async function getChatsByUserId({
         );
       }
 
-      filteredChats = await query(gt(chat.createdAt, selectedChat.createdAt));
-    } else if (endingBefore) {
-      const [selectedChat] = await db
+      filteredChats = await db
         .select()
+        .from(chat)
+        .where(
+          and(eq(chat.userId, id), gt(chat.createdAt, selectedChat.createdAt)),
+        )
+        .orderBy(desc(chat.createdAt))
+        .limit(extendedLimit);
+    } else if (endingBefore) {
+      // Optimized cursor-based pagination
+      const [selectedChat] = await db
+        .select({ createdAt: chat.createdAt })
         .from(chat)
         .where(eq(chat.id, endingBefore))
         .limit(1);
@@ -186,9 +316,17 @@ export async function getChatsByUserId({
         );
       }
 
-      filteredChats = await query(lt(chat.createdAt, selectedChat.createdAt));
+      filteredChats = await db
+        .select()
+        .from(chat)
+        .where(
+          and(eq(chat.userId, id), lt(chat.createdAt, selectedChat.createdAt)),
+        )
+        .orderBy(desc(chat.createdAt))
+        .limit(extendedLimit);
     } else {
-      filteredChats = await query();
+      // First page - use base query with index
+      filteredChats = await baseQuery;
     }
 
     const hasMore = filteredChats.length > limit;
@@ -226,17 +364,113 @@ export async function saveMessages({
   }
 }
 
-export async function getMessagesByChatId({ id }: { id: string }) {
+export async function getMessagesByChatId({
+  id,
+  limit,
+  before,
+  excludeCompareMessages = false,
+}: {
+  id: string;
+  limit?: number;
+  before?: string;
+  excludeCompareMessages?: boolean;
+}) {
   try {
-    return await db
+    // Build the base query
+    let query = db
       .select()
       .from(message)
       .where(eq(message.chatId, id))
-      .orderBy(asc(message.createdAt));
+      .orderBy(desc(message.createdAt)); // Latest first for pagination
+
+    // Add cursor-based pagination if before is provided
+    if (before) {
+      const cursorMessage = await db
+        .select()
+        .from(message)
+        .where(eq(message.id, before))
+        .limit(1);
+
+      if (cursorMessage.length > 0) {
+        // Create new query with cursor condition
+        query = db
+          .select()
+          .from(message)
+          .where(
+            and(
+              eq(message.chatId, id),
+              lt(message.createdAt, cursorMessage[0].createdAt),
+            ),
+          )
+          .orderBy(desc(message.createdAt));
+      }
+    }
+
+    // Apply limit and execute query
+    const messages = await (limit ? query.limit(limit) : query);
+
+    // 🚀 PERFORMANCE OPTIMIZATION: Optimized compare message filtering
+    let filteredMessages = messages;
+    if (excludeCompareMessages && messages.length > 0) {
+      // Single efficient query to check for compare runs
+      const [compareRunCheck] = await db
+        .select({ exists: sql<boolean>`1` })
+        .from(compareRun)
+        .where(eq(compareRun.chatId, id))
+        .limit(1);
+
+      if (compareRunCheck?.exists) {
+        // Use optimized JSON filtering with GIN index
+        filteredMessages = messages.filter((message) => {
+          // Keep all user messages (most common case first)
+          if (message.role === 'user') return true;
+
+          // For assistant messages, use optimized metadata check
+          if (message.role === 'assistant') {
+            try {
+              // Direct JSON access - leverages GIN index
+              const parts = message.parts as any[];
+              if (!Array.isArray(parts)) return true;
+
+              // Fast metadata check using find with early return
+              const hasCompareMetadata = parts.some(
+                (part: any) => part.type === 'metadata' && part.compareRunId,
+              );
+
+              return !hasCompareMetadata;
+            } catch (e) {
+              // Fail safe: keep message if parsing fails
+              return true;
+            }
+          }
+
+          return true; // Keep other message types
+        });
+      }
+    }
+
+    // Reverse to chronological order for UI
+    return filteredMessages.reverse();
   } catch (error) {
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get messages by chat id',
+    );
+  }
+}
+
+export async function getMessagesCount({ chatId }: { chatId: string }) {
+  try {
+    const result = await db
+      .select({ count: count() })
+      .from(message)
+      .where(eq(message.chatId, chatId));
+
+    return result[0]?.count || 0;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get messages count',
     );
   }
 }
@@ -702,21 +936,32 @@ export async function createPaymentEvent({
   metadata?: any;
 }) {
   try {
-    console.log('💾 Creating payment event record...');
-    console.log('📝 Inserting payment event with data:', {
-      paymentId,
-      orderId,
-      userId,
-      eventType,
-      status,
-      amountPaise,
-      currency,
-      method,
-      errorCode,
-      errorDescription,
-      metadataType: typeof metadata,
-      metadataKeys: metadata ? Object.keys(metadata) : [],
-    });
+    dbLogger.info(
+      {
+        paymentId,
+        orderId,
+        userId,
+        eventType,
+        status,
+        amountPaise,
+        currency,
+        method,
+      },
+      'Creating payment event record',
+    );
+
+    dbLogger.debug(
+      {
+        paymentId,
+        orderId,
+        userId,
+        eventType,
+        status,
+        amountPaise,
+        metadataKeys: metadata ? Object.keys(metadata) : [],
+      },
+      'Inserting payment event with data',
+    );
 
     await db.insert(paymentEvent).values({
       paymentId,
@@ -733,14 +978,29 @@ export async function createPaymentEvent({
       createdAt: new Date(), // ✅ Fix: Explicitly set createdAt
     });
 
-    console.log('✅ Payment event created successfully');
+    dbLogger.info(
+      {
+        paymentId,
+        orderId,
+        userId,
+        eventType,
+      },
+      'Payment event created successfully',
+    );
   } catch (error) {
-    console.error('❌ Database error in createPaymentEvent:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      paymentId,
-      userId,
-    });
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        error: parsedError.message,
+        stack: parsedError.stack,
+        paymentId,
+        userId,
+        orderId,
+        eventType,
+      },
+      'Database error in createPaymentEvent',
+    );
 
     throw new ChatSDKError(
       'bad_request:database',
@@ -973,12 +1233,15 @@ export async function setSubscriptionPlan({
   currentPeriodEnd?: Date | null;
 }) {
   try {
-    console.log('💎 Setting subscription plan:', {
-      userId,
-      plan,
-      status,
-      currentPeriodEnd: currentPeriodEnd?.toISOString(),
-    });
+    dbLogger.info(
+      {
+        userId,
+        plan,
+        status,
+        currentPeriodEnd: currentPeriodEnd?.toISOString(),
+      },
+      'Setting subscription plan',
+    );
 
     // Check if a subscription already exists for this user
     const existing = await db
@@ -1008,14 +1271,27 @@ export async function setSubscriptionPlan({
       });
     }
 
-    console.log('✅ Subscription plan set successfully');
+    dbLogger.info(
+      {
+        userId,
+        plan,
+        status,
+      },
+      'Subscription plan set successfully',
+    );
   } catch (error) {
-    console.error('❌ Database error in setSubscriptionPlan:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      userId,
-      plan,
-    });
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        error: parsedError.message,
+        stack: parsedError.stack,
+        userId,
+        plan,
+        status,
+      },
+      'Database error in setSubscriptionPlan',
+    );
 
     throw new ChatSDKError(
       'bad_request:database',
@@ -1122,7 +1398,32 @@ export async function getUserUsageAndLimits({
   try {
     const entitlements = entitlementsByUserType[userType];
 
-    if (userType === 'free') {
+    if (userType === 'anonymous') {
+      // Anonymous users: daily limits (same as free but different quota)
+      const today = new Date();
+      const todayString = `${today.getUTCFullYear()}-${String(
+        today.getUTCMonth() + 1,
+      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+
+      const [dailyUsage] = await db
+        .select({ totalMessages: sum(usageDaily.messages) })
+        .from(usageDaily)
+        .where(
+          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString)),
+        );
+
+      const used = Number(dailyUsage?.totalMessages) || 0;
+      const quota = entitlements.maxMessagesPerDay ?? 0;
+
+      return {
+        used,
+        quota,
+        remaining: Math.max(0, quota - used),
+        isOverLimit: used >= quota,
+        type: 'daily' as const,
+        resetInfo: 'tomorrow at 5:29 AM',
+      };
+    } else if (userType === 'free') {
       // Free users: daily limits
       const today = new Date();
       const todayString = `${today.getUTCFullYear()}-${String(
@@ -1184,9 +1485,219 @@ export async function getUserUsageAndLimits({
   }
 }
 
-// Helper function to check if user has active subscription
-export async function getUserType(userId: string): Promise<UserType> {
+// User Settings Management
+export async function getUserSettings(userId: string) {
   try {
+    const [settings] = await db
+      .select()
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+      .limit(1);
+
+    return settings;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user settings',
+    );
+  }
+}
+
+export async function upsertUserSettings(
+  userId: string,
+  settings: Record<string, any>,
+) {
+  try {
+    await db
+      .insert(userSettings)
+      .values({
+        userId,
+        settings,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: {
+          settings,
+          updatedAt: new Date(),
+        },
+      });
+
+    return { success: true };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to upsert user settings',
+    );
+  }
+}
+
+export async function updateUserSetting(
+  userId: string,
+  key: string,
+  value: any,
+) {
+  try {
+    // Get current settings
+    const currentSettings = await getUserSettings(userId);
+    const updatedSettings = {
+      ...(currentSettings?.settings || {}),
+      [key]: value,
+    };
+
+    return await upsertUserSettings(userId, updatedSettings);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to update user setting',
+    );
+  }
+}
+
+// Multi-model settings functions
+export async function getUserDefaultModel(
+  userId: string,
+): Promise<string | null> {
+  try {
+    const settings = await getUserSettings(userId);
+    return (settings?.settings as any)?.defaultModel || null;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user default model',
+    );
+  }
+}
+
+export async function setUserDefaultModel(userId: string, modelId: string) {
+  try {
+    return await updateUserSetting(userId, 'defaultModel', modelId);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set user default model',
+    );
+  }
+}
+
+export async function getUserCompareModels(userId: string): Promise<string[]> {
+  try {
+    const settings = await getUserSettings(userId);
+    return (settings?.settings as any)?.compareModels || [];
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user compare models',
+    );
+  }
+}
+
+export async function setUserCompareModels(userId: string, modelIds: string[]) {
+  try {
+    return await updateUserSetting(userId, 'compareModels', modelIds);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set user compare models',
+    );
+  }
+}
+
+export async function getUserMode(
+  userId: string,
+): Promise<'single' | 'compare'> {
+  try {
+    const settings = await getUserSettings(userId);
+    return (settings?.settings as any)?.mode || 'single';
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get user mode');
+  }
+}
+
+export async function setUserMode(userId: string, mode: 'single' | 'compare') {
+  try {
+    return await updateUserSetting(userId, 'mode', mode);
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to set user mode');
+  }
+}
+
+// Convenience function to update both mode and models at once
+export async function setUserModelSelection(
+  userId: string,
+  mode: 'single' | 'compare',
+  modelIdOrIds: string | string[],
+) {
+  try {
+    const settings: Record<string, any> = { mode };
+
+    if (mode === 'single' && typeof modelIdOrIds === 'string') {
+      settings.defaultModel = modelIdOrIds;
+      settings.compareModels = []; // Clear compare models when switching to single mode
+    } else if (mode === 'compare' && Array.isArray(modelIdOrIds)) {
+      settings.compareModels = modelIdOrIds;
+      settings.defaultModel = null; // Clear default model when switching to compare mode
+    } else {
+      throw new ChatSDKError(
+        'bad_request:api',
+        'Invalid mode or model selection combination',
+      );
+    }
+
+    return await upsertUserSettings(userId, settings);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set user model selection',
+    );
+  }
+}
+
+// System Prompt functions
+export async function getUserSystemPrompt(
+  userId: string,
+): Promise<UserSystemPrompt | null> {
+  try {
+    const settings = await getUserSettings(userId);
+    return (settings?.settings as any)?.systemPrompt || null;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user system prompt',
+    );
+  }
+}
+
+export async function updateUserSystemPrompt(
+  userId: string,
+  prompt: UserSystemPrompt,
+): Promise<void> {
+  try {
+    const promptWithTimestamp = {
+      ...prompt,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await updateUserSetting(userId, 'systemPrompt', promptWithTimestamp);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to update user system prompt',
+    );
+  }
+}
+
+// Helper function to check if user has active subscription
+export async function getUserType(
+  userId: string,
+  isAnonymous?: boolean,
+): Promise<UserType> {
+  try {
+    // Anonymous users always get 'anonymous' type
+    if (isAnonymous) {
+      return 'anonymous';
+    }
+
     const [userSubscription] = await db
       .select()
       .from(subscription)
@@ -1198,12 +1709,37 @@ export async function getUserType(userId: string): Promise<UserType> {
       userSubscription?.plan === 'pro' &&
       userSubscription?.status === 'active'
     ) {
-      return 'pro';
+      // Also check if subscription hasn't expired
+      if (
+        userSubscription.currentPeriodEnd &&
+        userSubscription.currentPeriodEnd > new Date()
+      ) {
+        return 'pro';
+      }
+      // If expired, we should update the subscription status
+      if (
+        userSubscription.currentPeriodEnd &&
+        userSubscription.currentPeriodEnd <= new Date()
+      ) {
+        await db
+          .update(subscription)
+          .set({ status: 'past_due' })
+          .where(eq(subscription.userId, userId));
+      }
     }
 
     return 'free';
   } catch (error) {
-    console.error('Error checking subscription status:', error);
+    const parsedError =
+      error instanceof Error ? error : new Error(String(error));
+    dbLogger.error(
+      {
+        userId,
+        error: parsedError.message,
+        stack: parsedError.stack,
+      },
+      'Error checking subscription status',
+    );
     return 'free'; // Default to free on error
   }
 }
@@ -1256,6 +1792,9 @@ export async function getUsageHistory(userId: string) {
 // Get complete usage summary for a user
 export async function getUserUsageSummary(userId: string) {
   try {
+    // First determine user type to decide how to get usage data
+    const userType = await getUserType(userId, false); // We'll determine if anonymous from user data
+
     const [userSubscription, usageHistory] = await Promise.all([
       getUserSubscription(userId),
       getUsageHistory(userId),
@@ -1264,63 +1803,23 @@ export async function getUserUsageSummary(userId: string) {
     const isProUser =
       userSubscription?.plan === 'pro' && userSubscription?.status === 'active';
 
-    let used = 0;
-    let quota = 0;
-    let resetInfo = '';
-    let type: 'daily' | 'monthly';
+    // Use the same logic as getUserUsageAndLimits for consistency
+    const usageInfo = await getUserUsageAndLimits({ userId, userType });
 
-    if (isProUser) {
-      // Pro users: monthly message limit
-      quota = PRICING.PAID_TIER.monthlyMessages;
-      resetInfo = 'monthly at 5:29 AM';
-      type = 'monthly';
-
-      // Get current month usage
-      const now = new Date();
-      const monthStart = `${now.getUTCFullYear()}-${String(
-        now.getUTCMonth() + 1,
-      ).padStart(2, '0')}-01`;
-
-      const [monthlyUsage] = await db
-        .select({ totalMessages: sum(usageMonthly.messages) })
-        .from(usageMonthly)
-        .where(
-          and(
-            eq(usageMonthly.userId, userId),
-            eq(usageMonthly.month, monthStart),
-          ),
-        );
-
-      used = Number(monthlyUsage?.totalMessages) || 0;
-    } else {
-      // Free users: daily message limit
-      quota = PRICING.FREE_TIER.dailyMessages;
-      resetInfo = 'tomorrow at 5:29 AM';
-      type = 'daily';
-
-      // Get today's usage
-      const today = new Date();
-      const todayString = `${today.getUTCFullYear()}-${String(
-        today.getUTCMonth() + 1,
-      ).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
-
-      const [dailyUsage] = await db
-        .select({ totalMessages: sum(usageDaily.messages) })
-        .from(usageDaily)
-        .where(
-          and(eq(usageDaily.userId, userId), eq(usageDaily.day, todayString)),
-        );
-
-      used = Number(dailyUsage?.totalMessages) || 0;
+    let planName = 'Free';
+    if (userType === 'anonymous') {
+      planName = 'Guest';
+    } else if (isProUser) {
+      planName = 'Pro';
     }
 
     return {
       plan: {
-        name: isProUser ? 'Pro' : 'Free',
-        quota,
-        used,
-        resetInfo,
-        type,
+        name: planName,
+        quota: usageInfo.quota,
+        used: usageInfo.used,
+        resetInfo: usageInfo.resetInfo,
+        type: usageInfo.type,
       },
       usage: usageHistory,
     };
@@ -1328,6 +1827,612 @@ export async function getUserUsageSummary(userId: string) {
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get user usage summary',
+    );
+  }
+}
+
+// ============================================================================
+// AI Compare Run Queries
+// ============================================================================
+
+export async function createCompareRun({
+  userId,
+  chatId,
+  prompt,
+  modelIds,
+}: {
+  userId: string;
+  chatId: string;
+  prompt: string;
+  modelIds: string[];
+}) {
+  try {
+    // Create the compare run
+    const [run] = await db
+      .insert(compareRun)
+      .values({
+        userId,
+        chatId,
+        prompt,
+        modelIds,
+        status: 'running',
+      })
+      .returning();
+
+    // Create result entries for each model
+    const results = await db
+      .insert(compareResult)
+      .values(
+        modelIds.map((modelId) => ({
+          runId: run.id,
+          modelId,
+          status: 'running' as const,
+          content: '',
+        })),
+      )
+      .returning();
+
+    return { run, results };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create compare run',
+    );
+  }
+}
+
+export async function appendCompareResultContent({
+  runId,
+  modelId,
+  delta,
+}: {
+  runId: string;
+  modelId: string;
+  delta: string;
+}) {
+  try {
+    // Get current content and append delta
+    const [result] = await db
+      .select({ content: compareResult.content })
+      .from(compareResult)
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+
+    if (!result) {
+      throw new ChatSDKError('not_found:compare', 'Compare result not found');
+    }
+
+    const newContent = (result.content || '') + delta;
+
+    await db
+      .update(compareResult)
+      .set({ content: newContent })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+
+    return newContent;
+  } catch (error) {
+    if (error instanceof ChatSDKError) throw error;
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to append compare result content',
+    );
+  }
+}
+
+export async function startCompareResultInference({
+  runId,
+  modelId,
+}: {
+  runId: string;
+  modelId: string;
+}) {
+  try {
+    await db
+      .update(compareResult)
+      .set({
+        status: 'running',
+        serverStartedAt: new Date(),
+      })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to start compare result inference',
+    );
+  }
+}
+
+export async function completeCompareResult({
+  runId,
+  modelId,
+  content,
+  reasoning,
+  usage,
+  serverStartedAt,
+  serverCompletedAt,
+  inferenceTimeMs,
+}: {
+  runId: string;
+  modelId: string;
+  content: string;
+  reasoning?: string;
+  usage?: any;
+  serverStartedAt?: Date;
+  serverCompletedAt?: Date;
+  inferenceTimeMs?: number;
+}) {
+  try {
+    await db
+      .update(compareResult)
+      .set({
+        status: 'completed',
+        content,
+        reasoning,
+        usage,
+        completedAt: new Date(),
+        serverStartedAt,
+        serverCompletedAt,
+        inferenceTimeMs,
+      })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to complete compare result',
+    );
+  }
+}
+
+export async function failCompareResult({
+  runId,
+  modelId,
+  error: errorMessage,
+}: {
+  runId: string;
+  modelId: string;
+  error: string;
+}) {
+  try {
+    await db
+      .update(compareResult)
+      .set({
+        status: 'failed',
+        error: errorMessage,
+        completedAt: new Date(),
+      })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to fail compare result',
+    );
+  }
+}
+
+export async function cancelCompareResult({
+  runId,
+  modelId,
+}: {
+  runId: string;
+  modelId: string;
+}) {
+  try {
+    await db
+      .update(compareResult)
+      .set({
+        status: 'canceled',
+        completedAt: new Date(),
+      })
+      .where(
+        and(eq(compareResult.runId, runId), eq(compareResult.modelId, modelId)),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to cancel compare result',
+    );
+  }
+}
+
+export async function completeCompareRun({ runId }: { runId: string }) {
+  try {
+    await db
+      .update(compareRun)
+      .set({
+        status: 'completed',
+        updatedAt: new Date(),
+      })
+      .where(eq(compareRun.id, runId));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to complete compare run',
+    );
+  }
+}
+
+export async function cancelCompareRun({ runId }: { runId: string }) {
+  try {
+    // Cancel the run
+    await db
+      .update(compareRun)
+      .set({
+        status: 'canceled',
+        updatedAt: new Date(),
+      })
+      .where(eq(compareRun.id, runId));
+
+    // Cancel all running results
+    await db
+      .update(compareResult)
+      .set({
+        status: 'canceled',
+        completedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(compareResult.runId, runId),
+          eq(compareResult.status, 'running'),
+        ),
+      );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to cancel compare run',
+    );
+  }
+}
+
+export async function getCompareRun({ runId }: { runId: string }) {
+  try {
+    const [run] = await db
+      .select()
+      .from(compareRun)
+      .where(eq(compareRun.id, runId));
+
+    if (!run) {
+      throw new ChatSDKError('not_found:compare', 'Compare run not found');
+    }
+
+    const results = await db
+      .select()
+      .from(compareResult)
+      .where(eq(compareResult.runId, runId))
+      .orderBy(asc(compareResult.createdAt));
+
+    return { run, results };
+  } catch (error) {
+    if (error instanceof ChatSDKError) throw error;
+    throw new ChatSDKError('bad_request:database', 'Failed to get compare run');
+  }
+}
+
+export async function listCompareRunsByChat({
+  chatId,
+  limit = 50,
+  cursor,
+}: {
+  chatId: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  try {
+    const conditions = [eq(compareRun.chatId, chatId)];
+
+    if (cursor) {
+      conditions.push(gt(compareRun.createdAt, new Date(cursor)));
+    }
+
+    const runs = await db
+      .select()
+      .from(compareRun)
+      .where(and(...conditions))
+      .orderBy(asc(compareRun.createdAt))
+      .limit(limit + 1); // Get one extra to check if there are more
+
+    const hasMore = runs.length > limit;
+    const items = hasMore ? runs.slice(0, -1) : runs;
+    const nextCursor = hasMore
+      ? items[items.length - 1]?.createdAt.toISOString()
+      : null;
+
+    // 🚀 PERFORMANCE OPTIMIZATION: Batch load ALL results in single query
+    if (items.length === 0) {
+      return { items: [], nextCursor, hasMore };
+    }
+
+    const runIds = items.map((run) => run.id);
+    const allResults = await db
+      .select()
+      .from(compareResult)
+      .where(inArray(compareResult.runId, runIds))
+      .orderBy(asc(compareResult.createdAt));
+
+    // Group results by runId for O(1) lookup
+    const resultsByRunId = allResults.reduce(
+      (acc, result) => {
+        if (!acc[result.runId]) acc[result.runId] = [];
+        acc[result.runId].push(result);
+        return acc;
+      },
+      {} as Record<string, typeof allResults>,
+    );
+
+    // Attach results to runs
+    const itemsWithResults = items.map((run) => ({
+      ...run,
+      results: resultsByRunId[run.id] || [],
+    }));
+
+    return {
+      items: itemsWithResults,
+      nextCursor,
+      hasMore,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to list compare runs',
+    );
+  }
+}
+
+export async function listCompareRunsByUser({
+  userId,
+  limit = 50,
+  cursor,
+}: {
+  userId: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  try {
+    const conditions = [eq(compareRun.userId, userId)];
+
+    if (cursor) {
+      conditions.push(gt(compareRun.createdAt, new Date(cursor)));
+    }
+
+    const runs = await db
+      .select()
+      .from(compareRun)
+      .where(and(...conditions))
+      .orderBy(asc(compareRun.createdAt))
+      .limit(limit + 1);
+
+    const hasMore = runs.length > limit;
+    const items = hasMore ? runs.slice(0, -1) : runs;
+    const nextCursor = hasMore
+      ? items[items.length - 1]?.createdAt.toISOString()
+      : null;
+
+    return {
+      items,
+      nextCursor,
+      hasMore,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to list compare runs by user',
+    );
+  }
+}
+
+// ============================================================================
+// MODEL CACHE QUERIES
+// ============================================================================
+
+export async function getActiveModelCache() {
+  try {
+    // We need to use Supabase client directly for ModelCache table
+    // since it's in Supabase storage, not our local database
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
+
+    const { data: cache } = await supabase
+      .from('ModelCache')
+      .select('models')
+      .eq('status', 'active')
+      .gt('expiresAt', new Date().toISOString())
+      .order('lastRefreshedAt', { ascending: false })
+      .limit(1)
+      .single();
+
+    return cache;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get active model cache',
+    );
+  }
+}
+
+// ============================================================================
+// NEW USAGE TRACKING SYSTEM
+// ============================================================================
+
+// Cost calculation utility using model pricing
+export function calculateCost(modelId: string, usage: any): number {
+  // Model pricing in USD per 1M tokens (input, output)
+  const pricing: Record<string, { input: number; output: number }> = {
+    // Add more models as needed
+  };
+
+  const modelPricing = pricing[modelId];
+  if (!modelPricing) return 0;
+
+  const inputTokens = usage?.promptTokens || 0;
+  const outputTokens = usage?.completionTokens || 0;
+
+  const inputCost = (inputTokens / 1_000_000) * modelPricing.input;
+  const outputCost = (outputTokens / 1_000_000) * modelPricing.output;
+
+  // Return cost in cents to avoid floating point issues
+  return Math.round((inputCost + outputCost) * 100);
+}
+
+// Batch insert chat usage - CRITICAL for multi-model efficiency
+interface UsageRecord {
+  userId: string;
+  chatId: string | null; // NULL for deleted chats
+  modelId: string;
+  tokensIn: number;
+  tokensOut: number;
+  cost: number; // In cents
+}
+
+export async function batchInsertChatUsage(records: UsageRecord[]) {
+  try {
+    if (records.length === 0) return;
+
+    dbLogger.info(
+      { recordCount: records.length },
+      'Batch inserting usage records',
+    );
+
+    return await db.insert(chatUsage).values(records);
+  } catch (error) {
+    dbLogger.error(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        recordCount: records.length,
+      },
+      'Failed to batch insert usage records',
+    );
+    throw new ChatSDKError('bad_request:database', 'Failed to track usage');
+  }
+}
+
+// Ultra-minimal query for raw usage data (client-side computation)
+export async function getUserUsageData(userId: string, limit = 25, page = 1) {
+  try {
+    const offset = (page - 1) * limit;
+
+    const [usageData, totalCount] = await Promise.all([
+      db
+        .select()
+        .from(chatUsage)
+        .where(eq(chatUsage.userId, userId))
+        .orderBy(desc(chatUsage.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: count() })
+        .from(chatUsage)
+        .where(eq(chatUsage.userId, userId)),
+    ]);
+
+    return {
+      items: usageData,
+      total: totalCount[0].count,
+      page,
+      limit,
+      hasMore: offset + limit < totalCount[0].count,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user usage data',
+    );
+  }
+}
+
+// Server-side validation functions for security (cannot trust client data)
+export async function getCurrentUserUsage(userId: string) {
+  try {
+    const [result] = await db
+      .select({
+        totalTokens: sql<number>`SUM(${chatUsage.tokensIn} + ${chatUsage.tokensOut})`,
+        totalCostCents: sql<number>`SUM(${chatUsage.cost})`,
+        totalChats: sql<number>`COUNT(DISTINCT ${chatUsage.chatId})`,
+        activeChats: sql<number>`COUNT(DISTINCT CASE WHEN ${chatUsage.chatId} IS NOT NULL THEN ${chatUsage.chatId} END)`,
+      })
+      .from(chatUsage)
+      .where(eq(chatUsage.userId, userId));
+
+    return (
+      result || {
+        totalTokens: 0,
+        totalCostCents: 0,
+        totalChats: 0,
+        activeChats: 0,
+      }
+    );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get current user usage',
+    );
+  }
+}
+
+// Get usage data with server validation context for API
+export async function getUserUsageWithValidation(
+  userId: string,
+  userType: UserType,
+  page = 1,
+  limit = 25,
+) {
+  try {
+    // Get raw data for client computation
+    const usageData = await getUserUsageData(userId, limit, page);
+
+    // Get server validation data
+    const currentUsage = await getCurrentUserUsage(userId);
+    const usageInfo = await getUserUsageAndLimits({ userId, userType });
+
+    // Generate server-side warnings/limits for security
+    const warnings: Array<{
+      type: string;
+      message: string;
+      severity: string;
+    }> = [];
+    const warningThreshold = 0.8;
+
+    if (usageInfo.used > usageInfo.quota * warningThreshold) {
+      warnings.push({
+        type: 'quota',
+        message: `You've used ${Math.round(
+          (usageInfo.used / usageInfo.quota) * 100,
+        )}% of your quota`,
+        severity: 'warning',
+      });
+    }
+
+    return {
+      ...usageData,
+      // Server validation context
+      limits: {
+        quota: usageInfo.quota,
+        used: usageInfo.used,
+        remaining: usageInfo.quota - usageInfo.used,
+        type: usageInfo.type,
+        resetInfo: usageInfo.resetInfo,
+      },
+      currentUsage: {
+        totalTokens: currentUsage.totalTokens || 0,
+        totalCost:
+          Math.round(((currentUsage.totalCostCents || 0) / 100) * 10000) /
+          10000, // Convert cents to dollars with 4 decimal places
+        totalChats: currentUsage.totalChats || 0,
+        activeChats: currentUsage.activeChats || 0,
+      },
+      warnings,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user usage with validation',
     );
   }
 }

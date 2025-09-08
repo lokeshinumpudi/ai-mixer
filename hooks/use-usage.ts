@@ -19,15 +19,19 @@ interface UsageResponse {
   usage: any[];
 }
 
-export function useUsage() {
+export function useUsage(options?: { fetch?: boolean }) {
+  const shouldFetch = options?.fetch !== false;
   const [currentUsage, setCurrentUsage] = useState<UsageInfo | null>(null);
 
   const { data, error, mutate } = useSWR<UsageResponse>(
-    '/api/usage/summary',
+    shouldFetch ? '/api/usage/summary' : null,
     fetcher,
     {
-      refreshInterval: 30000, // Refresh every 30 seconds
+      // Usage should not refetch on each chat mount; controlled updates only
+      refreshInterval: 0,
       revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 10 * 60 * 1000, // 10 minutes
     },
   );
 

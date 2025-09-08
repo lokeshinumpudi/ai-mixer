@@ -1,0 +1,98 @@
+---
+alwaysApply: false
+description: "Guidelines for using reasoning components across the application"
+globs: components/ai-elements/reasoning.tsx,components/message.tsx,components/compare-message.tsx
+---
+
+# Reasoning Component Usage Guidelines
+
+## Overview
+
+The application uses a unified reasoning component system that provides consistent thinking/reasoning display within the compare mode architecture.
+
+## Key Components
+
+- **Reasoning**: Main collapsible container (from `ai-elements/reasoning.tsx`)
+- **ReasoningTrigger**: Clickable header that shows "Thinking..." or "Thought for X seconds"
+- **ReasoningContent**: Expandable content area with scrollable reasoning text
+
+## Usage Patterns
+
+### Basic Usage (Compare Mode)
+
+```tsx
+<Reasoning
+  isStreaming={result.status === "running"}
+  className="w-full"
+  variant="grey"
+>
+  <ReasoningTrigger />
+  <ReasoningContent>{result.reasoning}</ReasoningContent>
+</Reasoning>
+```
+
+### Basic Usage (Compare Mode)
+
+```tsx
+<Reasoning
+  isStreaming={result.status === "running"}
+  className="w-full"
+  variant="grey"
+>
+  <ReasoningTrigger />
+  <ReasoningContent>{result.reasoning}</ReasoningContent>
+</Reasoning>
+```
+
+## Important Rules
+
+### 1. Default State
+
+- **Always start collapsed** (`defaultOpen = false`) to prevent layout shifts during streaming
+- **Auto-collapse after completion** with a 1-second delay to show final reasoning
+
+### 2. Variant Usage
+
+- **Use `variant="grey"` for compare mode** - provides visual distinction within compare cards
+- **Use default variant sparingly** - primarily for compare mode interactions
+- Grey variant applies subtle text colors and max-height scrollable content
+
+### 3. Mobile Considerations
+
+- **Responsive Design**: Reasoning components work seamlessly in both desktop grid and mobile horizontal scroll layouts
+- **Modal Integration**: In expandable modals, reasoning maintains proper spacing and scrollability
+- **Touch Interactions**: Collapsible behavior works with touch gestures
+
+### 4. Props Mapping
+
+- **`isStreaming`**: Maps to loading/streaming state
+- **`variant`**: Controls visual styling ("default" or "grey")
+- **Content**: Pass reasoning text directly to `ReasoningContent`
+
+### 5. Test Compatibility
+
+- Always include `data-testid="message-reasoning-toggle"` on trigger
+- Always include `data-testid="message-reasoning"` on content
+- Maintains compatibility with existing test suites
+
+## Best Practices
+
+### ✅ Do
+
+- Start collapsed to prevent layout shifts
+- Use grey variant for compare mode
+- Include proper test IDs
+- Handle streaming states correctly
+
+### ❌ Don't
+
+- Start expanded by default
+- Use visual boxes/borders in reasoning
+- Remove test IDs
+- Mix reasoning implementations
+
+## Migration Notes
+
+- All reasoning now uses `ai-elements/reasoning.tsx`
+- Previous `message-reasoning.tsx` has been removed
+- Test IDs maintained for backward compatibility

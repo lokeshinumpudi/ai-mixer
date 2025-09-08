@@ -1,0 +1,610 @@
+---
+alwaysApply: false
+description: "Mobile-responsive design patterns and best practices for touch interfaces"
+globs: components/ui/mobile-scroll-container.tsx,components/ui/expandable-modal.tsx,components/compare-message.tsx
+---
+
+# Mobile-Responsive Design Patterns
+
+## Overview
+
+Mobile-responsive patterns ensure optimal user experiences across all device sizes, with special focus on touch interactions, horizontal scrolling, and space-efficient layouts.
+
+## Core Principles
+
+### 1. Mobile-First Approach
+
+```tsx
+// Always design mobile first, then enhance for desktop
+<div className="mobile-layout md:desktop-layout">
+  {/* Mobile-optimized content */}
+</div>
+```
+
+### 2. Touch-Friendly Interactions
+
+- **Minimum Touch Targets**: 44x44px minimum for all interactive elements
+- **Adequate Spacing**: Prevent accidental taps with proper margins
+- **Swipe Gestures**: Support natural touch interactions
+
+### 3. Space Efficiency
+
+- **Horizontal Scrolling**: Use for content that doesn't fit vertically
+- **Progressive Disclosure**: Show most important content first
+- **Collapsible Sections**: Allow users to expand when needed
+
+### 4. Share Button Placement (New)
+
+- Prefer a single-toggle share button (public/private) on mobile instead of dropdowns.
+- Group right-side actions in a compact row in the header: New Chat + Share.
+- Use 44x44px minimum hit area (e.g., `size-8`) and avoid tiny icons.
+- Visual state: public → green background + globe icon; private → neutral + share icon.
+- On public toggle, copy the chat URL and show a toast; no extra modal.
+
+## Mobile Scroll Container Pattern
+
+### Implementation
+
+```tsx
+export function MobileScrollContainer({
+  children,
+  itemCount,
+  itemIds = [],
+  showIndicators = true,
+}: MobileScrollContainerProps) {
+  // Scroll position tracking
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  return (
+    <div className="relative w-full overflow-hidden">
+      {/* Scrollable container with snap behavior */}
+      <div
+        className={cn(
+          "flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory",
+          "w-full min-w-0",
+          // Touch optimizations
+          "scrollbar-thin scrollbar-thumb-muted/50",
+          "[&::-webkit-scrollbar]:h-2"
+        )}
+        style={{
+          WebkitOverflowScrolling: "touch",
+          maxWidth: "100vw", // Prevent page overflow
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+```
+
+### Key Features
+
+#### Scroll Snap Behavior
+
+```css
+.scroll-container {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll-item {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+```
+
+#### Visual Indicators
+
+```tsx
+// Dot indicators with active states
+{
+  Array.from({ length: itemCount }, (_, index) => (
+    <button
+      key={itemIds[index] || `scroll-indicator-${itemCount}-${index}`}
+      type="button"
+      onClick={() => scrollToCard(index)}
+      className={cn(
+        "h-2 w-2 rounded-full transition-colors duration-200",
+        index === activeIndex
+          ? "bg-primary"
+          : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
+      )}
+      aria-label={`Go to card ${index + 1}`}
+    />
+  ));
+}
+```
+
+#### Navigation Controls
+
+```tsx
+// Left/right navigation buttons
+{
+  canScrollLeft && (
+    <button
+      type="button"
+      onClick={() => scrollToCard(Math.max(0, activeIndex - 1))}
+      className="absolute left-2 top-1/2 -translate-y-1/2 z-10 
+               bg-background/80 backdrop-blur-sm border rounded-full p-2 
+               shadow-lg hover:bg-background/90 transition-colors"
+      aria-label="Scroll left"
+    >
+      <ChevronLeft className="h-4 w-4" />
+    </button>
+  );
+}
+```
+
+## Responsive Layout Strategies
+
+### Breakpoint-Based Rendering
+
+```tsx
+// Separate mobile and desktop implementations
+<div className="relative">
+  {/* Mobile: Horizontal scroll */}
+  <div className="md:hidden">
+    <MobileScrollContainer>
+      {items.map((item) => (
+        <MobileCard key={item.id} className="w-[80vw] max-w-[320px]" />
+      ))}
+    </MobileScrollContainer>
+  </div>
+
+  {/* Desktop: Grid layout */}
+  <div className="hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    {items.map((item) => (
+      <DesktopCard key={item.id} />
+    ))}
+  </div>
+</div>
+```
+
+### Container Overflow Management
+
+```tsx
+// Prevent horizontal page scrolling
+<div className={cn("w-full mx-auto max-w-5xl overflow-hidden", className)}>
+  {/* Content with proper padding */}
+  <div className="px-4 md:px-0">
+    {/* Mobile gets padding, desktop doesn't */}
+  </div>
+</div>
+```
+
+## Modal Patterns for Mobile
+
+### Expandable Modal Implementation
+
+```tsx
+export function ExpandableModal({
+  isOpen,
+  onClose,
+  title,
+  headerContent,
+  children,
+  className,
+}: ExpandableModalProps) {
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop with click-to-close */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Modal with mobile optimizations */}
+      <div
+        className={cn(
+          "relative w-full max-w-4xl bg-background rounded-lg shadow-xl",
+          "animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200",
+          // Mobile optimizations
+          "mx-2 sm:mx-4 md:mx-auto",
+          "max-h-[95vh] sm:max-h-[90vh]",
+          "rounded-lg sm:rounded-xl",
+          className
+        )}
+      >
+        {/* Responsive header */}
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            {title && (
+              <h2 className="text-lg font-semibold truncate">{title}</h2>
+            )}
+            {headerContent && (
+              <div className="flex items-center gap-4 ml-auto">
+                {headerContent}
+              </div>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="h-8 w-8 p-0 ml-2 flex-shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto max-h-[calc(95vh-80px)] sm:max-h-[calc(90vh-80px)]">
+          {children}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+```
+
+### Mobile Modal Features
+
+- **Full Viewport Usage**: `max-h-[95vh]` on mobile for maximum space
+- **Touch-Friendly Closing**: Large backdrop area for easy dismissal
+- **Responsive Padding**: Smaller padding on mobile (`p-4` vs `sm:p-6`)
+- **Keyboard Support**: Escape key handling
+- **Smooth Animations**: Quick 200ms duration for snappy feel
+
+## Performance Considerations
+
+### Scroll Performance
+
+```tsx
+// Throttled scroll position updates
+const checkScrollPosition = useCallback(
+  throttle(() => {
+    if (!scrollRef.current) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+    setCanScrollLeft(scrollLeft > 0);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
+
+    // Calculate active index
+    const cardWidth = scrollRef.current.clientWidth * 0.8;
+    const newIndex = Math.round(scrollLeft / (cardWidth + 16));
+    setActiveIndex(Math.min(newIndex, itemCount - 1));
+  }, 16), // ~60fps
+  [itemCount]
+);
+```
+
+### Memory Management
+
+```tsx
+// Proper event listener cleanup
+useEffect(() => {
+  const scrollElement = scrollRef.current;
+  if (!scrollElement) return;
+
+  scrollElement.addEventListener("scroll", checkScrollPosition);
+  window.addEventListener("resize", checkScrollPosition);
+
+  return () => {
+    scrollElement.removeEventListener("scroll", checkScrollPosition);
+    window.removeEventListener("resize", checkScrollPosition);
+  };
+}, [checkScrollPosition]);
+```
+
+### Conditional Rendering
+
+```tsx
+// Only render modal when actually needed
+{
+  expandedModelId && (
+    <ExpandableModal isOpen={true} onClose={handleClose}>
+      {/* Content */}
+    </ExpandableModal>
+  );
+}
+
+// Instead of always rendering with isOpen prop
+<ExpandableModal isOpen={expandedModelId !== null} />;
+```
+
+## Touch Interaction Patterns
+
+### Swipe Gestures
+
+```tsx
+// Native touch scrolling with momentum
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+}
+```
+
+### Touch Target Sizing
+
+```tsx
+// Ensure adequate touch targets
+<button className="min-h-[44px] min-w-[44px] p-2 rounded-full">
+  <Icon className="h-4 w-4" />
+</button>
+```
+
+### Haptic Feedback (iOS)
+
+```tsx
+// Add subtle haptic feedback for interactions
+const handleCardSelect = (index: number) => {
+  // Trigger haptic feedback on supported devices
+  if ("vibrate" in navigator) {
+    navigator.vibrate(10);
+  }
+
+  scrollToCard(index);
+};
+```
+
+## Accessibility Considerations
+
+### Screen Reader Support
+
+```tsx
+// Proper ARIA labels and roles
+<div role="region" aria-label="Scrollable card container">
+  <div
+    role="tablist"
+    aria-orientation="horizontal"
+    className="flex overflow-x-auto"
+  >
+    {items.map((item, index) => (
+      <div
+        key={item.id}
+        role="tab"
+        tabIndex={index === activeIndex ? 0 : -1}
+        aria-selected={index === activeIndex}
+        aria-label={`Card ${index + 1} of ${items.length}`}
+      >
+        {/* Card content */}
+      </div>
+    ))}
+  </div>
+</div>
+```
+
+### Keyboard Navigation
+
+```tsx
+// Arrow key navigation support
+const handleKeyDown = (e: KeyboardEvent) => {
+  switch (e.key) {
+    case "ArrowLeft":
+      e.preventDefault();
+      scrollToCard(Math.max(0, activeIndex - 1));
+      break;
+    case "ArrowRight":
+      e.preventDefault();
+      scrollToCard(Math.min(itemCount - 1, activeIndex + 1));
+      break;
+    case "Home":
+      e.preventDefault();
+      scrollToCard(0);
+      break;
+    case "End":
+      e.preventDefault();
+      scrollToCard(itemCount - 1);
+      break;
+  }
+};
+```
+
+## Testing Mobile Patterns
+
+### Touch Interaction Tests
+
+```tsx
+test("horizontal scroll works on mobile", async ({ page }) => {
+  // Set mobile viewport
+  await page.setViewportSize({ width: 375, height: 667 });
+
+  // Simulate touch swipe
+  await page.touchscreen.swipe({ x: 300, y: 300 }, { x: 100, y: 300 });
+
+  // Verify scroll position changed
+  const scrollLeft = await page.evaluate(() => {
+    const container = document.querySelector(
+      '[data-testid="scroll-container"]'
+    );
+    return container?.scrollLeft || 0;
+  });
+
+  expect(scrollLeft).toBeGreaterThan(0);
+});
+```
+
+### Performance Tests
+
+```tsx
+test("scroll performance maintains 60fps", async ({ page }) => {
+  // Monitor frame rate during scroll
+  const frameRate = await page.evaluate(() => {
+    let frames = 0;
+    const startTime = performance.now();
+
+    const countFrames = () => {
+      frames++;
+      if (performance.now() - startTime < 1000) {
+        requestAnimationFrame(countFrames);
+      }
+    };
+
+    requestAnimationFrame(countFrames);
+
+    // Trigger scroll
+    document
+      .querySelector('[data-testid="scroll-container"]')
+      ?.scrollBy(100, 0);
+
+    return new Promise((resolve) => {
+      setTimeout(() => resolve(frames), 1000);
+    });
+  });
+
+  expect(frameRate).toBeGreaterThanOrEqual(55); // Allow some margin
+});
+```
+
+## Best Practices Summary
+
+### ✅ Do
+
+- Design mobile-first, enhance for desktop
+- Use horizontal scrolling for space-constrained content
+- Implement snap scrolling for precise positioning
+- Provide visual indicators for scrollable content
+- Ensure touch targets are minimum 44x44px
+- Use proper overflow containment to prevent page scrolling
+- Test on real devices with touch interactions
+- Implement proper keyboard navigation
+- Provide haptic feedback where appropriate
+
+### ❌ Don't
+
+- Force vertical layouts on mobile when horizontal works better
+- Ignore scroll containment (causing page-wide scrolling)
+- Use tiny touch targets or buttons
+- Forget about keyboard accessibility
+- Skip performance testing on slower devices
+- Ignore screen reader accessibility
+- Use complex gestures without fallbacks
+- Assume mouse hover states work on touch devices
+
+### Performance Targets
+
+- **Touch Response**: < 16ms (60fps)
+- **Scroll Smoothness**: Consistent 60fps during scrolling
+- **Modal Open Time**: < 200ms animation duration
+- **Memory Usage**: Proper cleanup of event listeners
+- **Battery Impact**: Minimize continuous animations
+
+## Mobile-First Settings Page Pattern
+
+### Responsive Layout Strategy
+
+```tsx
+// Mobile: Priority content first, Desktop: Sidebar layout
+<div className="flex flex-col lg:grid lg:grid-cols-12 lg:gap-8 gap-6">
+  {/* Mobile: User info at top, Desktop: Sidebar */}
+  <div className="lg:col-span-4 lg:order-2 order-1">
+    {/* User profile, usage stats, upgrade CTA */}
+  </div>
+
+  {/* Mobile: Main content second, Desktop: Main content first */}
+  <div className="lg:col-span-8 lg:order-1 order-2">
+    {/* Tab content with responsive navigation */}
+  </div>
+</div>
+```
+
+### Responsive Tab Navigation
+
+```tsx
+{
+  /* Mobile: Dropdown selector */
+}
+<div className="lg:hidden">
+  <select
+    value={activeTab}
+    onChange={(e) => setActiveTab(e.target.value)}
+    className="w-full p-3 rounded-lg border border-border bg-background text-foreground text-base font-medium shadow-sm focus:ring-2 focus:ring-primary focus:border-primary"
+  >
+    {tabs.map((tab) => (
+      <option key={tab.id} value={tab.id}>
+        {tab.label}
+      </option>
+    ))}
+  </select>
+</div>;
+
+{
+  /* Desktop: Traditional tabs */
+}
+<div className="hidden lg:block">
+  <div className="bg-muted p-1 rounded-lg">
+    <div className="flex gap-1">
+      {tabs.map((tab) => (
+        <button
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex-1 ${
+            selected
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  </div>
+</div>;
+```
+
+### Mobile-Optimized Data Tables
+
+```tsx
+{
+  /* Mobile: Card layout */
+}
+<div className="md:hidden space-y-3">
+  {items.map((item) => (
+    <div className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-medium">{formatDate(item.date)}</div>
+        <Badge variant="secondary">{item.category}</Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <div className="text-muted-foreground text-xs mb-1">Label 1</div>
+          <div className="font-medium">{item.value1}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground text-xs mb-1">Label 2</div>
+          <div className="font-medium">{item.value2}</div>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>;
+
+{
+  /* Desktop: Table layout */
+}
+<div className="hidden md:block overflow-x-auto">
+  <table className="w-full">
+    <thead>
+      <tr className="border-b">
+        <th className="text-left p-3">Column 1</th>
+        <th className="text-left p-3">Column 2</th>
+        <th className="text-right p-3">Column 3</th>
+      </tr>
+    </thead>
+    <tbody>
+      {items.map((item) => (
+        <tr className="border-b hover:bg-muted/50">
+          <td className="p-3">{item.value1}</td>
+          <td className="p-3">{item.value2}</td>
+          <td className="p-3 text-right">{item.value3}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>;
+```
+
+### Mobile Content Hierarchy
+
+```
+Mobile Priority Order:
+1. 👤 User Profile & Status (Top Priority)
+2. 📊 Key Metrics/Usage (High Priority)
+3. ⚡ Action Items/CTAs (High Priority)
+4. 📋 Navigation Controls (Medium Priority)
+5. 📄 Detailed Content (Selected Content)
+```

@@ -1,0 +1,318 @@
+---
+alwaysApply: false
+description: "Usage tracking system implementation with cost-conscious client-side computation"
+globs: app/(chat)/api/usage/**,components/usage/**,lib/db/queries.ts
+---
+
+# 24: Usage Tracking System
+
+## Overview
+
+The application implements a **cost-conscious, client-side computation usage tracking system** that replaces legacy aggregated approaches with granular, efficient tracking.
+
+## Core Architecture
+
+### Database Schema
+
+```typescript
+// lib/db/schema.ts
+export const chatUsage = pgTable("ChatUsage", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  chatId: uuid("chatId").references(() => chat.id), // NULL = deleted chat
+  userId: uuid("userId").notNull().references(() => user.id),
+  modelId: varchar("modelId", { length: 64 }).notNull(),
+  tokensIn: integer("tokensIn").notNull().default(0),
+  tokensOut: integer("tokensOut").notNull().default(0),
+  cost: integer("cost").notNull().default(0), // In cents to avoid floating point
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+});
+```
+
+### Cost Calculation
+
+```typescript
+// lib/db/queries.ts
+export function calculateCost(modelId: string, usage: any): number {
+  const pricing: Record<string, { input: number; output: number }> = {
+    "openai/gpt-4o": { input: 2.5, output: 10.0 },
+    "openai/gpt-4o-mini": { input: 0.15, output: 0.6 },
+    // ... other model pricings in USD per million tokens
+  };
+  
+  const modelPricing = pricing[modelId];
+  if (!modelPricing) return 0;
+  
+  const inputCost = (usage.inputTokens || 0) * (modelPricing.input / 1_000_000);
+  const outputCost = (usage.outputTokens || 0) * (modelPricing.output / 1_000_000);
+  
+  return Math.round((inputCost + outputCost) * 100); // Return cost in cents
+}
+```
+
+## API Endpoints
+
+### Primary Usage API
+
+- **`/api/usage`**: Main endpoint for fetching usage data with pagination
+  - Returns: `{ items, total, page, limit, hasMore, limits, currentUsage, warnings }`
+  - Supports pagination: `?page=1&limit=100`
+  - Server-side validation and warnings
+
+### Integration Points
+
+```typescript
+// Batch usage tracking in compare stream
+const usageBatch: Array<{
+  chatId: string;
+  userId: string;
+  modelId: string;
+  tokensIn: number;
+  tokensOut: number;
+  cost: number;
+}> = [];
+
+// Collect usage during streaming
+usageBatch.push({
+  chatId,
+  userId: user.id,
+  modelId: result.modelId,
+  tokensIn: usage.inputTokens || 0,
+  tokensOut: usage.outputTokens || 0,
+  cost: calculateCost(result.modelId, usage),
+});
+
+// Single batch insert after all models complete
+await batchInsertChatUsage(usageBatch);
+```
+
+## Client-Side Components
+
+### Usage Dashboard
+
+```typescript
+// components/usage/usage-dashboard.tsx
+export function UsageDashboard() {
+  const [page, setPage] = useState(1);
+  const { data: usageData } = useSWR<UsageData>(
+    `/api/usage?page=${page}&limit=${limit}`,
+    fetcher,
+    { refreshInterval: 30000 }
+  );
+
+  // Mobile: Card layout, Desktop: Table layout
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-2xl font-bold text-orange-600">
+              {usageData?.currentUsage?.totalTokens || "0"}
+            </div>
+            <p className="text-sm text-muted-foreground">Total Tokens</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-2xl font-bold text-green-600">
+              ${((usageData?.currentUsage?.totalCost || 0) / 100).toFixed(4)}
+            </div>
+            <p className="text-sm text-muted-foreground">Total Cost</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Responsive Usage History */}
+      <Card>
+        {/* Mobile: Card layout */}
+        <div className="md:hidden space-y-3">
+          {items.map((item) => (
+            <div key={item.id} className="p-4 rounded-lg border">
+              <div className="flex justify-between mb-3">
+                <div className="text-sm font-medium">{formatDate(item.createdAt)}</div>
+                <Badge>{item.modelId.split("/")[1]}</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <div className="text-muted-foreground text-xs">Tokens In</div>
+                  <div className="font-medium">{item.tokensIn.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Tokens Out</div>
+                  <div className="font-medium">{item.tokensOut.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Total Tokens</div>
+                  <div className="font-medium">{(item.tokensIn + item.tokensOut).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Cost</div>
+                  <div className="font-medium">${(item.cost / 100).toFixed(4)}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop: Table layout */}
+        <div className="hidden md:block">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-3">Date</th>
+                <th className="text-left p-3">Model</th>
+                <th className="text-right p-3">Tokens In</th>
+                <th className="text-right p-3">Tokens Out</th>
+                <th className="text-right p-3">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-b hover:bg-muted/50">
+                  <td className="p-3 text-sm">{formatDate(item.createdAt)}</td>
+                  <td className="p-3">
+                    <Badge variant="secondary">{item.modelId.split("/")[1]}</Badge>
+                  </td>
+                  <td className="p-3 text-sm text-right">{item.tokensIn.toLocaleString()}</td>
+                  <td className="p-3 text-sm text-right">{item.tokensOut.toLocaleString()}</td>
+                  <td className="p-3 text-sm text-right">${(item.cost / 100).toFixed(4)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+```
+
+## Rate Limiting Integration
+
+### Settings Page Integration
+
+```typescript
+// app/(chat)/settings/page.tsx
+const { data: usageData } = useSWR<UsageData>(`/api/usage?page=1&limit=100`, fetcher);
+
+const plan = usageData ? {
+  type: usageData.limits?.type || "daily",
+  quota: usageData.limits?.quota || 50,
+  used: (() => {
+    if (!usageData.items) return 0;
+    const today = new Date().toDateString();
+    return usageData.items.filter((item: any) => {
+      const itemDate = new Date(item.createdAt);
+      return itemDate.toDateString() === today;
+    }).length;
+  })(),
+  remaining: (() => {
+    const quota = usageData.limits?.quota || 50;
+    const todayUsed = /* calculate today's usage */;
+    return Math.max(0, quota - todayUsed);
+  })(),
+} : null;
+```
+
+### Input Rate Limiting
+
+```typescript
+// components/multimodal-input.tsx
+const { data: usageData } = useSWR<UsageData>(`/api/usage?page=1&limit=100`, fetcher);
+
+const todayUsed = usageData?.items ? usageData.items.filter((item: any) => {
+  const itemDate = new Date(item.createdAt);
+  return itemDate.toDateString() === new Date().toDateString();
+}).length : 0;
+
+const quota = usageData?.limits?.quota || 50;
+const isOverLimit = todayUsed >= quota;
+
+if (isOverLimit) {
+  upgradeToast({
+    title: "Rate limit reached",
+    description: `You've used ${todayUsed}/${quota} messages today.`,
+    actionText: "Upgrade to Pro",
+  });
+  return;
+}
+```
+
+## Cost-Conscious Principles
+
+### 1. Client-Side Computation
+- **Raw Data Transfer**: API returns granular usage records
+- **Client Aggregation**: Summaries calculated on client-side
+- **Reduced Server Load**: No expensive database aggregations
+
+### 2. Efficient Queries
+- **Simple Selects**: No complex JOINs or GROUP BY operations
+- **Pagination**: Limit data transfer with cursor-based pagination
+- **Batch Operations**: Single insert for multiple usage records
+
+### 3. Smart Caching
+- **SWR Integration**: Automatic caching and revalidation
+- **Refresh Intervals**: Background updates every 30 seconds
+- **Cache Invalidation**: Targeted cache updates on new usage
+
+## Migration from Legacy System
+
+### Deprecated Patterns
+- ❌ `usageDaily`/`usageMonthly` tables
+- ❌ `useUsage` hook
+- ❌ `/api/usage/summary` endpoint
+- ❌ Server-side aggregations
+
+### New Patterns
+- ✅ Single `chatUsage` table
+- ✅ Direct `useSWR` calls to `/api/usage`
+- ✅ Client-side daily/monthly calculations
+- ✅ Batch usage tracking
+
+## Performance Benefits
+
+- **50% Fewer API Calls**: Consolidated usage data fetching
+- **Reduced Database Load**: Simple queries vs complex aggregations
+- **Better UX**: Real-time usage updates with optimistic updates
+- **Cost Efficiency**: Minimal server computation required
+
+## Best Practices
+
+### ✅ Do
+- Use batch operations for multi-model usage tracking
+- Calculate costs in cents to avoid floating-point errors
+- Implement client-side aggregations for summaries
+- Use pagination for large usage datasets
+- Cache usage data with appropriate refresh intervals
+
+### ❌ Don't
+- Create server-side aggregation endpoints
+- Store costs as floating-point numbers
+- Make individual API calls for each usage record
+- Skip batch operations for performance
+- Over-fetch usage data without pagination
+
+## Testing Strategy
+
+```typescript
+// Test usage calculation
+test('calculateCost returns correct cost in cents', () => {
+  const usage = { inputTokens: 1000, outputTokens: 2000 };
+  const cost = calculateCost('openai/gpt-4o-mini', usage);
+  expect(cost).toBe(Math.round((1000 * 0.15/1000000 + 2000 * 0.6/1000000) * 100));
+});
+
+// Test batch insertion
+test('batchInsertChatUsage handles multiple records', async () => {
+  const batch = [
+    { chatId: 'chat1', userId: 'user1', modelId: 'gpt-4', tokensIn: 100, tokensOut: 200, cost: 5 },
+    { chatId: 'chat1', userId: 'user1', modelId: 'claude-3', tokensIn: 150, tokensOut: 300, cost: 8 },
+  ];
+  
+  await batchInsertChatUsage(batch);
+  // Verify records were inserted correctly
+});
+```
+
+This usage tracking system provides **granular insights** while maintaining **cost efficiency** and **excellent user experience** across all device sizes.

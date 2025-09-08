@@ -16,7 +16,10 @@ export const TEST_PROMPTS: Record<string, ModelMessage> = {
   USER_NEXTJS: {
     role: 'user',
     content: [
-      { type: 'text', text: 'What are the advantages of using Next.js?' },
+      {
+        type: 'text',
+        text: 'What are the advantages of using AI tools instead of Google?',
+      },
     ],
   },
   USER_IMAGE_ATTACHMENT: {

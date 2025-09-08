@@ -1,0 +1,31 @@
+---
+alwaysApply: true
+description: "TypeScript, linting, formatting, and pre-commit hooks."
+---
+
+# 14: Code Quality & Linting
+
+## Core Principle
+
+Code quality is enforced automatically through a combination of TypeScript's strict mode, ESLint and Biome for linting, and pre-commit hooks that validate every commit.
+
+## TypeScript
+
+- **Strict Mode**: The `tsconfig.json` is configured with `strict: true` and other strict checks to catch potential errors at compile time.
+- **Type Safety**: Leverage TypeScript's features like generics, unions, and type guards to write robust, type-safe code. Inferred types from Drizzle ORM should be used for all database-related objects.
+- **Stream Data Types**: All custom data types for the real-time data stream **MUST** be defined in the `CustomUIDataTypes` interface in `lib/types.ts` to ensure type safety across the streaming pipeline.
+
+## Linting & Formatting
+
+- **ESLint & Biome**: A combination of ESLint and Biome is used to enforce code style and catch common errors.
+- **Auto-formatting**: Biome is configured to format code automatically. This is integrated into a pre-commit hook, so all code is formatted before it's committed.
+
+## Pre-commit Hooks
+
+Husky is used to manage Git hooks. The pre-commit hook is the primary mechanism for enforcing code quality:
+
+1.  **Auto-formats** staged files.
+2.  **Lints** staged files (blocks commit on errors, allows warnings).
+3.  **Type-checks** the entire project (blocks commit on any type error).
+
+This ensures that no code that violates style guidelines or has type errors can be committed to the repository.

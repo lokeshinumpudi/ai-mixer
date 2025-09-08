@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { toast as sonnerToast } from 'sonner';
 import { CheckCircleFillIcon, DiamondIcon, WarningIcon } from './icons';
+
 import { Button } from './ui/button';
 
 const iconsByType: Record<'success' | 'error', ReactNode> = {
@@ -163,13 +164,27 @@ function UpgradeToast(props: UpgradeToastProps) {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 text-xs h-8"
+                className="h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white"
                 onClick={() => {
                   sonnerToast.dismiss(id);
-                  router.push('/pricing');
+                  if (actionText === 'Upgrade to Pro') {
+                    const paymentUrl =
+                      process.env.NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL || '';
+                    if (paymentUrl) {
+                      window.open(paymentUrl, '_blank');
+                    } else {
+                      console.error(
+                        'Payment URL not configured. Set NEXT_PUBLIC_RAZORPAY_PAYMENT_PAGE_URL.',
+                      );
+                      // Fallback to settings page
+                      window.location.href = '/settings';
+                    }
+                  } else {
+                    // Fallback to login for other action texts
+                    window.location.href = '/login';
+                  }
                 }}
               >
-                <DiamondIcon size={12} />
                 {actionText}
               </Button>
               <Button

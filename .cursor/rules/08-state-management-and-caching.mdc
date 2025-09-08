@@ -1,0 +1,124 @@
+---
+alwaysApply: true
+description: "SWR usage, local state, and offline-first caching strategies."
+---
+
+# 08: State Management & Caching
+
+## Core Principles
+
+- **SWR for Server State**: Use SWR for fetching, caching, and revalidating all server-side data.
+- **React Hooks for Local State**: Use `useState`, `useReducer`, and `useRef` for component-level state.
+- **Offline-First**: Prioritize loading data from a local cache (localStorage) for an instant user experience, with background synchronization to fetch fresh data.
+
+## SWR & Caching Strategy
+
+The application employs a cache-first strategy. Components should first attempt to load data from a local cache and then trigger a background revalidation with the server.
+
+```typescript
+// hooks/use-chat-messages.ts
+export function useChatMessages(chatId: string) {
+  const cacheKey = `chat-messages-${chatId}`;
+  const [cachedMessages] = useState(() => safeReadFromCache(cacheKey));
+
+  const { data: messages, mutate } = useSWR(
+    `/api/chat/${chatId}/messages`,
+    fetcher,
+    {
+      fallbackData: cachedMessages, // Load from cache instantly
+      revalidateOnMount: true, // Revalidate in the background
+      onSuccess: (data) => {
+        if (data) safeWriteToCache(cacheKey, data); // Update cache
+      },
+    }
+  );
+
+  return { messages: messages || cachedMessages || [], mutate };
+}
+```
+
+## State Management Layers
+
+- **Local State**: For UI state like form inputs or dialog visibility.
+- **Server State (SWR)**: For data fetched from the API. SWR handles caching, revalidation, and optimistic updates.
+- **Database Cache**: For expensive external API calls (Vercel Gateway), cache in PostgreSQL with automatic refresh via Edge Functions.
+- **Chat-Scoped State**: For features like the artifacts system, state is scoped to a specific `chatId` to prevent state leakage between conversations.
+- **Global State (Context)**: For cross-cutting concerns like data streaming (`DataStreamProvider`) and theme management.
+
+## Database Caching for External APIs
+
+For expensive external API calls that don't change frequently, implement database-level caching with automatic refresh:
+
+### Implementation Pattern
+
+```sql
+-- Create cache table
+CREATE TABLE model_cache (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  models JSONB NOT NULL,
+  lastRefreshedAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expiresAt TIMESTAMPTZ NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'active'
+);
+```
+
+```typescript
+// Edge function for cache refresh
+Deno.serve(async (req: Request) => {
+  const supabase = createClient(/* credentials */);
+  const gateway = createGatewayProvider({});
+
+  const { models } = await gateway.getAvailableModels();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  await supabase.from("ModelCache").insert({
+    models,
+    expiresAt,
+    status: "active",
+  });
+
+  return new Response("Cache refreshed");
+});
+```
+
+```typescript
+// API endpoint using cache
+export const GET = authenticatedRoute(async (req, context, user) => {
+  const supabase = await createClient();
+
+  // Check database cache first
+  const { data: cache } = await supabase
+    .from("ModelCache")
+    .select("models")
+    .eq("status", "active")
+    .gt("expiresAt", new Date().toISOString())
+    .order("lastRefreshedAt", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (cache) {
+    return NextResponse.json({ models: cache.models });
+  }
+
+  // Fallback to live API
+  const gateway = createGatewayProvider({});
+  const { models } = await gateway.getAvailableModels();
+  return NextResponse.json({ models });
+});
+```
+
+### Key Principles
+
+1. **Long Expiry for Stable Data**: Use 7-day expiry for model data vs. 30-minute expiry for user-specific data
+2. **Conservative Refresh**: Daily cron jobs instead of frequent polling
+3. **Intelligent Fallbacks**: Database cache → Memory cache → Live API
+4. **Error Resilience**: Cache refresh failures don't break the user experience
+
+## Optimistic Updates
+
+For actions like voting or updating settings, use optimistic updates to provide immediate UI feedback.
+
+1.  Update the local SWR cache immediately with the expected new state.
+2.  Send the update request to the server.
+3.  If the server request fails, SWR automatically rolls back the change.
+4.  If it succeeds, revalidate the data to ensure consistency.

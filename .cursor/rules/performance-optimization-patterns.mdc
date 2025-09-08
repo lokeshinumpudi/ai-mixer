@@ -1,0 +1,710 @@
+---
+alwaysApply: false
+description: "Performance optimization patterns for React components and user interactions"
+globs: components/**/*.tsx,hooks/**/*.ts
+---
+
+# Performance Optimization Patterns
+
+## Overview
+
+Performance optimization patterns ensure smooth user experiences through efficient rendering, memory management, and interaction handling across all devices. This includes advanced context management for AI model interactions and token efficiency optimization.
+
+## React Performance Patterns
+
+### Component Memoization
+
+```tsx
+// Memoize expensive components
+const ExpensiveComponent = memo(function ExpensiveComponent({
+  data,
+  onAction,
+}: Props) {
+  // Expensive computations
+  const processedData = useMemo(() => {
+    return complexDataProcessing(data);
+  }, [data]);
+
+  // Stable event handlers
+  const handleAction = useCallback(
+    (id: string) => {
+      onAction(id);
+    },
+    [onAction]
+  );
+
+  return <div>{/* Component JSX */}</div>;
+});
+```
+
+### Memoization Best Practices
+
+#### ✅ Good Memoization Candidates
+
+- **Complex calculations**: Data processing, filtering, sorting
+- **Event handlers**: Functions passed to child components
+- **Expensive renders**: Components with heavy DOM or computations
+- **Stable references**: Objects/arrays used as dependencies
+
+```tsx
+// Memoize expensive computations
+const filteredAndSortedData = useMemo(() => {
+  return data
+    .filter((item) => item.status === "active")
+    .sort((a, b) => a.priority - b.priority);
+}, [data]);
+
+// Memoize stable event handlers
+const handleItemClick = useCallback(
+  (itemId: string) => {
+    onItemSelect(itemId);
+  },
+  [onItemSelect]
+);
+
+// Memoize component references
+const MemoizedChildComponent = useMemo(() => {
+  return <ChildComponent data={processedData} />;
+}, [processedData]);
+```
+
+#### ❌ Avoid Over-Memoization
+
+```tsx
+// ❌ Don't memoize simple values
+const simpleValue = useMemo(() => props.count * 2, [props.count]);
+
+// ✅ Just use direct calculation
+const simpleValue = props.count * 2;
+
+// ❌ Don't memoize with unstable dependencies
+const unstableCallback = useCallback(() => {
+  doSomething(props.data.map((x) => x.id)); // New array every time
+}, [props.data]);
+
+// ✅ Memoize the dependency first
+const itemIds = useMemo(() => props.data.map((x) => x.id), [props.data]);
+const stableCallback = useCallback(() => {
+  doSomething(itemIds);
+}, [itemIds]);
+```
+
+## Modal and Overlay Performance
+
+### Conditional Rendering
+
+```tsx
+// ✅ Only render when needed
+{
+  isModalOpen && (
+    <Modal isOpen={true} onClose={handleClose}>
+      <ExpensiveModalContent />
+    </Modal>
+  );
+}
+
+// ❌ Always render with visibility toggle
+<Modal isOpen={isModalOpen} onClose={handleClose}>
+  <ExpensiveModalContent />
+</Modal>;
+```
+
+### Portal Performance
+
+```tsx
+// Efficient portal usage with cleanup
+export function OptimizedModal({ isOpen, children, onClose }: Props) {
+  // Memoize portal content to prevent unnecessary re-renders
+  const modalContent = useMemo(() => {
+    if (!isOpen) return null;
+
+    return (
+      <div className="modal-backdrop" onClick={handleBackdropClick}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          {children}
+        </div>
+      </div>
+    );
+  }, [isOpen, children]);
+
+  // Only create portal when needed
+  return isOpen ? createPortal(modalContent, document.body) : null;
+}
+```
+
+## Scroll Performance Optimization
+
+### Throttled Scroll Handlers
+
+```tsx
+// Throttle scroll events for 60fps performance
+const handleScroll = useCallback(
+  throttle((event: Event) => {
+    const element = event.target as HTMLElement;
+    const { scrollLeft, scrollWidth, clientWidth } = element;
+
+    // Update state only when necessary
+    setScrollState((prev) => {
+      const newState = {
+        canScrollLeft: scrollLeft > 0,
+        canScrollRight: scrollLeft < scrollWidth - clientWidth - 10,
+        scrollPercentage: scrollLeft / (scrollWidth - clientWidth),
+      };
+
+      // Prevent unnecessary updates
+      if (
+        newState.canScrollLeft === prev.canScrollLeft &&
+        newState.canScrollRight === prev.canScrollRight
+      ) {
+        return prev;
+      }
+
+      return newState;
+    });
+  }, 16), // ~60fps
+  []
+);
+```
+
+### Intersection Observer for Performance
+
+```tsx
+// Efficient visibility detection
+const useIntersectionObserver = (
+  elementRef: RefObject<Element>,
+  options: IntersectionObserverInit = {}
+) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        setIsVisible(entry.isIntersecting);
+      },
+      {
+        threshold: 0.1,
+        rootMargin: "50px",
+        ...options,
+      }
+    );
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [elementRef, options]);
+
+  return isVisible;
+};
+```
+
+## Event Handler Optimization
+
+### Stable Event References
+
+```tsx
+// Create stable references for event handlers
+const EventOptimizedComponent = ({ items, onItemAction }: Props) => {
+  // Memoize handler to prevent child re-renders
+  const handleItemAction = useCallback(
+    (itemId: string, action: string) => {
+      onItemAction(itemId, action);
+    },
+    [onItemAction]
+  );
+
+  return (
+    <div>
+      {items.map((item) => (
+        <MemoizedItem
+          key={item.id}
+          item={item}
+          onAction={handleItemAction} // Stable reference
+        />
+      ))}
+    </div>
+  );
+};
+
+// Child component won't re-render unless item changes
+const MemoizedItem = memo(function Item({ item, onAction }: ItemProps) {
+  const handleClick = () => onAction(item.id, "click");
+
+  return <button onClick={handleClick}>{item.name}</button>;
+});
+```
+
+### Event Delegation for Lists
+
+```tsx
+// Use event delegation for large lists
+const OptimizedList = ({ items, onItemClick }: Props) => {
+  const handleListClick = useCallback(
+    (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const itemElement = target.closest("[data-item-id]");
+
+      if (itemElement) {
+        const itemId = itemElement.getAttribute("data-item-id");
+        if (itemId) {
+          onItemClick(itemId);
+        }
+      }
+    },
+    [onItemClick]
+  );
+
+  return (
+    <div onClick={handleListClick}>
+      {items.map((item) => (
+        <div key={item.id} data-item-id={item.id}>
+          {item.content}
+        </div>
+      ))}
+    </div>
+  );
+};
+```
+
+## Memory Management
+
+### Cleanup Patterns
+
+```tsx
+// Proper cleanup of resources
+const ResourceHeavyComponent = () => {
+  const timeoutRef = useRef<NodeJS.Timeout>();
+  const intervalRef = useRef<NodeJS.Timeout>();
+  const observerRef = useRef<IntersectionObserver>();
+
+  useEffect(() => {
+    // Set up resources
+    timeoutRef.current = setTimeout(() => {
+      // Some delayed action
+    }, 1000);
+
+    intervalRef.current = setInterval(() => {
+      // Periodic updates
+    }, 5000);
+
+    observerRef.current = new IntersectionObserver((entries) => {
+      // Handle visibility changes
+    });
+
+    // Cleanup function
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  return <div>{/* Component content */}</div>;
+};
+```
+
+### Memory Leak Prevention
+
+```tsx
+// Prevent memory leaks in async operations
+const AsyncComponent = () => {
+  const [data, setData] = useState(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const result = await api.getData();
+
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setData(result);
+        }
+      } catch (error) {
+        if (isMountedRef.current) {
+          console.error("Failed to fetch data:", error);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  return <div>{/* Render data */}</div>;
+};
+```
+
+## State Update Optimization
+
+### Batched State Updates
+
+```tsx
+// Batch multiple state updates
+const OptimizedStateComponent = () => {
+  const [state, setState] = useState({
+    loading: false,
+    data: null,
+    error: null,
+  });
+
+  const updateState = useCallback((updates: Partial<typeof state>) => {
+    setState((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  const handleAction = async () => {
+    // Batch initial state changes
+    updateState({ loading: true, error: null });
+
+    try {
+      const data = await fetchData();
+      // Batch success state changes
+      updateState({ loading: false, data });
+    } catch (error) {
+      // Batch error state changes
+      updateState({ loading: false, error: error.message });
+    }
+  };
+
+  return <div>{/* Component JSX */}</div>;
+};
+```
+
+### Reducer for Complex State
+
+```tsx
+// Use reducer for complex state logic
+interface State {
+  items: Item[];
+  selectedIds: Set<string>;
+  filters: FilterState;
+  loading: boolean;
+}
+
+type Action =
+  | { type: "SET_LOADING"; payload: boolean }
+  | { type: "SET_ITEMS"; payload: Item[] }
+  | { type: "TOGGLE_SELECTION"; payload: string }
+  | { type: "SET_FILTER"; payload: Partial<FilterState> };
+
+const stateReducer = (state: State, action: Action): State => {
+  switch (action.type) {
+    case "SET_LOADING":
+      return { ...state, loading: action.payload };
+
+    case "SET_ITEMS":
+      return { ...state, items: action.payload, loading: false };
+
+    case "TOGGLE_SELECTION":
+      const newSelectedIds = new Set(state.selectedIds);
+      if (newSelectedIds.has(action.payload)) {
+        newSelectedIds.delete(action.payload);
+      } else {
+        newSelectedIds.add(action.payload);
+      }
+      return { ...state, selectedIds: newSelectedIds };
+
+    case "SET_FILTER":
+      return {
+        ...state,
+        filters: { ...state.filters, ...action.payload },
+      };
+
+    default:
+      return state;
+  }
+};
+
+const ComplexStateComponent = () => {
+  const [state, dispatch] = useReducer(stateReducer, initialState);
+
+  // Memoized selectors
+  const filteredItems = useMemo(() => {
+    return state.items.filter((item) => matchesFilters(item, state.filters));
+  }, [state.items, state.filters]);
+
+  return <div>{/* Component JSX */}</div>;
+};
+```
+
+## Animation Performance
+
+### CSS-Based Animations
+
+```tsx
+// Prefer CSS animations over JavaScript
+const AnimatedComponent = ({ isVisible }: Props) => {
+  return (
+    <div
+      className={cn(
+        "transition-all duration-200 ease-out",
+        "transform-gpu", // Use GPU acceleration
+        isVisible
+          ? "opacity-100 translate-y-0 scale-100"
+          : "opacity-0 translate-y-2 scale-95"
+      )}
+    >
+      {/* Content */}
+    </div>
+  );
+};
+```
+
+### Framer Motion Performance
+
+```tsx
+// Optimize Framer Motion animations
+const OptimizedMotionComponent = ({ children }: Props) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{
+        duration: 0.2,
+        ease: [0.25, 0.46, 0.45, 0.94], // Custom easing
+      }}
+      // Performance optimizations
+      style={{ willChange: "transform, opacity" }}
+      layoutId="unique-id" // For layout animations
+    >
+      {children}
+    </motion.div>
+  );
+};
+```
+
+## Bundle Size Optimization
+
+### Dynamic Imports
+
+```tsx
+// Lazy load heavy components
+const HeavyComponent = lazy(() => import("./HeavyComponent"));
+
+const ParentComponent = () => {
+  const [showHeavy, setShowHeavy] = useState(false);
+
+  return (
+    <div>
+      <button onClick={() => setShowHeavy(true)}>Load Heavy Component</button>
+
+      {showHeavy && (
+        <Suspense fallback={<div>Loading...</div>}>
+          <HeavyComponent />
+        </Suspense>
+      )}
+    </div>
+  );
+};
+```
+
+### Tree Shaking Optimization
+
+```tsx
+// Import only what you need
+import { debounce } from "lodash/debounce"; // ✅ Specific import
+import _ from "lodash"; // ❌ Imports entire library
+
+// Use tree-shakeable libraries
+import { format } from "date-fns"; // ✅ Tree-shakeable
+import moment from "moment"; // ❌ Large bundle
+```
+
+## Performance Monitoring
+
+### Performance Metrics
+
+```tsx
+// Monitor component performance
+const PerformanceMonitor = ({ children, name }: Props) => {
+  useEffect(() => {
+    const startTime = performance.now();
+
+    return () => {
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+
+      if (duration > 16) {
+        // Longer than one frame
+        console.warn(`${name} took ${duration}ms to render`);
+      }
+    };
+  });
+
+  return <>{children}</>;
+};
+```
+
+### Memory Usage Tracking
+
+```tsx
+// Track memory usage in development
+const useMemoryMonitor = (componentName: string) => {
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development" && "memory" in performance) {
+      const checkMemory = () => {
+        const memory = (performance as any).memory;
+        console.log(`${componentName} memory:`, {
+          used: Math.round(memory.usedJSHeapSize / 1024 / 1024),
+          total: Math.round(memory.totalJSHeapSize / 1024 / 1024),
+          limit: Math.round(memory.jsHeapSizeLimit / 1024 / 1024),
+        });
+      };
+
+      const interval = setInterval(checkMemory, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [componentName]);
+};
+```
+
+## Testing Performance
+
+### Performance Tests
+
+```tsx
+// Test component render performance
+test("component renders within performance budget", async () => {
+  const startTime = performance.now();
+
+  render(<ExpensiveComponent data={largeDataset} />);
+
+  const endTime = performance.now();
+  const renderTime = endTime - startTime;
+
+  expect(renderTime).toBeLessThan(16); // One frame budget
+});
+
+// Test memory leaks
+test("component cleans up resources", async () => {
+  const { unmount } = render(<ResourceHeavyComponent />);
+
+  // Check initial memory
+  const initialMemory = getMemoryUsage();
+
+  // Unmount component
+  unmount();
+
+  // Force garbage collection (in test environment)
+  if (global.gc) {
+    global.gc();
+  }
+
+  // Check memory after cleanup
+  const finalMemory = getMemoryUsage();
+
+  // Memory should not increase significantly
+  expect(finalMemory - initialMemory).toBeLessThan(1024 * 1024); // 1MB
+});
+```
+
+## AI Context Management Performance
+
+### Token Efficiency Optimization
+
+For AI model interactions, implement intelligent context management:
+
+```typescript
+// app/(chat)/api/compare/stream/route.ts
+const buildModelSpecificContext = (
+  targetModelId: string,
+  uiMessages: any[]
+) => {
+  // Filter to only relevant context for this model
+  const filteredUIMessages = uiMessages.filter((msg) => {
+    if (msg.role === "user") return true;
+    if (msg.role === "assistant") {
+      return msg.metadata?.modelId === targetModelId; // Only this model's responses
+    }
+    return true;
+  });
+
+  // Apply dynamic token-based optimization
+  const contextOptimizedMessages = optimizeContextWindow(filteredUIMessages);
+  return convertToModelMessages(contextOptimizedMessages) as any[];
+};
+```
+
+### Dynamic Context Window Management
+
+```typescript
+const optimizeContextWindow = (messages: any[]) => {
+  const OPTIMAL_CONTEXT_TOKENS = 2000; // Target context size
+  const MIN_RECENT_PAIRS = 2; // Minimum context preservation
+
+  // Estimate tokens and select optimal context window
+  const pairs = groupIntoPairs(messages);
+  const totalTokens = pairs.reduce((sum, pair) => sum + pair.tokenEstimate, 0);
+
+  if (totalTokens <= OPTIMAL_CONTEXT_TOKENS) {
+    return messages; // Use full context if within limits
+  }
+
+  // Sliding window selection based on token budget
+  return selectOptimalPairs(pairs, OPTIMAL_CONTEXT_TOKENS);
+};
+```
+
+**Performance Benefits:**
+
+- **Token Efficiency**: Up to 87% reduction in context tokens
+- **Cost Optimization**: Massive savings in API costs for long conversations
+- **Memory Efficiency**: Constant memory usage regardless of conversation length
+- **Response Speed**: Faster model processing with smaller contexts
+
+See [Intelligent Context Management](mdc:.cursor/rules/21-intelligent-context-management.mdc) for complete implementation details.
+
+## Best Practices Summary
+
+### ✅ Do
+
+- Memoize expensive computations and components
+- Use stable references for event handlers
+- Implement proper cleanup in useEffect
+- Prefer CSS animations over JavaScript
+- Use conditional rendering for modals/overlays
+- Throttle scroll and resize handlers
+- Monitor performance in development
+- Test performance with realistic data sizes
+- **Implement model-specific context filtering for AI interactions**
+- **Use dynamic token-based optimization for long conversations**
+- **Monitor token usage and API costs in AI features**
+
+### ❌ Don't
+
+- Over-memoize simple values
+- Create new objects/arrays in render
+- Forget to clean up timers and event listeners
+- Use inline objects as props or dependencies
+- Ignore bundle size optimization
+- Skip performance testing
+- Use heavy libraries when lighter alternatives exist
+- Ignore memory leak warnings
+- **Send full conversation history to AI models without optimization**
+- **Use static filtering for dynamic content management**
+- **Ignore token efficiency in multi-model scenarios**
+
+### Performance Targets
+
+- **Render Time**: < 16ms per component (60fps)
+- **Bundle Size**: < 250KB initial load
+- **Memory Usage**: Stable over time, no leaks
+- **Animation Performance**: Consistent 60fps
+- **Time to Interactive**: < 3s on slow 3G
+- **AI Context Tokens**: < 2000 tokens per model request
+- **Token Efficiency**: > 70% reduction for long conversations

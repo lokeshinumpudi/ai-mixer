@@ -17,9 +17,36 @@ export const user = pgTable('User', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   email: varchar('email', { length: 64 }).notNull(),
   password: varchar('password', { length: 64 }),
+  supabaseId: uuid('supabaseId'), // Supabase user ID for OAuth mapping
 });
 
 export type User = InferSelectModel<typeof user>;
+
+// User settings table for storing user preferences
+export const userSettings = pgTable('UserSettings', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id)
+    .unique(),
+  settings: json('settings').notNull().default({}),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type UserSettings = InferSelectModel<typeof userSettings>;
+
+// Model cache table for Vercel Gateway caching (existing table from migration)
+export const modelCache = pgTable('ModelCache', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  models: json('models').notNull(),
+  lastRefreshedAt: timestamp('lastRefreshedAt').notNull().defaultNow(),
+  expiresAt: timestamp('expiresAt').notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('active'),
+  refreshError: text('refreshError'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type ModelCache = InferSelectModel<typeof modelCache>;
 
 export const chat = pgTable('Chat', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
@@ -250,6 +277,24 @@ export const usageMonthly = pgTable(
 export type UsageDaily = InferSelectModel<typeof usageDaily>;
 export type UsageMonthly = InferSelectModel<typeof usageMonthly>;
 
+// ===== NEW USAGE TRACKING SYSTEM =====
+// Ultra-minimal schema for cost-conscious usage tracking
+// Single table with client-side computation approach
+export const chatUsage = pgTable('ChatUsage', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  chatId: uuid('chatId').references(() => chat.id), // NULL = deleted chat, NOT NULL = active
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  modelId: varchar('modelId', { length: 64 }).notNull(),
+  tokensIn: integer('tokensIn').notNull().default(0),
+  tokensOut: integer('tokensOut').notNull().default(0),
+  cost: integer('costCents').notNull().default(0), // Store in cents to avoid floating point
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type ChatUsage = InferSelectModel<typeof chatUsage>;
+
 // Enhanced payment tracking with full lifecycle
 export const paymentEvent = pgTable('PaymentEvent', {
   id: uuid('id').notNull().defaultRandom().primaryKey(),
@@ -323,3 +368,48 @@ export const userNotification = pgTable('UserNotification', {
 });
 
 export type UserNotification = InferSelectModel<typeof userNotification>;
+
+// AI Compare feature tables
+export const compareRun = pgTable('CompareRun', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  chatId: uuid('chatId')
+    .notNull()
+    .references(() => chat.id),
+  prompt: text('prompt').notNull(),
+  modelIds: json('modelIds').$type<string[]>().notNull(),
+  status: varchar('status', { length: 32 }).notNull().default('running'), // running|completed|canceled|failed
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type CompareRun = InferSelectModel<typeof compareRun>;
+
+export const compareResult = pgTable(
+  'CompareResult',
+  {
+    id: uuid('id').notNull().defaultRandom(),
+    runId: uuid('runId')
+      .notNull()
+      .references(() => compareRun.id, { onDelete: 'cascade' }),
+    modelId: varchar('modelId', { length: 64 }).notNull(),
+    status: varchar('status', { length: 32 }).notNull().default('running'), // running|completed|canceled|failed
+    content: text('content').default(''),
+    reasoning: text('reasoning').default(''), // AI reasoning/thinking content
+    usage: json('usage'),
+    error: text('error'),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    completedAt: timestamp('completedAt'),
+    // Server-side timing fields
+    serverStartedAt: timestamp('serverStartedAt'),
+    serverCompletedAt: timestamp('serverCompletedAt'),
+    inferenceTimeMs: integer('inferenceTimeMs'), // Pure inference time in milliseconds
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.runId, table.modelId] }),
+  }),
+);
+
+export type CompareResult = InferSelectModel<typeof compareResult>;

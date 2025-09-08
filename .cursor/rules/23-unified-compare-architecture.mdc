@@ -1,0 +1,405 @@
+---
+alwaysApply: true
+---
+
+# 23: Unified Compare Architecture
+
+## Overview
+
+The application has been **unified to always use compare mode**, eliminating the complexity of dual chat modes. This simplifies the architecture, improves maintainability, and provides a consistent user experience regardless of model selection count.
+
+**Entry Point**: `compare-message.tsx` is the **defacto entry point** for all message rendering and interactions - no dual-mode logic exists in the application.
+
+## Core Architectural Decision
+
+### Always Compare Mode
+
+**CRITICAL**: The application now operates exclusively in compare mode. There is no longer a "regular chat" mode.
+
+```typescript
+// components/chat.tsx - ALWAYS compare mode
+const [isCompareMode, setIsCompareMode] = useState(true); // Always true
+const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+
+// Single model selection still uses compare infrastructure
+if (selectedModelIds.length === 1) {
+  // Still uses /api/compare/stream with single model
+  await startCompare({ prompt, modelIds: selectedModelIds });
+}
+```
+
+### Deprecated APIs
+
+The following APIs are **deprecated** and should not be used for new features:
+
+- ❌ `/api/chat/[id]/stream` - Regular chat streaming
+- ❌ `/api/chat/route` - Regular chat endpoint
+- ❌ `useChat` hook - Regular chat state management
+
+### Active APIs
+
+All chat interactions use the compare infrastructure:
+
+- ✅ `/api/compare/stream` - Unified streaming for 1-N models
+- ✅ `/api/compare` - List compare runs
+- ✅ `useCompareRun` - Unified state management
+
+## Data Loading Strategy
+
+### Conditional Loading Based on Compare Runs
+
+The `useChatData` hook now intelligently skips regular message loading when compare runs exist:
+
+```typescript
+// hooks/use-chat-data.ts
+export function useChatData(chatId: string): ChatData {
+  // First check if chat has compare runs
+  const { data: compareRunsCheck } = useSWR<{ items: any[] }>(
+    chatId ? `/api/compare?chatId=${chatId}&limit=1` : null,
+    fetcher
+  );
+
+  const hasCompareRuns = (compareRunsCheck?.items?.length ?? 0) > 0;
+
+  // 🚫 SKIP regular message loading if compare runs exist
+  const messagesData = useSWRInfinite((pageIndex, previousPageData) => {
+    if (!chatId) return null;
+
+    // Skip loading if compare runs exist
+    if (hasCompareRuns) return null;
+
+    // Only load regular messages for legacy chats without compare runs
+    return `/api/chat/${chatId}/messages?limit=20`;
+  }, fetcher);
+
+  return {
+    chat: chat || null,
+    messages: hasCompareRuns ? [] : allMessages, // Empty for compare mode
+    // ... other properties
+  };
+}
+```
+
+### Benefits of Unified Architecture
+
+1. **No Duplication**: Eliminates duplicate API calls and UI rendering
+2. **Consistent Experience**: Same interface regardless of model count
+3. **Simplified State Management**: Single source of truth for all interactions
+4. **Better Performance**: Fewer network requests and state synchronization
+5. **Easier Maintenance**: Single code path to maintain and debug
+
+## User Experience Flow
+
+### Single Model Selection
+
+```typescript
+// User selects 1 model → Still uses compare infrastructure
+const handleSubmit = async (prompt: string) => {
+  // Always use compare, even for single model
+  await startCompare({
+    prompt,
+    modelIds: selectedModelIds, // Could be ["gpt-4"]
+  });
+};
+```
+
+### Multiple Model Selection
+
+```typescript
+// User selects 2+ models → Same infrastructure
+const handleSubmit = async (prompt: string) => {
+  await startCompare({
+    prompt,
+    modelIds: selectedModelIds, // Could be ["gpt-4", "claude-3"]
+  });
+};
+```
+
+### UI Rendering - Entry Point
+
+```typescript
+// components/messages.tsx
+// 🚨 ENTRY POINT: compare-message.tsx handles all message rendering
+{
+  messages.length === 0 && compareRuns.length === 0 && <Greeting />;
+}
+
+{
+  /* Historical compare runs */
+}
+{
+  compareRuns.map((run) => <CompareMessage key={run.id} data={run} />);
+}
+
+{
+  /* Active compare message - defacto entry point for interactions */
+}
+{
+  activeCompareMessage && <CompareMessage data={activeCompareMessage} />;
+}
+```
+
+## Migration Strategy
+
+### Existing Chats
+
+- **Legacy regular chats**: Continue to load via regular message API
+- **New interactions**: Always use compare mode
+- **Mixed chats**: Once a compare run is created, switch to compare-only mode
+
+### Code Cleanup (Future)
+
+The following can be deprecated over time:
+
+```typescript
+// Future cleanup candidates (DO NOT DELETE YET)
+// - Regular chat streaming endpoints
+// - useChat hook
+// - Regular message components (for compare-only chats)
+// - Dual-mode logic in components
+```
+
+## Component Architecture
+
+### Unified Input Component
+
+```typescript
+// components/multimodal-input.tsx
+// Always shows compare mode UI
+const MultimodalInput = ({
+  selectedModelIds, // Always array, even for single model
+  onStartCompare, // Always compare function
+  // ... other props
+}) => {
+  // No mode switching - always compare
+  const handleSubmit = () => {
+    onStartCompare(input, selectedModelIds);
+  };
+};
+```
+
+### Simplified Chat Component
+
+```typescript
+// components/chat.tsx
+const Chat = ({ id }: { id: string }) => {
+  // Always in compare mode
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+
+  // No mode switching logic needed
+  const { startCompare, compareRuns, ...compareState } = useCompareRun(id);
+
+  // Unified message handling
+  const handleStartCompare = async (prompt: string, modelIds: string[]) => {
+    await startCompare({ prompt, modelIds });
+  };
+};
+```
+
+## Database Schema Impact
+
+### Message Metadata
+
+Compare runs store metadata to distinguish from legacy regular messages:
+
+```typescript
+// Each model response includes metadata
+const messageWithMetadata = {
+  role: "assistant",
+  parts: [
+    { type: "text", text: result.content },
+    {
+      type: "metadata",
+      compareRunId: runId,
+      modelId: result.modelId,
+      createdAt: new Date().toISOString(),
+    },
+  ],
+};
+```
+
+### Filtering Logic
+
+```typescript
+// lib/db/queries.ts
+export async function getMessagesByChatId({
+  id,
+  excludeCompareMessages = true, // Default to true for new architecture
+}) {
+  // Filter out compare-related messages to prevent duplication
+  const filteredMessages = messages.filter((message) => {
+    if (message.role === "user") return true;
+
+    if (message.role === "assistant") {
+      const parts = Array.isArray(message.parts) ? message.parts : [];
+      const metadataPart = parts.find((part: any) => part.type === "metadata");
+
+      // Exclude messages with compareRunId (they belong to compare mode)
+      return !metadataPart?.compareRunId;
+    }
+
+    return true;
+  });
+}
+```
+
+## Error Handling
+
+### Unified Error States
+
+```typescript
+// All errors go through compare error handling
+case "model_error": {
+  setState(prev => ({
+    ...prev,
+    byModelId: {
+      ...prev.byModelId,
+      [event.modelId]: {
+        ...prev.byModelId[event.modelId],
+        status: "failed",
+        error: event.error,
+      },
+    },
+  }));
+}
+```
+
+### Rate Limiting
+
+```typescript
+// Single rate limiting system
+const handleRateLimit = (error: any) => {
+  upgradeToast({
+    title: "Rate limit reached",
+    description: "Upgrade to Pro for unlimited conversations",
+    actionText: "Upgrade to Pro",
+  });
+};
+```
+
+## Performance Optimizations
+
+### Single API Call Strategy
+
+```typescript
+// Before: Two API calls for compare mode chats
+// ❌ /api/chat/[id]/messages
+// ❌ /api/compare?chatId=...
+
+// After: One API call for compare mode chats
+// ✅ /api/compare?chatId=... (only)
+```
+
+### Optimistic Updates
+
+```typescript
+// Single optimistic update pattern
+mutateCompareRuns(
+  (currentData) => ({
+    ...currentData,
+    items: [...currentData.items, completedRun],
+  }),
+  false // No server revalidation needed
+);
+```
+
+## Testing Strategy
+
+### Unified Test Suite
+
+```typescript
+// All chat interactions test compare mode
+test("single model interaction", async ({ page }) => {
+  await page.click("[data-testid='model-picker']");
+  await page.click("[data-testid='gpt-4']");
+  await page.fill("[data-testid='input']", "Hello");
+  await page.click("[data-testid='send-button']");
+
+  // Should create compare run with single model
+  await expect(page.locator("[data-testid='compare-message']")).toBeVisible();
+});
+
+test("multi model interaction", async ({ page }) => {
+  await page.click("[data-testid='model-picker']");
+  await page.click("[data-testid='gpt-4']");
+  await page.click("[data-testid='claude-3']");
+  await page.fill("[data-testid='input']", "Compare responses");
+  await page.click("[data-testid='send-button']");
+
+  // Should create compare run with multiple models
+  await expect(page.locator("[data-testid='compare-cards']")).toHaveCount(2);
+});
+```
+
+## Future Enhancements
+
+### Simplified Feature Development
+
+With unified architecture, new features become simpler:
+
+- **File uploads**: Only implement in compare mode
+- **Reasoning**: Single implementation path
+- **Voice input**: Unified handling
+- **Export**: Single data format
+
+### Performance Monitoring
+
+```typescript
+// Single set of metrics to track
+const metrics = {
+  compareRunLatency: number,
+  tokensPerModel: number,
+  streamingPerformance: number,
+  userSatisfaction: number,
+};
+```
+
+## Migration Checklist
+
+### ✅ Completed
+
+- [x] Modified `useChatData` to skip regular messages when compare runs exist
+- [x] Fixed metadata storage in compare stream
+- [x] Updated message filtering logic
+- [x] Cleaned up debug logs
+
+### 🔄 In Progress
+
+- [ ] Update all new feature development to use compare mode only
+- [ ] Deprecate regular chat endpoints in documentation
+- [ ] Add warnings for deprecated API usage
+
+### 📋 Future Tasks
+
+- [ ] Remove dual-mode logic from components
+- [ ] Simplify model picker to always show multi-select
+- [ ] Update user onboarding to reflect unified experience
+- [ ] Performance audit of unified architecture
+
+## Best Practices
+
+### ✅ Always Do
+
+- Use `useCompareRun` for all chat interactions
+- Default to compare mode in all new components
+- Test both single and multi-model scenarios
+- Store metadata with all model responses
+- Use optimistic updates for smooth UX
+
+### ❌ Never Do
+
+- Create new features using regular chat APIs
+- Mix regular and compare message rendering
+- Skip metadata storage for model responses
+- Use `useChat` hook for new features
+- Implement dual-mode logic
+
+### Key Success Metrics
+
+- **API Call Reduction**: 50% fewer calls for compare mode chats
+- **Code Complexity**: Reduced dual-mode logic
+- **User Experience**: Consistent interface regardless of model count
+- **Performance**: Faster loading with unified data flow
+- **Maintainability**: Single code path to maintain
+
+This unified architecture represents a significant simplification of the codebase while maintaining full functionality and improving the user experience.

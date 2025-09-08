@@ -1,0 +1,2 @@
+-- Empty migration to satisfy journal state
+-- This migration was missing due to git branch synchronization issues

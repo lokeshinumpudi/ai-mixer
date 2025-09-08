@@ -1,44 +1,15 @@
-import { cookies } from 'next/headers';
+'use client';
 
+import { useAuth } from '@/components/auth-provider';
 import { Chat } from '@/components/chat';
 import { DataStreamHandler } from '@/components/data-stream-handler';
-import { getDefaultModelForUser } from '@/lib/ai/models';
 import { generateUUID } from '@/lib/utils';
-import { redirect } from 'next/navigation';
-import { auth } from '../(auth)/auth';
+import { useMemo } from 'react';
 
-export default async function Page() {
-  const session = await auth();
-
-  if (!session) {
-    redirect('/login');
-  }
-
-  const id = generateUUID();
-
-  const cookieStore = await cookies();
-  const modelIdFromCookie = cookieStore.get('chat-model');
-
-  // Get default model based on user's plan
-  const defaultModel = getDefaultModelForUser(session.user.type);
-
-  if (!modelIdFromCookie) {
-    return (
-      <>
-        <Chat
-          key={id}
-          id={id}
-          initialMessages={[]}
-          initialChatModel={defaultModel}
-          initialVisibilityType="private"
-          isReadonly={false}
-          session={session}
-          autoResume={false}
-        />
-        <DataStreamHandler />
-      </>
-    );
-  }
+export default function Page() {
+  const { user } = useAuth();
+  // Generate UUID only once per component lifecycle to prevent chat replacement
+  const id = useMemo(() => generateUUID(), []);
 
   return (
     <>
@@ -46,10 +17,9 @@ export default async function Page() {
         key={id}
         id={id}
         initialMessages={[]}
-        initialChatModel={modelIdFromCookie.value}
         initialVisibilityType="private"
         isReadonly={false}
-        session={session}
+        user={user}
         autoResume={false}
       />
       <DataStreamHandler />

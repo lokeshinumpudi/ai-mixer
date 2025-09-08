@@ -1,0 +1,306 @@
+---
+description: "AI Compare feature implementation - multi-model comparison system with real-time streaming"
+---
+
+# 17: AI Compare Feature
+
+## Overview
+
+The AI Compare feature is now the **core application architecture** - all interactions use this unified multi-model comparison system. The application operates exclusively in compare mode, with `compare-message.tsx` serving as the **defacto entry point** for all message rendering and interactions.
+
+## Core Architecture
+
+### Database Schema
+
+- **`compareRun`**: Stores comparison sessions with metadata
+- **`compareResult`**: Stores individual model responses within a run
+- **Composite Primary Key**: `(runId, modelId)` ensures unique model results per run
+
+### API Endpoints
+
+- **`/api/compare/stream`**: SSE endpoint for real-time multi-model streaming
+- **`/api/compare/cancel`**: Cancel active compare runs or individual models
+- **`/api/compare`**: List compare runs for a chat
+- **`/api/compare/[runId]`**: Retrieve specific compare run and results
+
+### Key Components
+
+- **`CompareMessage`**: 🚨 **ENTRY POINT** - Handles all message rendering and interactions
+- **`useCompareRun`**: Hook managing unified compare state, SSE lifecycle, and API calls
+- **`MultimodalInput`**: Enhanced with unified compare mode and model selection
+- **`ModelPicker`**: Multi-model selection interface (1-3 models)
+- **`Chat`**: Orchestrates unified compare experience
+
+## Implementation Details
+
+### Unified Compare Architecture
+
+**BREAKING CHANGE**: The application now **operates exclusively in compare mode**. There is no longer a separate single chat interface:
+
+```typescript
+// components/chat.tsx - ALWAYS compare mode
+const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+
+// Single model selection still uses compare infrastructure
+if (selectedModelIds.length === 1) {
+  // Still uses /api/compare/stream with single model
+  await startCompare({ prompt, modelIds: selectedModelIds });
+}
+```
+
+**Entry Point**: `compare-message.tsx` handles all message rendering and interactions - no dual-mode logic exists.
+
+**CRITICAL**: Regular chat APIs (`/api/chat/route`, `/api/chat/[id]/stream`) are **deprecated**. All interactions use the unified compare infrastructure.
+
+### Multi-Model Selection
+
+The `ModelPicker` supports both single and multi-selection:
+
+```typescript
+// components/model-picker.tsx
+const handleModelSelect = (modelId: string) => {
+  if (isCompareMode) {
+    // Multi-selection logic with COMPARE_MAX_MODELS limit
+    const newSelection = selectedModelIds.includes(modelId)
+      ? selectedModelIds.filter((id) => id !== modelId)
+      : selectedModelIds.length < COMPARE_MAX_MODELS
+      ? [...selectedModelIds, modelId]
+      : [...selectedModelIds.slice(1), modelId];
+    onSelectedModelIdsChange(newSelection);
+  } else {
+    // Single selection for regular mode
+    onModelChange(modelId);
+    setOpen(false);
+  }
+};
+```
+
+### Real-Time Streaming
+
+The compare system uses multiplexed SSE streaming:
+
+```typescript
+// hooks/use-compare-run.ts
+const response = await fetch("/api/compare/stream", {
+  method: "POST",
+  body: JSON.stringify({ chatId, prompt, modelIds }),
+});
+
+// Process SSE events tagged by modelId
+for (const line of lines) {
+  if (line.startsWith("data: ")) {
+    const event = JSON.parse(line.slice(6));
+    handleSSEEvent(event); // Updates per-model state
+  }
+}
+```
+
+## User Experience Flow
+
+1. **Unified Experience**: Application operates exclusively in compare mode
+2. **Model Selection**: Users can select 1-3 models via model picker
+3. **Unified Submission**: All interactions use compare infrastructure:
+   - 1 model → Compare run with single model card
+   - 2+ models → Compare run with side-by-side cards
+4. **Entry Point Rendering**: All results display as `CompareMessage` components (the defacto entry point)
+5. **Continuation**: Users can continue conversations with same or different model selection
+6. **Legacy Support**: Existing regular chats continue to work, new interactions use unified compare mode
+
+## Rate Limiting & Entitlements
+
+Compare operations consume quota per model:
+
+```typescript
+// Free tier: 5 messages/day
+// Pro tier: 1000 messages/month
+// Compare with 2 models = 2 message credits
+```
+
+### Upgrade CTAs
+
+Rate limit errors trigger upgrade prompts:
+
+```typescript
+// components/chat.tsx
+if (error.message.includes("429")) {
+  upgradeToast({
+    title: "Compare limit reached",
+    description:
+      "Upgrade to Pro for unlimited model comparisons and 1000 messages per month.",
+    actionText: "Upgrade to Pro",
+  });
+}
+```
+
+## Configuration
+
+### Model Limits
+
+```typescript
+// lib/constants.ts
+export const COMPARE_MAX_MODELS = 3;
+```
+
+### Compare Presets
+
+```typescript
+// lib/constants.ts
+export const COMPARE_PRESETS = {
+  "Fast Reasoning Trio": [
+    "google/gemini-2.0-flash",
+    "openai/gpt-5-nano",
+    "xai/grok-code-fast-1",
+  ],
+  "Vision Models": [
+    "google/gemini-2.0-flash",
+    "openai/gpt-5-mini",
+    "openai/gpt-oss-120b",
+  ],
+  "Code Specialists": [
+    "xai/grok-code-fast-1",
+    "openai/gpt-5-mini",
+    "google/gemini-2.0-flash",
+  ],
+};
+```
+
+## Stream Registry
+
+Global stream management for cancellation:
+
+```typescript
+// lib/cache/stream-registry.ts
+declare global {
+  var __compare_stream_registry__: Map<string, AbortController>;
+  var __stream_cleanup_interval__: NodeJS.Timeout;
+}
+```
+
+## Security & Validation
+
+- **Authentication**: All endpoints use `authenticatedRoute` decorator
+- **Model Access**: Server-side validation via `getAllowedModelIdsForUser`
+- **Rate Limiting**: Per-user quota enforcement with detailed logging
+- **Input Validation**: Zod schemas for request body validation
+
+## Error Handling
+
+- **ChatSDKError**: Standardized error responses with surface-specific codes
+- **Stream Failures**: Graceful degradation with per-model error states
+- **Network Issues**: Automatic cleanup and user-friendly error messages
+
+## Critical Implementation Notes
+
+### Historical Compare Runs Loading
+
+Historical compare runs require proper database query implementation:
+
+```typescript
+// lib/db/queries.ts - listCompareRunsByChat
+const itemsWithResults = await Promise.all(
+  items.map(async (run) => {
+    const results = await db
+      .select()
+      .from(compareResult)
+      .where(eq(compareResult.runId, run.id))
+      .orderBy(asc(compareResult.createdAt));
+
+    return { ...run, results };
+  })
+);
+```
+
+**CRITICAL**: The `listCompareRunsByChat` function MUST load `compareResult` records, not just the run metadata, or historical compare runs will display as empty.
+
+### UI State Management
+
+Proper greeting/suggestions hiding requires checking all content sources:
+
+```typescript
+// components/messages.tsx
+{messages.length === 0 && compareRuns.length === 0 && !activeCompareMessage && <Greeting />}
+
+// components/multimodal-input.tsx
+{messages.length === 0 &&
+  compareRuns.length === 0 &&
+  !activeCompareMessage &&
+  attachments.length === 0 &&
+  uploadQueue.length === 0 && (
+    <SuggestedActions ... />
+  )}
+```
+
+### SSE Stream Parsing
+
+Proper SSE chunk handling to avoid partial data corruption:
+
+```typescript
+// hooks/use-compare-run.ts
+let buffer = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+  const lines = buffer.split("\n");
+  buffer = lines.pop() || "";
+  // Process complete lines only
+}
+```
+
+## Context Management Integration
+
+The compare feature integrates with the [intelligent context management system](mdc:.cursor/rules/21-intelligent-context-management.mdc) for optimal token efficiency:
+
+### Model-Specific Context Filtering
+
+Each model receives only its own conversation history:
+
+```typescript
+// Each model gets filtered context to avoid token waste
+const modelSpecificMessages = buildModelSpecificContext(
+  modelId,
+  uiMessagesWithMetadata
+);
+
+// GPT-4 sees: [user_messages, gpt4_responses, current_user_message]
+// Claude sees: [user_messages, claude_responses, current_user_message]
+// No cross-model context pollution
+```
+
+### Dynamic Token Optimization
+
+Context windows adapt based on conversation complexity:
+
+- **Short conversations**: Full history preserved
+- **Long conversations**: Intelligent truncation to ~2000 tokens per model
+- **Token efficiency**: Up to 87% reduction in context tokens
+
+### Conversation Continuity
+
+Critical fixes ensure proper conversation flow:
+
+```typescript
+// User messages are saved to database
+await saveMessages({ messages: [userMessage] });
+
+// Each model's response is saved individually with metadata
+await saveMessages({
+  messages: [
+    {
+      role: "assistant",
+      parts: [{ type: "text", text: result.content }],
+      metadata: { modelId: result.modelId, compareRunId: runId },
+    },
+  ],
+});
+```
+
+**CRITICAL**: This ensures follow-up questions have proper context regardless of model selection changes.
+
+## Future Enhancements
+
+- **Pro-Only Restriction**: Currently available to all logged-in users, can be restricted to Pro tier
+- **More Presets**: Additional curated model combinations
+- **Export Results**: Save comparison results for later reference
+- **Model Recommendations**: Suggest optimal model combinations based on query type
+- **Semantic Context**: Advanced context analysis beyond token counting

@@ -1,0 +1,97 @@
+---
+description: "Supabase Auth PKCE + Anonymous + Identity Linking flow: client/server config, middleware exclusions, callback handling, and debugging"
+globs: app/auth/**,components/**,lib/supabase/**,middleware.ts
+---
+
+## Supabase Auth: PKCE + Anonymous + Identity Linking (Next.js App Router)
+
+This rule codifies our finalized authentication flow using Supabase with PKCE, default anonymous sign-in, and Google identity linking.
+
+### Core Guarantees
+
+- All OAuth uses PKCE end-to-end (browser + server).
+- Users are signed in anonymously on first load if not authenticated.
+- Identity linking upgrades an anonymous user by linking a provider (e.g., Google).
+- OAuth callbacks are handled server-side; middleware NEVER interferes with `/auth/**`.
+- No custom Supabase `storageKey` is used (so PKCE verifier cookies align across client and server).
+
+### Required Configuration
+
+1. Browser client configuration
+
+- File: [lib/supabase/client.ts](mdc:lib/supabase/client.ts)
+- Must:
+  - `autoRefreshToken: true`
+  - `persistSession: true`
+  - `detectSessionInUrl: true`
+  - `flowType: 'pkce'`
+  - Do NOT set a custom `storageKey` (let Supabase defaults manage cookies/localStorage for PKCE).
+
+2. Server client configuration
+
+- File: [lib/supabase/server.ts](mdc:lib/supabase/server.ts)
+- Must:
+  - Bridge Next cookies via `cookies()` get/set
+  - `auth.flowType: 'pkce'`
+  - `auth.debug: process.env.NODE_ENV === 'development'`
+
+3. Middleware exclusions
+
+- File: [middleware.ts](mdc:middleware.ts)
+- EXCLUDE all `/auth/**` routes from middleware matching to prevent breaking PKCE callbacks.
+
+### Anonymous Sign-In (Default)
+
+- Component: [components/auth-provider.tsx](mdc:components/auth-provider.tsx)
+- Pattern:
+  - On app load, if no session, call `supabase.auth.signInAnonymously()` (via `AuthGuard` logic in the provider).
+  - Expose `isAnonymous`, `userType`, and actions (`signInWithGoogle`, `linkIdentity`) through `useAuth()`.
+
+### Google Sign-In (Initial Auth)
+
+- Component: [components/auth-provider.tsx](mdc:components/auth-provider.tsx)
+- Use `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${baseUrl}/auth/callback` } })`.
+- Do NOT open in a different window/tab; let Supabase manage redirects for PKCE integrity.
+
+### Identity Linking (Upgrade Anonymous → Google)
+
+- Component: [components/auth-provider.tsx](mdc:components/auth-provider.tsx)
+- Use `supabase.auth.linkIdentity({ provider: 'google', options: { redirectTo: `${baseUrl}/auth/callback` } })`.
+- Must be invoked when the current user is anonymous; the callback will consolidate identities.
+
+### OAuth Callback Handling (Server)
+
+- Route: [app/auth/callback/route.ts](mdc:app/auth/callback/route.ts)
+- Steps:
+  1. Create server Supabase client ([lib/supabase/server.ts](mdc:lib/supabase/server.ts))
+  2. Log/verify PKCE cookies are present (we keep structured logs for troubleshooting)
+  3. Attempt `supabase.auth.exchangeCodeForSession(code)`
+  4. On success: redirect to `next` or `/`
+  5. On failure: if anonymous identity linking was in progress, re-check session (identities may have linked despite error) and redirect on success; otherwise redirect to `/auth/auth-code-error` with a safe message
+
+### Debugging Checklist (PKCE)
+
+- Verify the following in callback logs:
+  - `supabase.auth.token-code-verifier` cookie exists and is non-empty
+  - `code` query param is present (length ~36)
+  - Middleware is not matching `/auth/**`
+  - Server client has `auth.flowType: 'pkce'`
+  - Browser client does NOT set a custom `storageKey`
+
+### Do / Don’t
+
+- Do: Keep PKCE enabled on both client and server
+- Do: Exclude `/auth/**` from middleware
+- Do: Anonymous sign-in by default on first load
+- Do: Use `linkIdentity` to upgrade anonymous users
+- Don’t: Set a custom `storageKey` for auth
+- Don’t: Perform OAuth code exchange on the client
+- Don’t: Intercept or block `/auth/**` in middleware
+
+### File References
+
+- Browser client: [lib/supabase/client.ts](mdc:lib/supabase/client.ts)
+- Server client: [lib/supabase/server.ts](mdc:lib/supabase/server.ts)
+- Callback route: [app/auth/callback/route.ts](mdc:app/auth/callback/route.ts)
+- Auth provider + guard: [components/auth-provider.tsx](mdc:components/auth-provider.tsx)
+- Middleware: [middleware.ts](mdc:middleware.ts)

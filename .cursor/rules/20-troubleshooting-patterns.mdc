@@ -1,0 +1,254 @@
+---
+description: "Common troubleshooting patterns and debugging strategies for the AI Chat application"
+---
+
+# 20: Troubleshooting Patterns & Debugging Guide
+
+## Overview
+
+This rule captures common issues and their solutions based on production troubleshooting experience, particularly with the AI Compare feature.
+
+## Common Issue Categories
+
+### 1. UI State Management Issues
+
+#### **Problem**: Default suggestions showing when they shouldn't
+
+**Symptoms**: Suggestions appear at bottom of past chats or after user interactions
+**Root Cause**: Multiple components checking different state conditions
+
+**Solution Pattern**:
+
+```typescript
+// Check ALL content sources, not just messages
+{
+  messages.length === 0 &&
+    compareRuns.length === 0 &&
+    !activeCompareMessage &&
+    attachments.length === 0 &&
+    uploadQueue.length === 0 && <SuggestedActions />;
+}
+```
+
+#### **Problem**: User messages appearing on wrong side (left vs right)
+
+**Symptoms**: User queries don't have proper alignment/styling
+**Root Cause**: Missing user message creation in compare flow
+
+**Solution**: Always create user messages in ALL flows:
+
+```typescript
+// WRONG - Compare flow without user message
+await startCompare({ prompt, modelIds });
+
+// CORRECT - Always create user message first
+sendMessage({ role: "user", parts: [{ type: "text", text: prompt }] });
+await startCompare({ prompt, modelIds });
+```
+
+### 2. Data Loading Issues
+
+#### **Problem**: Historical compare runs showing as empty
+
+**Symptoms**: Past chats show "Model Comparison" text but no actual results
+**Root Cause**: Database query not loading related `compareResult` records
+
+**Solution**: Always load related data:
+
+```typescript
+// WRONG - Only loading run metadata
+const runs = await db.select().from(compareRun);
+
+// CORRECT - Loading runs with results
+const itemsWithResults = await Promise.all(
+  items.map(async (run) => {
+    const results = await db
+      .select()
+      .from(compareResult)
+      .where(eq(compareResult.runId, run.id));
+    return { ...run, results };
+  })
+);
+```
+
+### 3. Real-Time Streaming Issues
+
+#### **Problem**: SSE streaming not updating UI in real-time
+
+**Symptoms**: UI only updates after stream completes, not during
+**Root Causes**:
+
+- Partial SSE chunk corruption
+- Duplicate hook instances causing state resets
+
+**Solutions**:
+
+1. **Proper SSE Parsing**:
+
+```typescript
+let buffer = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+  const lines = buffer.split("\n");
+  buffer = lines.pop() || ""; // Keep incomplete line
+  for (const line of lines) {
+    if (line.startsWith("data: ")) {
+      // Process complete events only
+    }
+  }
+}
+```
+
+2. **Single Hook Instance**:
+
+```typescript
+// WRONG - Multiple hook instances
+// In Chat.tsx: useCompareRun(chatId)
+// In Messages.tsx: useCompareRun(chatId) // Creates duplicate!
+
+// CORRECT - Single instance with prop drilling
+// In Chat.tsx: const compareState = useCompareRun(chatId)
+// Pass to Messages.tsx as props
+```
+
+### 4. Authentication Issues
+
+#### **Problem**: API returning "Authentication required" errors
+
+**Symptoms**: 401/403 errors on protected endpoints
+**Common Causes**:
+
+- Expired Supabase session tokens
+- Cookie parsing issues
+- Route configuration problems
+
+**Debugging Steps**:
+
+1. Check route configuration in `lib/route-config.ts`
+2. Verify authentication decorator usage
+3. Test with fresh login session
+4. Check server logs for auth errors
+
+### 5. Database Constraint Issues
+
+#### **Problem**: Foreign key constraint violations during deletion
+
+**Symptoms**: Database errors when deleting chats with compare runs
+**Solution**: Delete in correct order:
+
+```typescript
+export async function deleteChatById({ id }: { id: string }) {
+  // Delete in order respecting foreign keys
+  await db.delete(vote).where(eq(vote.chatId, id));
+  await db.delete(message).where(eq(message.chatId, id));
+  await db.delete(stream).where(eq(stream.chatId, id));
+  await db.delete(compareRun).where(eq(compareRun.chatId, id)); // Before chat
+  const [chatsDeleted] = await db.delete(chat).where(eq(chat.id, id));
+  return chatsDeleted;
+}
+```
+
+## Debugging Strategies
+
+### 1. Systematic State Inspection
+
+When UI behaves unexpectedly, log state at key points:
+
+```typescript
+// Log component props and state
+console.log("[DEBUG] Component state:", {
+  messages: messages.length,
+  compareRuns: compareRuns.length,
+  activeCompare: !!activeCompareMessage,
+  // ... other relevant state
+});
+```
+
+### 2. API Response Validation
+
+Always verify API responses match expected structure:
+
+```typescript
+// Check if data structure matches expectations
+console.log("[DEBUG] API Response:", {
+  hasResults: !!run.results,
+  resultsCount: run.results?.length || 0,
+  resultKeys: Object.keys(run.results || {}),
+});
+```
+
+### 3. Hook Instance Tracking
+
+Prevent duplicate hooks by logging hook instances:
+
+```typescript
+// In useCompareRun
+useEffect(() => {
+  console.log(`[DEBUG] useCompareRun instance created for chat: ${chatId}`);
+  return () =>
+    console.log(`[DEBUG] useCompareRun instance destroyed for chat: ${chatId}`);
+}, [chatId]);
+```
+
+## Prevention Patterns
+
+### 1. Prop Drilling vs Hook Duplication
+
+**Prefer**: Single hook instance with prop drilling
+**Avoid**: Multiple hook instances in component tree
+
+### 2. Comprehensive State Checks
+
+**Always**: Check all possible content sources
+**Never**: Assume single state source (e.g., only checking `messages.length`)
+
+### 3. Database Query Completeness
+
+**Always**: Load related data when displaying complex objects
+**Never**: Assume foreign key data will be available without explicit loading
+
+### 4. Stream Processing Robustness
+
+**Always**: Handle partial chunks and incomplete data
+**Never**: Assume streaming data arrives in complete chunks
+
+## Testing Strategies
+
+### 1. Edge Case Testing
+
+- Empty states (no messages, no compare runs)
+- Mixed states (messages + compare runs)
+- Error states (failed streams, network issues)
+- Historical data loading
+
+### 2. State Transition Testing
+
+- New chat → first message → compare mode
+- Single model → multi model → back to single
+- Active compare → historical compare → new compare
+
+### 3. Cross-Component Integration
+
+- Verify state propagation between parent/child components
+- Test prop changes trigger correct re-renders
+- Ensure hook instances don't conflict
+
+## Common Gotchas
+
+1. **CSS Specificity**: Tailwind classes may not apply due to specificity issues
+2. **Async State Updates**: React state updates are asynchronous, don't assume immediate availability
+3. **SWR Caching**: Cached data might be stale, consider revalidation strategies
+4. **TypeScript Assertions**: Temporary `as any` casts can hide real type issues
+5. **Component Memoization**: Props changes might not trigger re-renders if memo conditions are wrong
+
+## Resolution Workflow
+
+1. **Reproduce**: Create minimal reproduction case
+2. **Isolate**: Identify which component/hook/API is involved
+3. **Log**: Add strategic logging to trace data flow
+4. **Compare**: Check against working examples in codebase
+5. **Fix**: Apply targeted fix addressing root cause
+6. **Test**: Verify fix doesn't break other functionality
+7. **Clean**: Remove debug logs and temporary code

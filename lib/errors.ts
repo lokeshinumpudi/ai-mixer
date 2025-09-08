@@ -4,6 +4,7 @@ export type ErrorType =
   | 'forbidden'
   | 'not_found'
   | 'rate_limit'
+  | 'login_required'
   | 'offline';
 
 export type Surface =
@@ -15,7 +16,9 @@ export type Surface =
   | 'history'
   | 'vote'
   | 'document'
-  | 'suggestions';
+  | 'suggestions'
+  | 'compare'
+  | 'model';
 
 export type ErrorCode = `${ErrorType}:${Surface}`;
 
@@ -31,6 +34,8 @@ export const visibilityBySurface: Record<Surface, ErrorVisibility> = {
   vote: 'response',
   document: 'response',
   suggestions: 'response',
+  compare: 'response',
+  model: 'response',
 };
 
 export class ChatSDKError extends Error {
@@ -89,6 +94,10 @@ export function getMessageByErrorCode(errorCode: ErrorCode): string {
 
     case 'rate_limit:chat':
       return 'You have exceeded your maximum number of messages for the day. Please try again later.';
+    case 'login_required:chat':
+      return 'Sign in to unlock unlimited model comparisons and higher limits.';
+    case 'login_required:compare':
+      return 'Sign in to unlock unlimited model comparisons and higher limits.';
     case 'not_found:chat':
       return 'The requested chat was not found. Please check the chat ID and try again.';
     case 'forbidden:chat':
@@ -124,6 +133,8 @@ function getStatusCodeByType(type: ErrorType) {
       return 404;
     case 'rate_limit':
       return 429;
+    case 'login_required':
+      return 429; // Use same status as rate_limit
     case 'offline':
       return 503;
     default:

@@ -1,5 +1,5 @@
 import type { ArtifactKind } from '@/components/artifact';
-import { protectedRoute } from '@/lib/auth-decorators';
+import { authenticatedRoute } from '@/lib/auth-decorators';
 import {
   deleteDocumentsByIdAfterTimestamp,
   getDocumentsById,
@@ -7,7 +7,7 @@ import {
 } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
-export const GET = protectedRoute(async (request, context, user) => {
+export const GET = authenticatedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
@@ -33,7 +33,7 @@ export const GET = protectedRoute(async (request, context, user) => {
   return Response.json(documents, { status: 200 });
 });
 
-export const POST = protectedRoute(async (request, context, user) => {
+export const POST = authenticatedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
@@ -72,7 +72,7 @@ export const POST = protectedRoute(async (request, context, user) => {
   return Response.json(document, { status: 200 });
 });
 
-export const DELETE = protectedRoute(async (request, context, user) => {
+export const DELETE = authenticatedRoute(async (request, context, user) => {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   const timestamp = searchParams.get('timestamp');

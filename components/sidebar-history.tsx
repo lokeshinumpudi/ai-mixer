@@ -1,11 +1,5 @@
 'use client';
 
-import { isToday, isYesterday, subMonths, subWeeks } from 'date-fns';
-import { useParams, useRouter } from 'next/navigation';
-import type { User } from 'next-auth';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { motion } from 'framer-motion';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,10 +17,16 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import type { Chat } from '@/lib/db/schema';
+import type { AppUser } from '@/lib/supabase/types';
 import { fetcher } from '@/lib/utils';
-import { ChatItem } from './sidebar-history-item';
+import { isToday, isYesterday, subMonths, subWeeks } from 'date-fns';
+import { motion } from 'framer-motion';
+import { useParams, useRouter } from 'next/navigation';
+import React, { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import useSWRInfinite from 'swr/infinite';
 import { LoaderIcon } from './icons';
+import { ChatItem } from './sidebar-history-item';
 
 type GroupedChats = {
   today: Chat[];
@@ -93,9 +93,37 @@ export function getChatHistoryPaginationKey(
   return `/api/history?ending_before=${firstChatFromPage.id}&limit=${PAGE_SIZE}`;
 }
 
-export function SidebarHistory({ user }: { user: User | undefined }) {
+// User-scoped key generator to avoid cache leakage across sessions
+export function getChatHistoryPaginationKeyForUser(userId?: string) {
+  return (pageIndex: number, previousPageData: ChatHistory) => {
+    if (previousPageData && previousPageData.hasMore === false) {
+      return null;
+    }
+
+    const uid = userId ?? 'anonymous';
+
+    if (pageIndex === 0) return `/api/history?limit=${PAGE_SIZE}&uid=${uid}`;
+
+    const firstChatFromPage = previousPageData.chats.at(-1);
+
+    if (!firstChatFromPage) return null;
+
+    return `/api/history?ending_before=${firstChatFromPage.id}&limit=${PAGE_SIZE}&uid=${uid}`;
+  };
+}
+
+export function SidebarHistory({ user }: { user: AppUser | null }) {
   const { setOpenMobile } = useSidebar();
   const { id } = useParams();
+
+  // Memoize the pagination key factory to avoid re-creation across renders
+  const getKey = useMemo(
+    () =>
+      user && !user.is_anonymous
+        ? getChatHistoryPaginationKeyForUser(user.id)
+        : () => null as any,
+    [user?.id, user?.is_anonymous],
+  );
 
   const {
     data: paginatedChatHistories,
@@ -103,8 +131,14 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     isValidating,
     isLoading,
     mutate,
-  } = useSWRInfinite<ChatHistory>(getChatHistoryPaginationKey, fetcher, {
+  } = useSWRInfinite<ChatHistory>(getKey, fetcher, {
     fallbackData: [],
+    // Reduce duplicate requests on mount/focus
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+    dedupingInterval: 4000,
+    // Important: we want first page to refresh when we invalidate after streaming
+    revalidateFirstPage: true,
   });
 
   const router = useRouter();
@@ -148,7 +182,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     }
   };
 
-  if (!user) {
+  if (!user || user.is_anonymous) {
     return (
       <SidebarGroup>
         <SidebarGroupContent>
@@ -320,24 +354,29 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
               })()}
           </SidebarMenu>
 
-          <motion.div
-            onViewportEnter={() => {
-              if (!isValidating && !hasReachedEnd) {
-                setSize((size) => size + 1);
-              }
-            }}
-          />
+          {/* Load more trigger - positioned after content but before end message */}
+          {!hasReachedEnd && (
+            <HistorySentinel
+              hasReachedEnd={hasReachedEnd}
+              isValidating={isValidating}
+              setSize={setSize}
+            />
+          )}
 
-          {hasReachedEnd ? (
-            <div className="px-2 text-zinc-500 w-full flex flex-row justify-center items-center text-sm gap-2 mt-8">
-              You have reached the end of your chat history.
-            </div>
-          ) : (
-            <div className="p-2 text-zinc-500 dark:text-zinc-400 flex flex-row gap-2 items-center mt-8">
+          {/* Loading indicator */}
+          {isValidating && !hasReachedEnd && (
+            <div className="p-2 text-zinc-500 dark:text-zinc-400 flex flex-row gap-2 items-center justify-center">
               <div className="animate-spin">
                 <LoaderIcon />
               </div>
-              <div>Loading Chats...</div>
+              <div className="text-sm">Loading more chats...</div>
+            </div>
+          )}
+
+          {/* End of history message */}
+          {hasReachedEnd && (
+            <div className="px-2 text-zinc-500 w-full flex flex-row justify-center items-center text-sm gap-2 mt-4">
+              You have reached the end of your chat history.
             </div>
           )}
         </SidebarGroupContent>
@@ -361,5 +400,33 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+function HistorySentinel({
+  hasReachedEnd,
+  isValidating,
+  setSize,
+}: {
+  hasReachedEnd: boolean;
+  isValidating: boolean;
+  setSize: (updater: (size: number) => number) => void;
+}) {
+  const didTriggerRef = React.useRef(false);
+
+  return (
+    <motion.div
+      className="h-4 w-full" // Make it visible for intersection
+      onViewportEnter={() => {
+        if (didTriggerRef.current) {
+          if (!isValidating && !hasReachedEnd) {
+            console.log('🔄 Loading more chats...');
+            setSize((size) => size + 1);
+          }
+        } else {
+          didTriggerRef.current = true;
+        }
+      }}
+    />
   );
 }

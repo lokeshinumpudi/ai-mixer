@@ -1,0 +1,167 @@
+---
+alwaysApply: true
+---
+
+# 19: Current Project Status & Recent Progress
+
+## Latest Major Achievement: Usage Tracking System & Mobile Optimization ✅
+
+**Successfully implemented a comprehensive usage tracking system and mobile-first responsive design:**
+
+### ✅ Major Accomplishments
+
+1. **Usage Tracking System**: Cost-conscious, client-side computation with granular tracking
+2. **Mobile-First Settings**: Responsive settings page with priority content hierarchy
+3. **Mobile Table Optimization**: Card-based layouts for mobile, table for desktop
+4. **Clean Database Architecture**: Fresh database state with no legacy complications
+5. **Simplified Authentication**: Direct Supabase ID mapping (no complex linking)
+
+### ✅ Completed Features
+
+1. **Default Compare Mode**: Compare mode is now the default user experience
+2. **Seamless Model Selection**: Users can select 1-3 models with automatic routing
+3. **Integrated UX**: No separate UI modes - everything works within the existing chat interface
+4. **Real-Time Streaming**: Multiplexed SSE for concurrent model responses
+5. **Persistent History**: Compare runs are saved and restorable in chat history
+6. **Rate Limiting**: Proper quota enforcement with upgrade CTAs
+7. **Mobile Responsive**: Works seamlessly across all device sizes
+8. **✅ FIXED: Historical Compare Loading**: Past chats now properly load compare results
+9. **✅ FIXED: UI State Management**: Default suggestions no longer show inappropriately
+10. **✅ FIXED: User Message Alignment**: User messages appear correctly styled and positioned
+11. **✅ NEW: Usage Tracking System**: Granular token and cost tracking with client-side computation
+12. **✅ NEW: Mobile-First Settings**: Responsive settings page with user info prioritized on mobile
+13. **✅ NEW: Mobile Table Optimization**: Card layouts for mobile, traditional tables for desktop
+
+### 🎯 Key Implementation Highlights
+
+- **Smart Routing**: 1 model → regular chat, 2+ models → compare mode
+- **Inline Results**: Compare results display as `CompareMessage` components in chat flow
+- **Model Chips**: Visual model selection with easy add/remove functionality
+- **Upgrade CTAs**: Contextual Pro plan promotion for rate limit scenarios
+- **Error Handling**: Graceful degradation with user-friendly error messages
+
+## Current Architecture State
+
+### Unified Compare Architecture
+
+- ✅ **Entry Point**: `compare-message.tsx` is the defacto entry point for all message rendering
+- ✅ **Unified Mode**: Application operates exclusively in compare mode - no dual interfaces
+- ✅ **Database Schema**: Compare tables (`compareRun`, `compareResult`) with proper constraints
+- ✅ **Migration System**: Working correctly with Drizzle ORM
+- ✅ **Composite Primary Keys**: Proper foreign key relationships established
+
+### API Layer
+
+- ✅ Complete compare API endpoints (`/stream`, `/cancel`, `/[runId]`)
+- ✅ Authentication decorators properly applied
+- ✅ Rate limiting with detailed logging
+- ✅ Input validation with Zod schemas
+
+### Frontend Components
+
+- ✅ Enhanced `ModelPicker` with multi-selection
+- ✅ Updated `MultimodalInput` with compare toggle and chips
+- ✅ New `CompareMessage` for inline result display
+- ✅ Integrated `Chat` component orchestrating all modes
+
+### State Management
+
+- ✅ `useCompareRun` hook for complex compare state
+- ✅ Chat-scoped state to prevent cross-chat leakage
+- ✅ SWR integration for caching and revalidation
+
+## User Experience Flow
+
+1. **Landing**: User sees unified compare mode with current model selected
+2. **Selection**: Can add/remove models via model picker (up to 3)
+3. **Submission**: All interactions use unified compare infrastructure
+4. **Results**: All results rendered through `compare-message.tsx` entry point
+5. **Continuation**: Can continue with same or different model selection
+6. **History**: All interactions preserved in unified chat history
+
+## Rate Limiting & Monetization
+
+### Current Limits
+
+- **Anonymous**: 5 messages/day
+- **Free**: 5 messages/day
+- **Pro**: 1000 messages/month
+
+### Upgrade CTAs
+
+- ✅ Compare rate limit errors trigger Pro upgrade prompts
+- ✅ File upload restrictions promote Pro features
+- ✅ Progressive disclosure for anonymous users
+- ✅ Direct payment integration via Razorpay
+
+## Next Potential Enhancements
+
+### Short Term
+
+- [ ] Pro-only restriction for compare feature (currently available to all logged-in users)
+- [ ] Additional curated model presets
+- [ ] Enhanced error messages with retry suggestions
+
+### Medium Term
+
+- [ ] Export comparison results
+- [ ] Model recommendation engine
+- [ ] Advanced filtering and sorting options
+- [ ] Comparison analytics and insights
+
+### Long Term
+
+- [ ] Team collaboration on comparisons
+- [ ] API access for compare functionality
+- [ ] Custom model fine-tuning integration
+
+## Recent Critical Fixes (Latest Session)
+
+### 🔧 Database Query Issues
+
+- **Fixed `listCompareRunsByChat`**: Now properly loads `compareResult` records for historical compare runs
+- **Fixed `deleteChatById`**: Added proper foreign key constraint handling for compare runs
+
+### 🔧 UI State Management Issues
+
+- **Fixed Greeting Display**: Now checks all content sources (`messages`, `compareRuns`, `activeCompareMessage`)
+- **Fixed Suggestions Persistence**: `MultimodalInput` now receives compare state to properly hide suggestions
+- **Fixed User Message Flow**: Compare mode now creates user messages for proper alignment and styling
+
+### 🔧 Real-Time Streaming Issues
+
+- **Fixed SSE Parsing**: Implemented proper buffering to handle partial chunks
+- **Fixed Duplicate Hooks**: Eliminated multiple `useCompareRun` instances causing state resets
+- **Fixed State Propagation**: Single hook instance with proper prop drilling to child components
+
+## Technical Debt & Maintenance
+
+### Clean Code Practices
+
+- ✅ Debugging logs removed from production code
+- ✅ Proper TypeScript typing throughout
+- ✅ Consistent error handling patterns
+- ✅ Centralized configuration in constants
+- ✅ Comprehensive troubleshooting documentation added
+
+### Performance Optimizations
+
+- ✅ Efficient SSE streaming with proper cleanup
+- ✅ SWR caching for reduced API calls
+- ✅ Optimistic updates for better UX
+- ✅ Proper React memoization where needed
+- ✅ Single hook instances to prevent state conflicts
+
+## Deployment Readiness
+
+The AI Compare feature is fully ready for production deployment:
+
+- ✅ **Database**: Migrations applied successfully
+- ✅ **APIs**: All endpoints tested and working
+- ✅ **Frontend**: Components integrated and responsive
+- ✅ **Error Handling**: Comprehensive error scenarios covered
+- ✅ **Rate Limiting**: Proper quota enforcement
+- ✅ **Security**: Authentication and authorization in place
+- ✅ **UX**: Smooth user experience with upgrade paths
+
+The feature successfully transforms the application from a single-model chat into a **unified multi-model comparison platform** where `compare-message.tsx` serves as the defacto entry point for all interactions.

@@ -1,0 +1,71 @@
+---
+alwaysApply: true
+description: "API optimization and data consolidation patterns."
+---
+
+# 11: API Performance & Optimization
+
+## Core Principle: Data Consolidation
+
+To minimize network requests and improve frontend performance, related data is consolidated into single API endpoints.
+
+### ✅ Preferred Pattern: Consolidated API
+
+Instead of multiple fetches for models and user settings, the application uses a single endpoint.
+
+```typescript
+// ✅ PREFER: Single, consolidated API call
+const { models, userSettings, userType } = useModels(); // Hits /api/models once
+
+// ❌ AVOID: Multiple separate API calls
+const { data: models } = useSWR("/api/models", fetcher);
+const { data: userSettings } = useSWR("/api/user/settings", fetcher);
+```
+
+The `/api/models` endpoint fetches all necessary data in parallel on the server-side, reducing client-side waterfalls.
+
+## Streamlined Upgrade Flow
+
+The user upgrade flow has been optimized by removing the intermediate `/pricing` page. All "Upgrade" CTAs now link directly to the Razorpay payment page, reducing user friction and simplifying the funnel.
+
+Note: Some code paths still reference `/api/models/public` as a protected endpoint for broader model discovery. Keep consolidated data on `/api/models` authoritative for client state.
+
+## Caching Strategy
+
+### Multi-Level Caching Architecture
+
+1. **Database Cache**: For expensive external APIs (Vercel Gateway) - 7-day expiry, daily refresh
+2. **SWR Cache**: For API responses - configurable TTL based on data volatility
+3. **Memory Cache**: For frequently accessed data - session-based, immediate expiry
+
+### Database Caching Pattern
+
+```typescript
+// For stable external data (model info, pricing)
+const { data: cache } = await supabase
+  .from("model_cache")
+  .select("models")
+  .gt("expiresAt", new Date().toISOString())
+  .single();
+
+if (cache) {
+  return NextResponse.json({ models: cache.models }); // ~50ms response
+}
+
+// Fallback to live API only if cache miss
+const { models } = await gateway.getAvailableModels();
+return NextResponse.json({ models }); // ~1200ms response
+```
+
+### SWR Configuration
+
+SWR is configured with appropriate caching strategies to reduce redundant requests:
+
+- **`revalidateOnFocus: false`**: Prevents excessive refetching when users switch tabs.
+- **`dedupingInterval`**: Prevents identical requests from being sent in a short period.
+- **`refreshInterval`**: Periodically refetches data like model availability in the background.
+
+## Anti-Patterns
+
+- **Circular Dependencies**: Avoid creating hooks that depend on each other in a circular fashion.
+- **Over-Consolidation**: Do not group logically unrelated data into a single endpoint. The data in a consolidated API should be cohesive (e.g., everything needed to render the chat view).

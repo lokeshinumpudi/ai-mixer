@@ -1,0 +1,49 @@
+---
+alwaysApply: true
+description: "React component best practices and UI/UX patterns."
+---
+
+# 06: Component & UI Patterns
+
+## Core Principles
+
+- **Client Components**: Use `'use client'` for all interactive components to support the application's offline-first and settings-driven architecture.
+- **shadcn/ui + Tailwind CSS**: Build the UI using shadcn/ui for accessible, unstyled primitives, and Tailwind CSS for styling.
+- **Settings-Aware Components**: Components that depend on user preferences should use the `useModels` hook, which provides both model data and user settings from a single, consolidated API call.
+
+## Component Structure
+
+```typescript
+// Standard component structure
+"use client";
+
+import { useModels } from "@/hooks/use-models"; // For settings-aware components
+// ... other imports
+
+interface MyComponentProps {
+  session?: Session | null; // Include for auth-aware components
+  // ... other props
+}
+
+export function MyComponent({ session }: MyComponentProps) {
+  const { userSettings } = useModels();
+  // ... component logic
+  return <div>{/* JSX */}</div>;
+}
+```
+
+## UI/UX Patterns from Recent Improvements
+
+Recent refactoring has established several important UI/UX patterns that should be followed:
+
+- **Content-First Design**: Prioritize scannability and clarity. For example, the redesigned model picker uses a vertical list that emphasizes model names over descriptions and other metadata.
+- **Progressive Disclosure**: In complex UI like the model picker, show a minimal set of options initially and provide a "View more" option to reveal the full list. This reduces cognitive load.
+- **Separated Concerns in Layouts**: Avoid cluttered headers. For example, in dialogs, the title should be distinct from secondary actions like an "Upgrade" call-to-action.
+- **Streamlined User Flows**: Minimize the number of steps to complete an action. The upgrade flow was streamlined by removing the intermediate `/pricing` page and linking CTAs directly to the payment gateway.
+- **Mobile-First Responsive Design**: Use responsive grid layouts and ensure content is prioritized correctly on smaller screens. For instance, in the settings page, the main content tabs appear before the usage/profile sidebar on mobile.
+
+### Sharing Pattern (New)
+
+- Use `ShareButtonSimple` to toggle chat visibility and copy the URL in one tap.
+- Prefer simple toggles with toast feedback over dropdowns, especially on mobile.
+- Visual state communicates sharing status (green globe for public, neutral share icon for private).

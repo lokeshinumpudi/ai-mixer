@@ -1,0 +1,488 @@
+---
+alwaysApply: false
+description: "Best practices for scroll management to prevent jarring behavior and maintain user position"
+globs: hooks/use-scroll-to-bottom.tsx,hooks/use-messages.tsx,components/messages.tsx,components/chat.tsx
+---
+
+# Scroll Management Best Practices
+
+## Overview
+
+Proper scroll management is essential for maintaining user context and preventing jarring layout shifts during dynamic content updates, streaming, and state transitions.
+
+## Core Principles
+
+### 1. User Intent Preservation
+
+**Never scroll without user intent.** Users should stay where they are unless:
+
+- They explicitly send a new message
+- A new conversation starts
+- They navigate to a different part of the app
+- Progressive loading reveals new content at bottom
+
+### 2. Advanced Scroll Intelligence
+
+**Context-aware scrolling based on user behavior:**
+
+```tsx
+// Smart scroll decision making
+const shouldAutoScroll = useMemo(() => {
+  return (
+    isAtBottom || // User is actively following
+    hasSentMessage || // User just sent message
+    isNewChat || // New conversation started
+    isInitialLoad // First load of latest messages
+  );
+}, [isAtBottom, hasSentMessage, isNewChat, isInitialLoad]);
+
+// Progressive loading scroll detection
+useEffect(() => {
+  if (activeCompareMessage?.status === "running") {
+    // Auto-scroll to new compare message
+    setTimeout(() => scrollToBottom("smooth"), 100);
+  }
+}, [activeCompareMessage?.status, scrollToBottom]);
+```
+
+## Scroll Hook Architecture
+
+### `useScrollToBottom` Hook
+
+```tsx
+export function useScrollToBottom() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  const { data: isAtBottom, mutate: setIsAtBottom } = useSWR(
+    "messages:is-at-bottom",
+    null,
+    { fallbackData: false }
+  );
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    endRef.current?.scrollIntoView({ behavior });
+  }, []);
+
+  // Viewport detection
+  function onViewportEnter() {
+    setIsAtBottom(true);
+  }
+  function onViewportLeave() {
+    setIsAtBottom(false);
+  }
+
+  return {
+    containerRef,
+    endRef,
+    isAtBottom,
+    scrollToBottom,
+    onViewportEnter,
+    onViewportLeave,
+  };
+}
+```
+
+### `useMessages` Integration
+
+```tsx
+export function useMessages({ chatId, status }) {
+  const {
+    containerRef,
+    endRef,
+    isAtBottom,
+    scrollToBottom,
+    onViewportEnter,
+    onViewportLeave,
+  } = useScrollToBottom();
+
+  // Smart scroll logic
+  useEffect(() => {
+    if (status === "submitted") {
+      // User intent: scroll to new message
+      scrollToBottom("smooth");
+    }
+  }, [status, scrollToBottom]);
+
+  return {
+    containerRef,
+    endRef,
+    onViewportEnter,
+    onViewportLeave,
+    scrollToBottom,
+  };
+}
+```
+
+## Message Container Setup
+
+### Proper Container Structure
+
+```tsx
+<div
+  ref={messagesContainerRef}
+  className="flex flex-col min-w-0 gap-8 flex-1 overflow-y-scroll pt-6 pb-4"
+>
+  {/* Messages content */}
+  <div className="space-y-4">
+    {messages.map((message, index) => (
+      <Message
+        key={message.id}
+        message={message}
+        requiresScrollPadding={hasSentMessage && index === messages.length - 1}
+      />
+    ))}
+  </div>
+
+  {/* Invisible scroll anchor */}
+  <motion.div
+    ref={messagesEndRef}
+    className="shrink-0 min-w-[24px] min-h-[24px] opacity-0"
+    onViewportLeave={onViewportLeave}
+    onViewportEnter={onViewportEnter}
+  />
+</div>
+```
+
+### Scroll Padding for Input
+
+```tsx
+// Ensure input doesn't cover last message
+.message:last-child {
+  scroll-margin-bottom: 120px; /* Height of input area */
+}
+```
+
+## Compare Mode Scroll Handling
+
+### Active Compare Message Scrolling
+
+```tsx
+// Only scroll when compare run starts, not when it completes
+useEffect(() => {
+  if (activeCompareMessage && activeCompareMessage.status === "running") {
+    // New compare run starting - scroll to it
+    setTimeout(() => scrollToBottom("smooth"), 100);
+  }
+}, [activeCompareMessage?.status, scrollToBottom]);
+```
+
+### Prevent Completion Scrolling
+
+```tsx
+// ❌ Don't do this - causes jarring behavior
+useEffect(() => {
+  if (compareRuns.length > 0) {
+    scrollToBottom("smooth"); // Jarring after completion!
+  }
+}, [compareRuns.length, scrollToBottom]);
+
+// ✅ Do this - let user stay where they are
+// No scroll effect for compare run completions
+```
+
+## Streaming Content Management
+
+### Content Expansion Without Layout Shift
+
+```tsx
+// Use max-height with smooth transitions
+<div
+  className="max-h-[280px] overflow-y-auto transition-all duration-300"
+  style={{
+    scrollbarWidth: "thin",
+    scrollbarColor: "rgb(148 163 184) transparent",
+  }}
+>
+  <ReasoningContent content={streamingContent} />
+</div>
+```
+
+### Progressive Content Loading
+
+```tsx
+// Show content as it streams without jumping
+useEffect(() => {
+  if (newContentChunk) {
+    // Append to existing content smoothly
+    setDisplayedContent((prev) => prev + newContentChunk);
+
+    // Only scroll if user was already at bottom
+    if (isAtBottom) {
+      scrollToBottom("smooth");
+    }
+  }
+}, [newContentChunk, isAtBottom, scrollToBottom]);
+```
+
+### Intersection Observer for Infinite Scroll
+
+```tsx
+// Detect when user scrolls to load more messages
+const topRef = useRef<HTMLDivElement>(null);
+
+useEffect(() => {
+  if (!hasMore || !loadMore || isLoadingMore) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+        // User scrolled to top, load older messages
+        loadMore();
+      }
+    },
+    {
+      threshold: 0.1,
+      rootMargin: "100px", // Trigger 100px before reaching top
+    }
+  );
+
+  if (topRef.current) {
+    observer.observe(topRef.current);
+  }
+
+  return () => observer.disconnect();
+}, [hasMore, loadMore, isLoadingMore]);
+
+// Invisible trigger element at top of message list
+<div ref={topRef} className="h-4 opacity-0">
+  {isLoadingMore && <LoadingSpinner />}
+</div>;
+```
+
+### Initial Load Scroll Behavior
+
+```tsx
+// Automatic scroll to latest messages on chat load
+useEffect(() => {
+  if (chatId && messages.length > 0 && !hasScrolledToBottom) {
+    // Scroll to bottom instantly to show latest messages
+    scrollToBottom("instant");
+    setHasScrolledToBottom(true);
+  }
+}, [chatId, messages.length, scrollToBottom, hasScrolledToBottom]);
+```
+
+## User Position Awareness
+
+### At-Bottom Detection
+
+```tsx
+function onViewportEnter() {
+  setIsAtBottom(true);
+}
+
+function onViewportLeave() {
+  setIsAtBottom(false);
+}
+
+// Use intersection observer for precise detection
+<motion.div
+  ref={endRef}
+  onViewportEnter={onViewportEnter}
+  onViewportLeave={onViewportLeave}
+/>;
+```
+
+### Contextual Scrolling Decisions
+
+```tsx
+// Only auto-scroll if user was already following the conversation
+const shouldAutoScroll = useMemo(() => {
+  return (
+    isAtBottom || // User is actively following
+    hasSentMessage || // User just sent a message
+    isNewChat // New conversation started
+  );
+}, [isAtBottom, hasSentMessage, isNewChat]);
+```
+
+## Performance Optimization
+
+### Debounced Scrolling
+
+```tsx
+// Prevent excessive scroll calls during rapid updates
+const debouncedScroll = useDebounce(() => {
+  if (shouldAutoScroll) {
+    scrollToBottom("smooth");
+  }
+}, 100);
+
+// Use in streaming content updates
+useEffect(() => {
+  if (contentUpdated) {
+    debouncedScroll();
+  }
+}, [contentUpdated, debouncedScroll]);
+```
+
+### Virtual Scrolling for Long Conversations
+
+```tsx
+// For conversations with many messages
+import { FixedSizeList } from "react-window";
+
+<FixedSizeList
+  height={window.innerHeight - 200}
+  itemCount={messages.length}
+  itemSize={120}
+  className="scroll-smooth"
+>
+  {({ index, style }) => (
+    <div style={style}>
+      <Message message={messages[index]} />
+    </div>
+  )}
+</FixedSizeList>;
+```
+
+## Mobile Considerations
+
+### Touch-Friendly Scrolling
+
+```tsx
+// Ensure smooth momentum scrolling on iOS
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+```
+
+### Horizontal Scroll Containment
+
+```tsx
+// Prevent page-wide horizontal scrolling on mobile
+<div className={cn("w-full mx-auto max-w-5xl overflow-hidden", className)}>
+  {/* Mobile: Contained horizontal scroll */}
+  <div className="md:hidden">
+    <div className="relative w-full overflow-hidden">
+      <div
+        className={cn(
+          "flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory",
+          "w-full min-w-0" // Critical for containment
+        )}
+        style={{
+          WebkitOverflowScrolling: "touch",
+          maxWidth: "100vw", // Hard viewport limit
+        }}
+      >
+        {/* Scrollable cards */}
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**Key Points:**
+
+- Use `overflow-hidden` on parent containers
+- Set `w-full min-w-0` on scroll containers
+- Add `maxWidth: "100vw"` as fallback
+- Reduce card width from 85vw to 80vw for breathing room
+
+### Keyboard Handling
+
+```tsx
+// Adjust scroll when keyboard appears
+useEffect(() => {
+  const handleResize = () => {
+    if (keyboardVisible) {
+      // Scroll to keep input visible
+      inputRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  window.addEventListener("resize", handleResize);
+  return () => window.removeEventListener("resize", handleResize);
+}, [keyboardVisible]);
+```
+
+## Testing Scroll Behavior
+
+### Scroll Position Tests
+
+```tsx
+test("maintains scroll position during streaming", async ({ page }) => {
+  // Scroll to middle of conversation
+  await page.evaluate(() => {
+    window.scrollTo(0, 500);
+  });
+
+  // Start streaming response
+  await page.click("[data-testid='send-button']");
+
+  // Verify scroll position remains stable
+  const scrollPosition = await page.evaluate(() => window.scrollY);
+  expect(scrollPosition).toBeGreaterThan(400); // Still near middle
+});
+
+test("auto-scrolls when user sends message", async ({ page }) => {
+  // User at top of conversation
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  // Send message
+  await page.fill("[data-testid='input']", "Hello");
+  await page.click("[data-testid='send-button']");
+
+  // Should scroll to bottom for new message
+  await page.waitForFunction(() => {
+    const scrollTop = window.scrollY;
+    const documentHeight = document.documentElement.scrollHeight;
+    const windowHeight = window.innerHeight;
+    return scrollTop + windowHeight >= documentHeight - 100;
+  });
+});
+```
+
+### Layout Shift Detection
+
+```tsx
+test("no layout shifts during content streaming", async ({ page }) => {
+  const messageSelector = "[data-testid='message']:last-child";
+
+  // Get initial position
+  const initialRect = await page.locator(messageSelector).boundingBox();
+
+  // Start streaming
+  await page.click("[data-testid='send-button']");
+
+  // Wait for content to stream
+  await page.waitForTimeout(2000);
+
+  // Check position stability
+  const finalRect = await page.locator(messageSelector).boundingBox();
+
+  // Allow small adjustments, but prevent large shifts
+  const positionChange = Math.abs(finalRect.y - initialRect.y);
+  expect(positionChange).toBeLessThan(50); // Max 50px shift
+});
+```
+
+## Best Practices Summary
+
+### ✅ Do
+
+- Preserve user's scroll position unless they take action
+- Use smooth scrolling with consistent timing
+- Implement viewport detection for context awareness
+- Handle loading states without jarring scrolls
+- Test scroll behavior across different scenarios
+- Consider mobile touch scrolling behavior
+- Use debouncing for rapid content updates
+
+### ❌ Don't
+
+- Auto-scroll after every completion or state change
+- Use abrupt or instant scrolling
+- Ignore user's current position in conversation
+- Scroll without considering if user is actively following
+- Forget to handle keyboard appearance on mobile
+- Use inconsistent scroll timing or easing
+
+### Key Metrics
+
+- **Scroll Performance**: Monitor scroll smoothness and frame rates
+- **Layout Stability**: Track Cumulative Layout Shift (CLS)
+- **User Engagement**: Measure how often users scroll vs auto-scroll
+- **Mobile Performance**: Test touch scrolling responsiveness
