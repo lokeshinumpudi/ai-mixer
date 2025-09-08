@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { FREE_MODELS, PRICING, PRO_MODELS } from '@/lib/constants';
-import { motion } from 'framer-motion';
+} from "@/components/ui/dialog";
+import { FREE_MODELS, PRICING, PRO_MODELS } from "@/lib/constants";
+import { motion } from "framer-motion";
 import {
   ArrowRight,
   Bot,
@@ -22,8 +22,8 @@ import {
   Star,
   Trophy,
   Zap,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
+} from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface OnboardingModalProps {
   isOpen: boolean;
@@ -39,7 +39,7 @@ const fadeInUp = {
 const scaleIn = {
   initial: { opacity: 0, scale: 0.9 },
   animate: { opacity: 1, scale: 1 },
-  transition: { duration: 0.5, ease: 'easeOut' },
+  transition: { duration: 0.5, ease: "easeOut" },
 };
 
 export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
@@ -59,8 +59,8 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
 
   const steps = [
     {
-      title: '🚀 Welcome to AI Mixer',
-      subtitle: 'Compare AI models like never before',
+      title: "🚀 Welcome to AI Mixer",
+      subtitle: "Compare AI models like never before",
       content: (
         <div className="space-y-4 sm:space-y-8">
           {/* Hero Section */}
@@ -181,8 +181,8 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
       ),
     },
     {
-      title: '⚡ Instant Model Comparison',
-      subtitle: 'See all perspectives at once',
+      title: "⚡ Instant Model Comparison",
+      subtitle: "See all perspectives at once",
       content: (
         <div className="space-y-3 sm:space-y-6">
           <motion.div {...fadeInUp} className="text-center">
@@ -266,15 +266,16 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
               <span className="ml-2 text-sm font-medium">4.9/5 rating</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              "Finally! No more switching between ChatGPT and Claude" - Sarah K.
+              "Finally! No more switching between ChatGPT and Claude" - Navneet
+              Bains.
             </p>
           </motion.div>
         </div>
       ),
     },
     {
-      title: '🎯 Start Free, Upgrade When Ready',
-      subtitle: 'Try it risk-free',
+      title: "🎯 Start Free, Upgrade When Ready",
+      subtitle: "Try it risk-free",
       content: (
         <div className="space-y-3 sm:space-y-6">
           <motion.div {...fadeInUp} className="text-center">
@@ -308,7 +309,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
                 {FREE_MODELS.slice(0, 3).map((model) => (
                   <li key={model} className="flex items-center gap-2">
                     <Check className="size-4 text-green-600" />
-                    <span>{model.split('/')[1]}</span>
+                    <span>{model.split("/")[1]}</span>
                   </li>
                 ))}
                 <li className="flex items-center gap-2">
@@ -386,7 +387,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
     },
     {
       title: "🚀 You're All Set!",
-      subtitle: 'Start comparing AI models now',
+      subtitle: "Start comparing AI models now",
       content: (
         <div className="space-y-3 sm:space-y-6">
           <motion.div {...scaleIn} className="text-center">
@@ -464,7 +465,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
     // Track skip behavior
     const timeBeforeSkip = Date.now() - startTime;
     console.log(
-      `Onboarding skipped at step ${currentStep} after ${timeBeforeSkip}ms`,
+      `Onboarding skipped at step ${currentStep} after ${timeBeforeSkip}ms`
     );
     onClose();
   };
@@ -518,10 +519,10 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
                   onClick={() => handleStepClick(index)}
                   className={`relative transition-all duration-200 ${
                     index === currentStep
-                      ? 'w-8 h-2 bg-primary rounded-full'
+                      ? "w-8 h-2 bg-primary rounded-full"
                       : index < currentStep
-                        ? 'size-2 bg-primary/60 rounded-full hover:bg-primary/80'
-                        : 'size-2 bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50'
+                      ? "size-2 bg-primary/60 rounded-full hover:bg-primary/80"
+                      : "size-2 bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50"
                   }`}
                   aria-label={`Go to step ${index + 1}`}
                 />
