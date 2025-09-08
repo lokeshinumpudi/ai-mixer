@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 
 export const Greeting = () => {
   return (
-    <div className="max-w-3xl mx-auto md:mt-20 px-8 size-full flex flex-col justify-center">
+    <div className="w-full max-w-none md:max-w-3xl mx-auto md:mt-20 px-4 md:px-8 size-full flex flex-col justify-center">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

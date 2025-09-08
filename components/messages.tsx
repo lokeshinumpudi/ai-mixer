@@ -216,7 +216,7 @@ function PureMessages({
       {shouldShowGreeting && (
         <div className="flex flex-col items-center gap-8 py-8">
           <Greeting key={`greeting-${chatId}`} />
-          <div className="w-full max-w-2xl px-4">
+          <div className="w-full max-w-none md:max-w-2xl px-4">
             <SuggestedActions
               chatId={chatId}
               selectedVisibilityType={selectedVisibilityType}
@@ -285,9 +285,9 @@ function PureMessages({
                 className={cn(
                   'w-full mx-auto',
                   // For single model, use full width on mobile, max-width on desktop
-                  run.modelIds.length === 1
-                    ? 'max-w-[100vw] px-2 md:max-w-4xl md:px-4'
-                    : 'max-w-5xl px-4',
+                  run.modelIds.length === 1 // Single model
+                    ? 'w-full px-2 md:max-w-4xl md:px-4'
+                    : 'w-full max-w-none md:max-w-5xl px-4', // Multi-model
                 )}
               >
                 <CompareMessage
@@ -337,9 +337,9 @@ function PureMessages({
           className={cn(
             'w-full mx-auto',
             // For single model, use full width on mobile, max-width on desktop
-            activeCompareMessage.modelIds.length === 1
-              ? 'max-w-[100vw] px-2 md:max-w-4xl md:px-4'
-              : 'max-w-5xl px-4',
+            activeCompareMessage.modelIds.length === 1 // Single model
+              ? 'w-full px-2 md:max-w-4xl md:px-4'
+              : 'w-full max-w-none md:max-w-5xl px-4', // Multi-model
           )}
         >
           <CompareMessage

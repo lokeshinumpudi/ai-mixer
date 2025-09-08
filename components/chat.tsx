@@ -9,6 +9,7 @@ import { useChatReadOnly } from "@/hooks/use-chat-access";
 import { useChatRunState } from "@/hooks/use-chat-run-state";
 import { useChatVisibility } from "@/hooks/use-chat-visibility";
 import { useCompareRun } from "@/hooks/use-compare-run";
+import { useOnboarding } from "@/hooks/use-onboarding";
 import { getDefaultModelForUser } from "@/lib/ai/models";
 import type { Chat as ChatType, Vote } from "@/lib/db/schema";
 import { uiLogger } from "@/lib/logger";
@@ -23,6 +24,7 @@ import { Artifact } from "./artifact";
 import { GoogleLoginCTA } from "./google-login-cta";
 import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
+import { OnboardingModal } from "./onboarding-modal";
 import { toast, upgradeToast } from "./toast";
 
 export function Chat({
@@ -64,6 +66,9 @@ export function Chat({
   // Anonymous message tracking (moved from useAnonymousAuth)
   const [messageCount, setMessageCount] = useState(0);
   const [shouldShowLoginPrompt, setShouldShowLoginPrompt] = useState(false);
+
+  // Onboarding state management
+  const { shouldShowOnboarding, markOnboardingComplete } = useOnboarding();
 
   // Load message count from localStorage
   useEffect(() => {
@@ -298,7 +303,13 @@ export function Chat({
 
   return (
     <>
-      <div className="flex flex-col min-w-0 h-dvh bg-background">
+      {/* Onboarding Modal */}
+      <OnboardingModal
+        isOpen={shouldShowOnboarding}
+        onClose={markOnboardingComplete}
+      />
+
+      <div className="flex flex-col min-w-0 h-dvh bg-background overflow-x-hidden">
         <ChatHeader
           chatId={id}
           selectedVisibilityType={currentVisibility}
@@ -311,7 +322,7 @@ export function Chat({
 
         {/* Read-only indicator for shared chats */}
         {!isOwner && chat?.visibility === "public" && (
-          <div className="mx-auto px-6 py-3 w-full md:max-w-3xl">
+          <div className="mx-auto px-4 py-3 w-full max-w-none md:max-w-3xl">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <div className="flex items-center gap-2 text-blue-700">
                 <svg
@@ -366,7 +377,7 @@ export function Chat({
 
         {/* Google Login Prompt for Anonymous Users */}
         {shouldShowLoginPrompt && authUser?.is_anonymous !== false && (
-          <div className="mx-auto px-6 py-4 w-full md:max-w-3xl">
+          <div className="mx-auto p-4 w-full max-w-none md:max-w-3xl">
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex-1 text-center sm:text-left">
@@ -391,8 +402,8 @@ export function Chat({
           </div>
         )}
 
-        <div className="absolute bottom-0 inset-x-0 flex justify-center px-4 pb-4 md:px-6 md:pb-6">
-          <form className="relative flex gap-2 w-full max-w-3xl">
+        <div className="absolute bottom-0 inset-x-0 flex justify-center px-2 pb-4 md:px-6 md:pb-6">
+          <form className="relative flex gap-2 w-full max-w-none md:max-w-3xl">
             {/* Backdrop blur background only behind the input area */}
             <div className="absolute inset-0 bg-background/95 backdrop-blur-sm border-t border-border/30 rounded-t-lg -z-10" />
             {!isChatReadOnly && messageCount < 10 && (

@@ -623,7 +623,9 @@ export const CompareMessage = memo(function CompareMessage({
       className={cn(
         'w-full mx-auto overflow-hidden',
         // For single model, use full width on mobile, max-width on desktop
-        modelIds.length === 1 ? 'max-w-[100vw] md:max-w-4xl' : 'max-w-5xl',
+        modelIds.length === 1
+          ? 'w-full md:max-w-4xl'
+          : 'w-full max-w-none md:max-w-5xl',
         className,
       )}
     >
@@ -697,7 +699,7 @@ export const CompareMessage = memo(function CompareMessage({
                     onCancelModel ? () => onCancelModel(modelId) : undefined
                   }
                   onExpand={() => handleExpandCard(modelId)}
-                  className="min-h-[400px] w-[80vw] max-w-[320px] shrink-0 snap-start"
+                  className="min-h-[400px] w-[calc(100vw-2rem)] max-w-[320px] shrink-0 snap-start"
                   isOnlyModel={modelIds.length === 1}
                 />
               );

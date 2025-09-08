@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/components/auth-provider';
 import { IdentityManager } from '@/components/identity-manager';
+import { OnboardingModal } from '@/components/onboarding-modal';
 import { SystemPromptForm } from '@/components/settings/SystemPromptForm';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { MobileFriendlyTooltip } from '@/components/ui/mobile-friendly-tooltip';
 import { Progress } from '@/components/ui/progress';
 import { useSidebar } from '@/components/ui/sidebar';
 import { UsageDashboard } from '@/components/usage/usage-dashboard';
+import { useOnboarding } from '@/hooks/use-onboarding';
 import { fetcher } from '@/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -43,6 +45,11 @@ export default function SettingsPage() {
   const { user, loading } = useAuth();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>('customization');
+
+  // Onboarding state management
+  const { shouldShowOnboarding, markOnboardingComplete, resetOnboarding } =
+    useOnboarding();
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   // Always fetch usage data since it's displayed in the sidebar
   const isUsageTab = activeTab === 'history';
   const {
@@ -91,9 +98,21 @@ export default function SettingsPage() {
   // Clean up refresh parameter from URL after handling it
   useEffect(() => {
     if (shouldRefreshBilling && typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('refresh');
-      window.history.replaceState({}, '', url.pathname + url.search);
+      try {
+        const currentHref = window.location.href;
+        if (
+          currentHref &&
+          typeof currentHref === 'string' &&
+          currentHref.trim()
+        ) {
+          const url = new URL(currentHref);
+          url.searchParams.delete('refresh');
+          window.history.replaceState({}, '', url.pathname + url.search);
+        }
+      } catch (error) {
+        // Silently ignore URL construction errors
+        console.warn('Failed to clean up URL parameters:', error);
+      }
     }
   }, [shouldRefreshBilling]);
 
@@ -181,6 +200,11 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Onboarding Modal */}
+      <OnboardingModal
+        isOpen={showOnboardingModal}
+        onClose={() => setShowOnboardingModal(false)}
+      />
       {/* Header */}
       <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 overflow-hidden">
@@ -604,14 +628,48 @@ function AccountTab() {
 }
 
 function CustomizationTab() {
+  const { resetOnboarding } = useOnboarding();
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+
+  const handleShowOnboarding = () => {
+    setShowOnboardingModal(true);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Onboarding Modal */}
+      <OnboardingModal
+        isOpen={showOnboardingModal}
+        onClose={() => setShowOnboardingModal(false)}
+      />
+
       <div>
         <h2 className="text-2xl font-bold">Customization</h2>
         <p className="text-muted-foreground">
           Personalize your AI experience with custom settings and preferences.
         </p>
       </div>
+
+      {/* Onboarding Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">App Tutorial</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            New to AI Mixer? Take a guided tour to learn about our multi-model
+            comparison features, settings, and capabilities.
+          </p>
+          <Button
+            onClick={handleShowOnboarding}
+            variant="outline"
+            className="w-full sm:w-auto"
+          >
+            🚀 Replay App Tutorial
+          </Button>
+        </CardContent>
+      </Card>
+
       <SystemPromptForm />
     </div>
   );
